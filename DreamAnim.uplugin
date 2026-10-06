@@ -22,6 +22,11 @@
 			"LoadingPhase": "Default"
 		},
 		{
+			"Name": "DreamAnimLang",
+			"Type": "UncookedOnly",
+			"LoadingPhase": "Default"
+		},
+		{
 			"Name": "DreamAnimTests",
 			"Type": "UncookedOnly",
 			"LoadingPhase": "Default"

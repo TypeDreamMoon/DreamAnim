@@ -18,6 +18,8 @@ public class DreamAnimTests : ModuleRules
 			"AssetRegistry",
 			"UnrealEd",
 			"DreamAnim",
+			"DreamAnimLang",
+			"Projects",
 		});
 	}
 }

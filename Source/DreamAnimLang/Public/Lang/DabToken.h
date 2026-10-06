@@ -1,0 +1,77 @@
+// Copyright DreamMoon. All Rights Reserved.
+//
+// Tokens. There are no reserved words at this level: `true`, `State`, `Settings` and every other word
+// reach the parser as identifiers, and the parser recognises them by position (Docs/Grammar.md).
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Lang/DabSource.h"
+
+namespace UE::DreamAnim::Lang
+{
+	enum class EDabTokenKind : uint8
+	{
+		EndOfFile,
+
+		Identifier,
+		/** Text is the lexeme as written; Number holds the value. */
+		Number,
+		/** Text is the value with escapes resolved; the span covers the quotes. */
+		String,
+		/**
+		 * `#include`, `#Region` or `#EndRegion` at the start of a line. Text is the directive word
+		 * without the `#` (`include`, `Region`, `EndRegion`). Its argument, if any, is the next token.
+		 */
+		Directive,
+
+		// -- punctuation
+		LeftParen, RightParen, LeftBrace, RightBrace, LeftBracket, RightBracket,
+		Comma, Semicolon, Colon, Dot, Question,
+		Assign,
+		Arrow,
+
+		// -- operators
+		Plus, Minus, Star, Slash, Bang,
+		AmpersandAmpersand, PipePipe,
+		Less, Greater, LessEqual, GreaterEqual, EqualEqual, BangEqual,
+
+		/** `// ...` or a block comment, delimiters included in Text. Only with FDabLexOptions::bEmitComments. */
+		Comment,
+
+		/** A character no token starts with. Reported as DAB1001 and emitted so the parser fails at the right spot. */
+		Unknown,
+	};
+
+	DREAMANIMLANG_API const TCHAR* LexToString(EDabTokenKind Kind);
+	/** The source spelling of a punctuation or operator kind (`->`, `&&`); empty for the others. */
+	DREAMANIMLANG_API const TCHAR* GetDabTokenSpelling(EDabTokenKind Kind);
+
+	struct FDabToken
+	{
+		EDabTokenKind Kind = EDabTokenKind::EndOfFile;
+		FDabSpan Span;
+		/** See EDabTokenKind for what each kind keeps here. Empty for punctuation. */
+		FString Text;
+		double Number = 0.0;
+		/** True when the token is the first non-whitespace thing on its line. */
+		bool bAtLineStart = false;
+		/** Number of line breaks between the previous token (or comment) and this one. */
+		int32 NewlinesBefore = 0;
+
+		bool Is(EDabTokenKind InKind) const { return Kind == InKind; }
+		bool IsIdentifier(const TCHAR* Name) const { return Kind == EDabTokenKind::Identifier && Text.Equals(Name, ESearchCase::CaseSensitive); }
+	};
+
+	struct FDabLexOptions
+	{
+		/** Emit Comment tokens instead of skipping comments. The parser asks for them when it keeps trivia. */
+		bool bEmitComments = false;
+	};
+
+	/**
+	 * Cuts a source text into tokens. Always ends with exactly one EndOfFile token. Problems are
+	 * reported to the sink and lexing goes on (an unknown character becomes an Unknown token).
+	 */
+	DREAMANIMLANG_API TArray<FDabToken> LexDab(const FDabSourceText& Source, class FDabDiagnosticSink& Sink, const FDabLexOptions& Options = FDabLexOptions());
+}
