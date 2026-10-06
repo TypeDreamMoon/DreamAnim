@@ -681,7 +681,21 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 		Blueprint->RequestRefreshExtensions();
 
 		Result.Blueprint = Blueprint;
+		// Class defaults go on the current class's default object before the compile: the compile carries them
+		// to the new one and, only then, lists them among the values new instances copy from it.
+		const bool bDefaultsFirst = Blueprint->GeneratedClass != nullptr;
+		if (bDefaultsFirst && !Model.ClassDefaults.IsEmpty())
+		{
+			DabGenApplyObjectProperties(Ctx, Blueprint->GeneratedClass->GetDefaultObject(), Model.ClassDefaults, TEXT("Defaults"));
+		}
 		DabGenCompile(Blueprint, Result);
+		if (!bDefaultsFirst && Blueprint->GeneratedClass && !Model.ClassDefaults.IsEmpty())
+		{
+			DabGenApplyObjectProperties(Ctx, Blueprint->GeneratedClass->GetDefaultObject(), Model.ClassDefaults, TEXT("Defaults"));
+			Result.CompilerErrors.Reset();
+			Result.CompilerWarnings.Reset();
+			DabGenCompile(Blueprint, Result);
+		}
 
 		const bool bModelClean = Sink.NumErrors() == ErrorsBefore;
 		if (Options.bSave && bModelClean && Result.CompilerErrors.IsEmpty())

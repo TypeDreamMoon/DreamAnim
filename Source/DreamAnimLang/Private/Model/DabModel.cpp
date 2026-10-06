@@ -473,6 +473,7 @@ namespace UE::DreamAnim::Model
 		}
 
 		DumpProperties(Out, 1, TEXT("Setting"), Model.ClassSettings);
+		DumpProperties(Out, 1, TEXT("Default"), Model.ClassDefaults);
 
 		TArray<const FDabModelVariable*> Variables;
 		for (const FDabModelVariable& Variable : Model.Variables)

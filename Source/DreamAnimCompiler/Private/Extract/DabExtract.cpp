@@ -52,6 +52,44 @@ namespace UE::DreamAnim::Compiler::ExtractPrivate
 		}
 
 		/**
+		 * The class defaults this Blueprint sets on properties its parent class declares, as the Class Defaults
+		 * panel shows them: editable, not transient, compared with the parent's defaults.
+		 */
+		void ExtractClassDefaults(FDabExtractContext& Ctx)
+		{
+			const UClass* Generated = Ctx.Blueprint.GeneratedClass;
+			const UClass* Parent = Ctx.Blueprint.ParentClass;
+			const UObject* Defaults = Generated ? Generated->GetDefaultObject(false) : nullptr;
+			const UObject* ParentDefaults = Parent ? Parent->GetDefaultObject() : nullptr;
+			if (!Defaults || !ParentDefaults)
+			{
+				return;
+			}
+			for (TFieldIterator<FProperty> It(Parent); It; ++It)
+			{
+				const FProperty* Property = *It;
+				if (!Property->HasAnyPropertyFlags(CPF_Edit) || Property->HasAnyPropertyFlags(CPF_Transient | CPF_Deprecated | CPF_DisableEditOnTemplate)
+					|| Property->GetOwnerClass() == UObject::StaticClass())
+				{
+					continue;
+				}
+				const void* Value = Property->ContainerPtrToValuePtr<void>(Defaults);
+				const void* Default = Property->ContainerPtrToValuePtr<void>(ParentDefaults);
+				if (Property->Identical(Value, Default, 0))
+				{
+					continue;
+				}
+				if (Lang::FDabExprPtr Converted = ConvertPropertyValue(Ctx, *Property, Value, Default, FString::Printf(TEXT("Defaults.%s"), *Property->GetName())))
+				{
+					Model::FDabModelProperty Entry;
+					Entry.Name = Property->GetName();
+					Entry.Value = MoveTemp(Converted);
+					Ctx.OutModel.ClassDefaults.Add(MoveTemp(Entry));
+				}
+			}
+		}
+
+		/**
 		 * The animation set slots, from the getters the generator makes (`DreamAnimAsset_<Slot>`). The declared
 		 * type is in the getter's keywords; failing that, its return type stands in.
 		 */
@@ -202,6 +240,7 @@ namespace UE::DreamAnim::Compiler::ExtractPrivate
 		ExtractAssetSlots(Ctx);
 
 		ExtractClassSettings(Ctx);
+		ExtractClassDefaults(Ctx);
 		ExtractVariables(Ctx);
 
 		// Machines are named before any graph is read: a condition may name a machine extracted later.

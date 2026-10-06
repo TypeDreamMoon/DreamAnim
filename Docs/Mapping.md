@@ -18,6 +18,7 @@ Syntax and diagnostics of the front end are in `Grammar.md`. This file adds code
 | `Implements = [ I, ... ]` | `Interfaces`: a DreamAnim interface by asset name, or `Path(...)` |
 | `DefaultAnimSet = Path(...)` | `DefaultAnimSet` |
 | any other `Settings` key | `ClassSettings` (a UAnimBlueprint property name, DAB4001 if it has none) |
+| `Defaults = { Settings = DA_Als; }` | `ClassDefaults`: editable properties of the parent class that this Blueprint's class defaults change (DAB4014 when the parent has no such property) |
 | `Aliases = { Main = Self.GetParent(); }` | nothing; every later `Main.X` is replaced by the expansion before it reaches the model |
 | `Properties = { float X = 0.3 [ Group="G" ]; }` | `Variables` |
 | `Assets = { AnimSequence X; }` | `AssetSlots` |
@@ -138,6 +139,7 @@ Raised by the semantic pass (`Source/DreamAnimCompiler/Private/Semantic/`). Seve
 | DAB4011 | Error | The same field, key, option or node function given twice, or a value given both directly and by the convenience that implies it |
 | DAB4012 | Error | BlendListByEnum whose enum is neither written (`BoundEnum`) nor the type of the path bound to `ActiveEnumValue` |
 | DAB4013 | Warning | `Inputs` names an input pose the linked graph or layer's target does not have |
+| DAB4014 | Error | A `Defaults` entry that is not an editable property of the parent class |
 | DAB5001 | Error | A call that is not `Target.Function(...)` with a Self-rooted target |
 | DAB5002 | Error | A call argument that is computed (only constants, `Props.X` and `Assets.X`) |
 | DAB5003 | Error | `Props.X` / `Assets.X` naming an undeclared tuning value or asset slot |

@@ -301,6 +301,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		void ReadProperties(const FDabBlockExpr& Block);
 		void ReadAssets(const FDabBlockExpr& Block);
 		void ReadSettings(const FDabBlockExpr& Block);
+		void ReadClassDefaults(const FDabBlockExpr& Block);
 		void ReadParent(const FDabExpr& Value);
 		void ReadNotifies(const FDabBlockExpr& Block);
 		void ReadLayer(const FDabNamedBlockStmt& Stmt);

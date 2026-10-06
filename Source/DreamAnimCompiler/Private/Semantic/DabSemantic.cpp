@@ -4,6 +4,8 @@
 // order their names are needed -- aliases, tuning values and asset slots before anything reads them, the
 // parent class before any path is typed against it, every cache and machine name before any graph.
 
+#include "Semantic/DabSemantic.h"
+
 #include "Semantic/DabSemanticInternal.h"
 
 #include "AnimGraphNode_Base.h"
@@ -65,6 +67,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 
 		// Sections by name; layers and machines in written order.
 		const FDabAssignStmt* SettingsStmt = nullptr;
+		const FDabAssignStmt* DefaultsStmt = nullptr;
 		const FDabAssignStmt* AliasesStmt = nullptr;
 		const FDabAssignStmt* PropertiesStmt = nullptr;
 		const FDabAssignStmt* AssetsStmt = nullptr;
@@ -110,7 +113,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 				else if (Named->Word != TEXT("Template"))
 				{
 					Sink.Error(TEXT("DAB6011"), Named->WordSpan, FString::Printf(TEXT("`%s` cannot be written at the document level."), *Named->Word),
-						TEXT("A document holds Settings, Aliases, Properties, Assets, Notifies, Graph, Layer, StateMachine and Template."));
+						TEXT("A document holds Settings, Defaults, Aliases, Properties, Assets, Notifies, Graph, Layer, StateMachine and Template."));
 				}
 				continue;
 			}
@@ -118,6 +121,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 			const FDabAssignStmt* Assign = Statement->As<FDabAssignStmt>();
 			const FDabAssignStmt** Slot = !Assign ? nullptr
 				: Assign->Name == TEXT("Settings") ? &SettingsStmt
+				: Assign->Name == TEXT("Defaults") ? &DefaultsStmt
 				: Assign->Name == TEXT("Aliases") ? &AliasesStmt
 				: Assign->Name == TEXT("Properties") ? &PropertiesStmt
 				: Assign->Name == TEXT("Assets") ? &AssetsStmt
@@ -128,7 +132,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 			{
 				Sink.Error(TEXT("DAB6011"), Assign ? Assign->NameSpan : Statement->Span,
 					Assign ? FString::Printf(TEXT("`%s` is not a section of a document."), *Assign->Name) : FString(TEXT("This statement cannot be written at the document level.")),
-					TEXT("A document holds Settings, Aliases, Properties, Assets, Notifies, Graph, Layer, StateMachine and Template."));
+					TEXT("A document holds Settings, Defaults, Aliases, Properties, Assets, Notifies, Graph, Layer, StateMachine and Template."));
 				continue;
 			}
 			if (*Slot)
@@ -169,6 +173,10 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		if (const FDabBlockExpr* Block = BlockOf(SettingsStmt))
 		{
 			ReadSettings(*Block);
+		}
+		if (const FDabBlockExpr* Block = BlockOf(DefaultsStmt))
+		{
+			ReadClassDefaults(*Block);
 		}
 		if (const FDabBlockExpr* Block = BlockOf(NotifiesStmt))
 		{
@@ -620,6 +628,37 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 				ReadMetaValue(*Property, Assign->Value.Get(), Assign->NameSpan, Property->ContainerPtrToValuePtr<void>(BlueprintDefaults), Model.ClassSettings,
 					FString::Printf(TEXT("The setting %s"), *Key));
 			}
+		}
+	}
+
+	void FSemantic::ReadClassDefaults(const FDabBlockExpr& Block)
+	{
+		const UObject* ParentDefaults = SelfClass ? SelfClass->GetDefaultObject() : nullptr;
+		for (const FDabStmtPtr& Statement : Block.Statements)
+		{
+			if (!Statement || Statement->Is<FDabRegionStmt>())
+			{
+				continue;
+			}
+			const FDabAssignStmt* Assign = Statement->As<FDabAssignStmt>();
+			if (!Assign || !Assign->Value)
+			{
+				Sink.Error(TEXT("DAB4014"), Statement->Span, TEXT("Each class default is `Property = Value;`."));
+				continue;
+			}
+			// What the Class Defaults panel edits, as the extractor reads it: editable properties of the parent class.
+			const FProperty* Property = SelfClass ? FindFProperty<FProperty>(SelfClass, FName(*Assign->Name)) : nullptr;
+			const bool bEditable = Property && Property->HasAnyPropertyFlags(CPF_Edit)
+				&& !Property->HasAnyPropertyFlags(CPF_Transient | CPF_Deprecated | CPF_DisableEditOnTemplate)
+				&& Property->GetOwnerClass() != UObject::StaticClass();
+			if (!bEditable || !ParentDefaults)
+			{
+				Sink.Error(TEXT("DAB4014"), Assign->NameSpan,
+					FString::Printf(TEXT("`%s` is not an editable property of the parent class %s."), *Assign->Name, SelfClass ? *SelfClass->GetName() : TEXT("(unknown)")));
+				continue;
+			}
+			ReadMetaValue(*Property, Assign->Value.Get(), Assign->NameSpan, Property->ContainerPtrToValuePtr<void>(ParentDefaults), Model.ClassDefaults,
+				FString::Printf(TEXT("The class default %s"), *Assign->Name));
 		}
 	}
 

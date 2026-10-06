@@ -235,6 +235,8 @@ namespace UE::DreamAnim::Model
 		TArray<FString> Interfaces;
 		/** Non-default UAnimBlueprint settings. */
 		TArray<FDabModelProperty> ClassSettings;
+		/** Editable properties of the parent class this Blueprint's class defaults change (`Settings` on an ALS instance). */
+		TArray<FDabModelProperty> ClassDefaults;
 		/** `DefaultAnimSet`, as an asset object path; empty when none. */
 		FString DefaultAnimSet;
 

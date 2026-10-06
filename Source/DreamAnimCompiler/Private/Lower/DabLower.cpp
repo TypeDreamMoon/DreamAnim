@@ -1515,6 +1515,15 @@ namespace UE::DreamAnim::Compiler::LowerPrivate
 				Body.Add(MakeAssign(TEXT("Settings"), MoveTemp(Settings)));
 			}
 		}
+		if (!Model.ClassDefaults.IsEmpty())
+		{
+			TUniquePtr<FDabBlockExpr> Defaults = MakeUnique<FDabBlockExpr>();
+			for (const FDabModelProperty& Default : Model.ClassDefaults)
+			{
+				Defaults->Statements.Add(MakeAssign(Default.Name, File.Value(Default.Value)));
+			}
+			Body.Add(MakeAssign(TEXT("Defaults"), MoveTemp(Defaults)));
+		}
 		const int32 AliasInsertAt = Body.Num();
 
 		if (!Model.Variables.IsEmpty())
