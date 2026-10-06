@@ -32,6 +32,11 @@
 			"LoadingPhase": "Default"
 		},
 		{
+			"Name": "DreamAnimEditor",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		},
+		{
 			"Name": "DreamAnimTests",
 			"Type": "UncookedOnly",
 			"LoadingPhase": "Default"
