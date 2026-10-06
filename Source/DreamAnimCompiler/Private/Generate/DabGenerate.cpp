@@ -29,6 +29,7 @@
 #include "EdGraphSchema_K2.h"
 #include "Factories/AnimBlueprintFactory.h"
 #include "Generate/DabGenerateInternal.h"
+#include "K2Node_AnimGetter.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/CompilerResultsLog.h"
 #include "Kismet2/KismetEditorUtilities.h"
@@ -272,6 +273,19 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 	/** Empties a Blueprint for regeneration, keeping the asset, its generated class and the AnimGraph's root. */
 	static void DabGenClearBlueprint(UAnimBlueprint* Blueprint)
 	{
+		// Anim getters listen to the Blueprint's graph renames until they are destroyed, and removed nodes are only
+		// destroyed by the next garbage collection: the old ones would answer this build's renames. They can only
+		// stop listening while they still belong to the Blueprint, so they go before their graphs do.
+		TArray<UK2Node_AnimGetter*> OldGetters;
+		FBlueprintEditorUtils::GetAllNodesOfClass(Blueprint, OldGetters);
+		for (UK2Node_AnimGetter* Getter : OldGetters)
+		{
+			if (Getter && !Getter->HasAnyFlags(RF_BeginDestroyed))
+			{
+				Getter->ConditionalBeginDestroy();
+			}
+		}
+
 		// Function graphs (self layers, generated functions) except the AnimGraph.
 		TArray<UEdGraph*> Graphs;
 		for (UEdGraph* Graph : Blueprint->FunctionGraphs)
