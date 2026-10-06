@@ -1,0 +1,86 @@
+// Renamed from the Blueprint:
+//   HandsTied <- "Hands Tied"
+AnimBlueprint(Name="ALS/Character/AnimationInstances/Overlays/AB_Als_HandsTied", Root="Plugin.ALS")
+{
+    Settings = {
+        Parent                                = AlsLinkedAnimationInstance;
+        Skeleton                              = SK_Als;
+        Implements                            = [ ALI_Overlay ];
+        bEnableLinkedAnimLayerInstanceSharing = true;
+    }
+
+    Aliases = { Main = Self.GetParent(); }
+
+    Graph = { Output = LinkedAnimLayer(Interface = ALI_Overlay, Layer = "Overlay"); }
+
+    Layer Overlay [ LayerGroup = "Default Shared Group"; BlendOptions = (BlendInTime = 0.2, BlendOutTime = 0.2) ]
+    {
+        MultiWayBlend1 = MultiWayBlend(
+            Poses         = [
+                TwoWayBlend(
+                    AlphaBoolBlend = (BlendOption = Linear),
+                    Alpha          = Main.PoseState.GaitWalkingAmount,
+                    A              = SequenceEvaluator(Sequence = A_Als_HandsTied_Poses, ExplicitFrame = 0),
+                    B              = SequenceEvaluator(Sequence = A_Als_HandsTied_Poses, ExplicitFrame = 1)
+                ),
+                SequenceEvaluator(Sequence = A_Als_HandsTied_Poses, ExplicitFrame = 2)
+            ],
+            DesiredAlphas = [ Main.PoseState.StandingAmount, Main.PoseState.CrouchingAmount ]
+        );
+
+        Base = TwoWayBlend(
+            AlphaBoolBlend = (BlendOption = Linear),
+            Alpha          = Main.PoseState.InAirAmount,
+            A              = MultiWayBlend1,
+            B              = TwoWayBlend(
+                AlphaBoolBlend      = (BlendOption = Linear),
+                AlphaScaleBiasClamp = (
+                    bInterpResult         = true,
+                    InterpSpeedIncreasing = 20,
+                    InterpSpeedDecreasing = 5
+                ),
+                Alpha               = Main.InAirState.GroundPredictionAmount,
+                A                   = SequenceEvaluator(Sequence = A_Als_HandsTied_Poses, ExplicitFrame = 1),
+                B                   = SequenceEvaluator(Sequence = A_Als_HandsTied_Poses, ExplicitFrame = 0)
+            )
+        );
+
+        HandsTied = ApplyAdditive(
+            Alpha          = 0.5,
+            AlphaBoolBlend = (BlendOption = Linear),
+            Base           = Base,
+            Additive       = SequencePlayer(
+                GroupName = "Secondary Motion",
+                Method    = SyncGroup,
+                Sequence  = A_Als_Idle
+            )
+        ) [ Cached ];
+
+        ModifyCurve1 = {
+            HandsTied;
+            ModifyCurve(LayerArmLeft = 3, LayerArmRight = 3);
+        };
+
+        ModifyCurve2 = {
+            HandsTied;
+            ModifyCurve(LayerArmLeft = 3, LayerArmRight = 3);
+        };
+
+        Output = GameplayTagsBlend(
+            BlendType = Linear,
+            ActiveTag = Main.LocomotionAction,
+            BlendPose = {
+                Default                          = HandsTied;
+                "Als.LocomotionAction.Mantling"  = HandsTied;
+                "Als.LocomotionAction.GettingUp" = ModifyCurve1;
+                "Als.LocomotionAction.Rolling"   = ModifyCurve2;
+            },
+            BlendTime = {
+                Default                          = 0.3;
+                "Als.LocomotionAction.Mantling"  = 0.1;
+                "Als.LocomotionAction.GettingUp" = 0;
+                "Als.LocomotionAction.Rolling"   = 0.1;
+            }
+        );
+    }
+}

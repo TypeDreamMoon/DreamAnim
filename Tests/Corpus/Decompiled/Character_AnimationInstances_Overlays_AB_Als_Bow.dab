@@ -1,0 +1,186 @@
+// Renamed from the Blueprint:
+//   BowStates <- "Bow States"
+AnimBlueprint(Name="ALS/Character/AnimationInstances/Overlays/AB_Als_Bow", Root="Plugin.ALS")
+{
+    Settings = {
+        Parent                                = AlsLinkedAnimationInstance;
+        Skeleton                              = SK_Als;
+        Implements                            = [ ALI_Overlay ];
+        bEnableLinkedAnimLayerInstanceSharing = true;
+    }
+
+    Aliases = { Main = Self.GetParent(); }
+
+    Notifies = {
+        ReadyToRelaxed = Main.PlayTransitionLeftAnimation(
+            PlayRate              = 1.5,
+            StartTime             = 0.3,
+            bFromStandingIdleOnly = true
+        );
+        RelaxedToReady = Main.PlayTransitionLeftAnimation(
+            PlayRate              = 1.5,
+            StartTime             = 0.3,
+            bFromStandingIdleOnly = true
+        );
+    }
+
+    Graph = { Output = LinkedAnimLayer(Interface = ALI_Overlay, Layer = "Overlay"); }
+
+    Layer Overlay [ LayerGroup = "Default Shared Group"; BlendOptions = (BlendInTime = 0.2, BlendOutTime = 0.2) ]
+    {
+        ModifyCurve1 = {
+            SequenceEvaluator(Sequence = A_Als_Bow_Poses, ExplicitFrame = 3);
+            ModifyCurve(LayerArmLeftAdditive = 0.5);
+        };
+
+        ModifyCurve2 = {
+            SequenceEvaluator(Sequence = A_Als_Bow_Poses, ExplicitFrame = 8);
+            ModifyCurve(LayerArmLeft = 3);
+        };
+
+        ModifyCurve3 = {
+            SequenceEvaluator(Sequence = A_Als_Bow_Poses, ExplicitFrame = 0);
+            ModifyCurve(LayerArmLeft = 3);
+        };
+
+        Output = GameplayTagsBlend(
+            BlendType = Linear,
+            ActiveTag = Main.LocomotionAction,
+            BlendPose = {
+                Default                          = BowStates;
+                "Als.LocomotionAction.Mantling"  = ModifyCurve1;
+                "Als.LocomotionAction.GettingUp" = ModifyCurve2;
+                "Als.LocomotionAction.Rolling"   = ModifyCurve3;
+            },
+            BlendTime = {
+                Default                          = 0.3;
+                "Als.LocomotionAction.Mantling"  = 0.3;
+                "Als.LocomotionAction.GettingUp" = 0;
+                "Als.LocomotionAction.Rolling"   = 0.3;
+            }
+        );
+    }
+
+    StateMachine BowStates
+    {
+        Entry = Relaxed;
+
+        State Relaxed
+        {
+            TwoWayBlend1 = TwoWayBlend(
+                AlphaBoolBlend = (BlendOption = Linear),
+                Alpha          = Main.PoseState.GaitRunningAmount,
+                A              = SequenceEvaluator(Sequence = A_Als_Bow_Poses, ExplicitFrame = 1),
+                B              = TwoWayBlend(
+                    AlphaBoolBlend = (BlendOption = Linear),
+                    Alpha          = Main.PoseState.GaitSprintingAmount,
+                    A              = SequenceEvaluator(Sequence = A_Als_Bow_Poses, ExplicitFrame = 2),
+                    B              = SequenceEvaluator(Sequence = A_Als_Bow_Poses, ExplicitFrame = 3)
+                )
+            );
+
+            Base = MultiWayBlend(
+                Poses         = [
+                    TwoWayBlend(
+                        AlphaBoolBlend = (BlendOption = Linear),
+                        Alpha          = Main.PoseState.GaitWalkingAmount,
+                        A              = SequenceEvaluator(Sequence = A_Als_Bow_Poses, ExplicitFrame = 0),
+                        B              = TwoWayBlend1
+                    ),
+                    SequenceEvaluator(Sequence = A_Als_Bow_Poses, ExplicitFrame = 8)
+                ],
+                DesiredAlphas = [ Main.PoseState.StandingAmount, Main.PoseState.CrouchingAmount ]
+            );
+
+            Pose = ApplyAdditive(
+                Alpha          = 0.75,
+                AlphaBoolBlend = (BlendOption = Linear),
+                Base           = Base,
+                Additive       = SequencePlayer(
+                    GroupName = "Secondary Motion",
+                    Method    = SyncGroup,
+                    Sequence  = A_Als_Idle
+                )
+            );
+        }
+
+        State Aiming
+        {
+            ApplyMeshSpaceAdditive1 = ApplyMeshSpaceAdditive(
+                AlphaBoolBlend = (BlendOption = Linear),
+                Base           = TwoWayBlend(
+                    AlphaBoolBlend = (BlendOption = Linear),
+                    Alpha          = Main.PoseState.GaitWalkingAmount,
+                    A              = SequenceEvaluator(Sequence = A_Als_Bow_Poses, ExplicitFrame = 6),
+                    B              = SequenceEvaluator(Sequence = A_Als_Bow_Poses, ExplicitFrame = 7)
+                ),
+                Additive       = SequenceEvaluator(
+                    Sequence     = A_Als_Bow_Aim,
+                    ExplicitTime = Main.ViewState.PitchAmount
+                )
+            );
+
+            BasePose = MultiWayBlend(
+                Poses         = [
+                    ApplyMeshSpaceAdditive1,
+                    ApplyMeshSpaceAdditive(
+                        AlphaBoolBlend = (BlendOption = Linear),
+                        Base           = SequenceEvaluator(Sequence = A_Als_Bow_Poses, ExplicitFrame = 10),
+                        Additive       = SequenceEvaluator(
+                            Sequence     = A_Als_Bow_Aim_Crouch,
+                            ExplicitTime = Main.ViewState.PitchAmount
+                        )
+                    )
+                ],
+                DesiredAlphas = [ Main.PoseState.StandingAmount, Main.PoseState.CrouchingAmount ]
+            );
+
+            Pose = ApplyAdditive(
+                Alpha          = 0.5,
+                AlphaBoolBlend = (BlendOption = Linear),
+                Base           = BasePose,
+                Additive       = SequencePlayer(
+                    GroupName = "Secondary Motion",
+                    Method    = SyncGroup,
+                    Sequence  = A_Als_Idle
+                )
+            );
+        }
+
+        State Ready
+        {
+            Base1 = MultiWayBlend(
+                Poses         = [
+                    TwoWayBlend(
+                        AlphaBoolBlend = (BlendOption = Linear),
+                        Alpha          = Main.PoseState.GaitWalkingAmount,
+                        A              = SequenceEvaluator(Sequence = A_Als_Bow_Poses, ExplicitFrame = 4),
+                        B              = SequenceEvaluator(Sequence = A_Als_Bow_Poses, ExplicitFrame = 5)
+                    ),
+                    SequenceEvaluator(Sequence = A_Als_Bow_Poses, ExplicitFrame = 9)
+                ],
+                DesiredAlphas = [ Main.PoseState.StandingAmount, Main.PoseState.CrouchingAmount ]
+            );
+
+            Pose = ApplyAdditive(
+                Alpha          = 0.75,
+                AlphaBoolBlend = (BlendOption = Linear),
+                Base           = Base1,
+                Additive       = SequencePlayer(
+                    GroupName = "Secondary Motion",
+                    Method    = SyncGroup,
+                    Sequence  = A_Als_Idle
+                )
+            );
+        }
+
+        Transitions = {
+            Aiming  -> Ready   : Main.RotationMode != "Als.RotationMode.Aiming"                                         [ Blend = 1; Curve = Custom; CustomBlendCurve = CF_Als_Aim_Out ];
+            Ready   -> Aiming  : Main.RotationMode == "Als.RotationMode.Aiming"                                         [ Blend = 0.5; Curve = Custom; CustomBlendCurve = CF_Als_Aim_In ];
+            Ready   -> Relaxed : Main.TransitionsState.bTransitionsAllowed && StateTime() >= 3                          [ Blend = 0.75; Curve = Cubic; TransitionStart = (NotifyName = "ReadyToRelaxed"); BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:QuickFeetBlend") ];
+            Relaxed -> Ready   : Main.RotationMode == "Als.RotationMode.Aiming"                                         [ TransitionStart = (NotifyName = "RelaxedToReady") ];
+            Ready   -> Relaxed : Main.LocomotionState.bMoving && StateTime() >= 3                                       [ Blend = 0.75; Curve = Cubic ];
+            Ready   -> Relaxed : Main.LocomotionMode == "Als.LocomotionMode.InAir" || Main.Gait == "Als.Gait.Sprinting" [ Priority = 2; Blend = 0.4 ];
+        }
+    }
+}

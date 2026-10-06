@@ -19,6 +19,7 @@ public class DreamAnimTests : ModuleRules
 			"UnrealEd",
 			"DreamAnim",
 			"DreamAnimLang",
+			"DreamAnimCompiler",
 			"Projects",
 		});
 	}

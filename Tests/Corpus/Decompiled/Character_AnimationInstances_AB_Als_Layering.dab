@@ -1,0 +1,320 @@
+// Renamed from the Blueprint:
+//   ArmLeft <- "Arm Left"
+//   ArmRight <- "Arm Right"
+//   BasePoses <- "Base Poses"
+//   LocomotionAdditiveLocalSpace <- "Locomotion Additive Local Space"
+//   LocomotionAdditiveMeshSpace <- "Locomotion Additive Mesh Space"
+//   LocomotionInput <- "Locomotion Input"
+//   OverlayInput <- "Overlay Input"
+AnimBlueprint(Name="ALS/Character/AnimationInstances/AB_Als_Layering", Root="Plugin.ALS")
+{
+    Settings = {
+        Parent                                = AlsLinkedAnimationInstance;
+        Skeleton                              = SK_Als;
+        bEnableLinkedAnimLayerInstanceSharing = true;
+    }
+
+    Aliases = { Main = Self.GetParent(); }
+
+    Graph = {
+        Slot1 = {
+            Overlay;
+            Slot("ArmLeft");
+        };
+
+        ArmLeft = TwoWayBlend(
+            AlphaBoolBlend = (BlendOption = Linear),
+            Alpha          = Main.LayeringState.ArmLeftBlendAmount,
+            A              = Locomotion,
+            B              = ApplyAdditive(
+                AlphaBoolBlend = (BlendOption = Linear),
+                Alpha          = Main.LayeringState.ArmLeftAdditiveBlendAmount,
+                Base           = TwoWayBlend(
+                    AlphaBoolBlend = (BlendOption = Linear),
+                    Alpha          = Main.LayeringState.ArmLeftSlotBlendAmount,
+                    A              = Overlay,
+                    B              = Slot1
+                ),
+                Additive       = LocomotionAdditiveLocalSpace
+            )
+        ) [ Cached ];
+
+        Slot2 = {
+            Overlay;
+            Slot("ArmRight");
+        };
+
+        ArmRight = TwoWayBlend(
+            AlphaBoolBlend = (BlendOption = Linear),
+            Alpha          = Main.LayeringState.ArmRightBlendAmount,
+            A              = Locomotion,
+            B              = ApplyAdditive(
+                AlphaBoolBlend = (BlendOption = Linear),
+                Alpha          = Main.LayeringState.ArmRightAdditiveBlendAmount,
+                Base           = TwoWayBlend(
+                    AlphaBoolBlend = (BlendOption = Linear),
+                    Alpha          = Main.LayeringState.ArmRightSlotBlendAmount,
+                    A              = Overlay,
+                    B              = Slot2
+                ),
+                Additive       = LocomotionAdditiveLocalSpace
+            )
+        ) [ Cached ];
+
+        BasePoses = MultiWayBlend(
+            Poses         = [
+                SequenceEvaluator(Sequence = A_Als_Stand_Pose, ExplicitFrame = 0),
+                SequenceEvaluator(Sequence = A_Als_Crouch_Pose, ExplicitFrame = 0)
+            ],
+            DesiredAlphas = [ Main.PoseState.StandingAmount, Main.PoseState.CrouchingAmount ]
+        ) [ Cached ];
+
+        Slot3 = {
+            Overlay;
+            Slot("Head");
+        };
+
+        Head = TwoWayBlend(
+            AlphaBoolBlend = (BlendOption = Linear),
+            Alpha          = Main.LayeringState.HeadBlendAmount,
+            A              = Locomotion,
+            B              = ApplyMeshSpaceAdditive(
+                AlphaBoolBlend = (BlendOption = Linear),
+                Alpha          = Main.LayeringState.HeadAdditiveBlendAmount,
+                Base           = TwoWayBlend(
+                    AlphaBoolBlend = (BlendOption = Linear),
+                    Alpha          = Main.LayeringState.HeadSlotBlendAmount,
+                    A              = Overlay,
+                    B              = Slot3
+                ),
+                Additive       = LocomotionAdditiveMeshSpace
+            )
+        ) [ Cached ];
+
+        Slot4 = {
+            Overlay;
+            Slot("Legs");
+        };
+
+        Legs = TwoWayBlend(
+            AlphaBoolBlend = (BlendOption = Linear),
+            Alpha          = Main.LayeringState.LegsBlendAmount,
+            A              = Locomotion,
+            B              = ApplyMeshSpaceAdditive(
+                AlphaBoolBlend = (BlendOption = Linear),
+                Base           = TwoWayBlend(
+                    AlphaBoolBlend = (BlendOption = Linear),
+                    Alpha          = Main.LayeringState.LegsSlotBlendAmount,
+                    A              = Overlay,
+                    B              = Slot4
+                ),
+                Additive       = LocomotionAdditiveMeshSpace
+            )
+        ) [ Cached ];
+
+        Locomotion = Input(LocomotionInput) [ Cached ];
+        LocomotionAdditiveLocalSpace = MakeDynamicAdditive(
+            Base     = BasePoses,
+            Additive = Locomotion
+        ) [ Cached ];
+        LocomotionAdditiveMeshSpace = MakeDynamicAdditive(
+            bMeshSpaceAdditive = true,
+            Base               = BasePoses,
+            Additive           = Locomotion
+        ) [ Cached ];
+        Overlay = Input(OverlayInput) [ Cached ];
+
+        Slot5 = {
+            Overlay;
+            Slot("Pelvis");
+        };
+
+        Pelvis = TwoWayBlend(
+            AlphaBoolBlend = (BlendOption = Linear),
+            Alpha          = Main.LayeringState.PelvisBlendAmount,
+            A              = Locomotion,
+            B              = ApplyMeshSpaceAdditive(
+                AlphaBoolBlend = (BlendOption = Linear),
+                Base           = TwoWayBlend(
+                    AlphaBoolBlend = (BlendOption = Linear),
+                    Alpha          = Main.LayeringState.PelvisSlotBlendAmount,
+                    A              = Overlay,
+                    B              = Slot5
+                ),
+                Additive       = LocomotionAdditiveMeshSpace
+            )
+        ) [ Cached ];
+
+        Slot6 = {
+            Overlay;
+            Slot("Spine");
+        };
+
+        Spine = TwoWayBlend(
+            AlphaBoolBlend = (BlendOption = Linear),
+            Alpha          = Main.LayeringState.SpineBlendAmount,
+            A              = Locomotion,
+            B              = ApplyMeshSpaceAdditive(
+                AlphaBoolBlend = (BlendOption = Linear),
+                Alpha          = Main.LayeringState.SpineAdditiveBlendAmount,
+                Base           = TwoWayBlend(
+                    AlphaBoolBlend = (BlendOption = Linear),
+                    Alpha          = Main.LayeringState.SpineSlotBlendAmount,
+                    A              = Overlay,
+                    B              = Slot6
+                ),
+                Additive       = LocomotionAdditiveMeshSpace
+            )
+        ) [ Cached ];
+
+        Base = LayeredBoneBlend(
+            LayerSetup              = [ bones(neck_01) ],
+            bMeshSpaceRotationBlend = true,
+            BasePose                = LayeredBoneBlend(
+                LayerSetup              = [ bones(spine_01, Depth = 3) ],
+                bMeshSpaceRotationBlend = true,
+                BasePose                = LayeredBoneBlend(
+                    LayerSetup              = [
+                        (
+                            BranchFilters = [
+                                (BoneName = "pelvis"),
+                                (BoneName = "thigh_l", BlendDepth = -1),
+                                (BoneName = "thigh_r", BlendDepth = -1)
+                            ]
+                        )
+                    ],
+                    bMeshSpaceRotationBlend = true,
+                    BasePose                = Legs,
+                    BlendPoses              = [ Pelvis ]
+                ),
+                BlendPoses              = [ Spine ]
+            ),
+            BlendPoses              = [ Head ]
+        );
+
+        BasePose = LayeredBoneBlend(
+            LayerSetup   = [ bones(clavicle_l, Depth = 1), bones(clavicle_r, Depth = 1) ],
+            BasePose     = LayeredBoneBlend(
+                LayerSetup              = [ bones(clavicle_r, Depth = 1) ],
+                bMeshSpaceRotationBlend = true,
+                BasePose                = LayeredBoneBlend(
+                    LayerSetup              = [ bones(clavicle_l, Depth = 1) ],
+                    bMeshSpaceRotationBlend = true,
+                    BasePose                = Base,
+                    BlendPoses              = [ ArmLeft ],
+                    BlendWeights            = [ Main.LayeringState.ArmLeftMeshSpaceBlendAmount ]
+                ),
+                BlendPoses              = [ ArmRight ],
+                BlendWeights            = [ Main.LayeringState.ArmRightMeshSpaceBlendAmount ]
+            ),
+            BlendPoses   = [ ArmLeft, ArmRight ],
+            BlendWeights = [
+                Main.LayeringState.ArmLeftLocalSpaceBlendAmount,
+                Main.LayeringState.ArmRightLocalSpaceBlendAmount
+            ]
+        );
+
+        Curve = {
+            Overlay;
+            ModifyCurve(
+                LayerHeadSlot     = 0,
+                LayerArmLeftSlot  = 0,
+                LayerArmRightSlot = 0,
+                LayerSpineSlot    = 0,
+                LayerPelvisSlot   = 0,
+                LayerLegsSlot     = 0
+            );
+            Slot("Curves");
+        };
+
+        Unused1 = LayeredBoneBlend(
+            LayerSetup   = [
+                bones(clavicle_l, Depth = 1),
+                bones(clavicle_r, Depth = 1),
+                bones(
+                    index_01_l,
+                    middle_01_l,
+                    ring_01_l,
+                    pinky_01_l,
+                    thumb_01_l,
+                    "VB hand_l_to_hand_r",
+                    "VB hand_l_to_ik_hand_gun"
+                ),
+                bones(
+                    index_01_r,
+                    middle_01_r,
+                    ring_01_r,
+                    pinky_01_r,
+                    thumb_01_r,
+                    "VB hand_r_to_hand_r",
+                    "VB hand_r_to_ik_hand_gun"
+                )
+            ],
+            BasePose     = LayeredBoneBlend(
+                LayerSetup              = [
+                    (
+                        BranchFilters = [
+                            (BoneName = "pelvis"),
+                            (BoneName = "thigh_l", BlendDepth = -1),
+                            (BoneName = "thigh_r", BlendDepth = -1)
+                        ]
+                    ),
+                    bones(spine_01, Depth = 3),
+                    bones(neck_01),
+                    bones(clavicle_l, Depth = 1),
+                    bones(clavicle_r, Depth = 1)
+                ],
+                bMeshSpaceRotationBlend = true,
+                BasePose                = Legs,
+                BlendPoses              = [ Pelvis, Spine, Head, ArmLeft, ArmRight ],
+                BlendWeights            = [
+                    1,
+                    1,
+                    1,
+                    Main.LayeringState.ArmLeftMeshSpaceBlendAmount,
+                    Main.LayeringState.ArmRightMeshSpaceBlendAmount
+                ]
+            ),
+            BlendPoses   = [ ArmLeft, ArmRight, Overlay, Overlay ],
+            BlendWeights = [
+                Main.LayeringState.ArmLeftLocalSpaceBlendAmount,
+                Main.LayeringState.ArmRightLocalSpaceBlendAmount,
+                Main.LayeringState.HandLeftBlendAmount,
+                Main.LayeringState.HandRightBlendAmount
+            ]
+        );
+
+        Output = CurvesBlend(
+            BlendMode = Override,
+            BasePose  = LayeredBoneBlend(
+                LayerSetup   = [
+                    bones(
+                        index_01_l,
+                        middle_01_l,
+                        ring_01_l,
+                        pinky_01_l,
+                        thumb_01_l,
+                        "VB hand_l_to_hand_r",
+                        "VB hand_l_to_ik_hand_gun"
+                    ),
+                    bones(
+                        index_01_r,
+                        middle_01_r,
+                        ring_01_r,
+                        pinky_01_r,
+                        thumb_01_r,
+                        "VB hand_r_to_hand_r",
+                        "VB hand_r_to_ik_hand_gun"
+                    )
+                ],
+                BasePose     = BasePose,
+                BlendPoses   = [ Overlay, Overlay ],
+                BlendWeights = [
+                    Main.LayeringState.HandLeftBlendAmount,
+                    Main.LayeringState.HandRightBlendAmount
+                ]
+            ),
+            CurvePose = CurvesBlend(BasePose = Locomotion, CurvePose = Curve)
+        );
+    }
+}

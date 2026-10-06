@@ -1,0 +1,18 @@
+// Not expressible in DreamAnim; move into C++:
+//   EventGraph/K2Node_Event_1: the event BlueprintUpdateAnimation is Blueprint logic; move it to C++
+//   EventGraph/K2Node_CallFunction_2: calls AnimInstance::GetOwningActor outside an AnimNotify event
+//   EventGraph/K2Node_CallFunction_1: calls AlsUtility::GetAnimationCurveValueFromCharacter outside an AnimNotify event
+//   EventGraph/K2Node_DynamicCast_0: a K2Node_DynamicCast node outside an AnimNotify event
+//   EventGraph/K2Node_VariableSet_0: a K2Node_VariableSet node outside an AnimNotify event
+//   EventGraph/K2Node_CallFunction_3: calls AlsConstants::PoseAimingCurveName outside an AnimNotify event
+AnimBlueprint(Name="ALS/OverlayObjects/Bow/AB_Als_Bow", Root="Plugin.ALS")
+{
+    Settings = {
+        Parent   = AnimInstance;
+        Skeleton = SK_Als_Bow;
+    }
+
+    Properties = { float DrawAmount = 0 [ Group = "State" ]; }
+
+    Graph = { Output = SequenceEvaluator(Sequence = A_Als_Bow_Draw, ExplicitTime = Props.DrawAmount); }
+}

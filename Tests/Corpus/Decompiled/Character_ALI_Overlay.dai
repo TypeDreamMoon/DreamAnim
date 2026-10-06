@@ -1,0 +1,6 @@
+AnimLayerInterface(Name="ALS/Character/ALI_Overlay", Root="Plugin.ALS")
+{
+    Settings = { Parent = AnimLayerInterface; }
+
+    Layer Overlay [ LayerGroup = "Default Shared Group" ];
+}

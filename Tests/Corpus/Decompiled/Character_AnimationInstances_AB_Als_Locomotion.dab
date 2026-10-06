@@ -1,0 +1,362 @@
+// Renamed from the Blueprint:
+//   EntryConduit <- "Entry Conduit"
+//   GroundedAlias <- "Grounded Alias"
+//   GroundedInput <- "Grounded Input"
+//   InAirAlias <- "In Air Alias"
+//   JumpStates <- "Jump States"
+//   LandConduct <- "Land Conduct"
+//   LandMovement <- "Land Movement"
+//   LeftFoot <- "Left Foot"
+//   LocomotionStates <- "Locomotion States"
+//   RightFoot <- "Right Foot"
+AnimBlueprint(Name="ALS/Character/AnimationInstances/AB_Als_Locomotion", Root="Plugin.ALS")
+{
+    Settings = {
+        Parent                                = AlsLinkedAnimationInstance;
+        Skeleton                              = SK_Als;
+        bEnableLinkedAnimLayerInstanceSharing = true;
+    }
+
+    Aliases = { Main = Self.GetParent(); }
+
+    Notifies = { LandToGrounded = Main.PlayTransitionRightAnimation(BlendInDuration = 0.1, PlayRate = 1.4); }
+
+    Graph = {
+        Grounded = Input(GroundedInput) [ Cached ];
+
+        Output = {
+            LocomotionStates;
+            Inertialization(FilteredCurves = [ "RotationYawSpeed" ], bResetOnBecomingRelevant = true);
+            Call(Self.InitializeLean, On = BecomeRelevant);
+        };
+    }
+
+    StateMachine JumpStates [ bAllowConduitEntryStates = true ]
+    {
+        Entry = EntryConduit;
+
+        State LeftFoot
+        {
+            Pose = TwoWayBlend(
+                AlphaBoolBlend      = (BlendOption = Linear),
+                AlphaScaleBiasClamp = (
+                    bMapRange             = true,
+                    bInterpResult         = true,
+                    InRange               = (Min = 200, Max = 500),
+                    InterpSpeedIncreasing = 5,
+                    InterpSpeedDecreasing = 5
+                ),
+                Alpha               = Main.LocomotionState.Speed,
+                A                   = SequencePlayer(
+                    GroupName      = "Jump",
+                    Method         = SyncGroup,
+                    Sequence       = A_Als_Jump_Walk_Left,
+                    StartPosition  = 0.12,
+                    bLoopAnimation = false,
+                    PlayRate       = Main.InAirState.JumpPlayRate
+                ),
+                B                   = SequencePlayer(
+                    GroupName      = "Jump",
+                    Method         = SyncGroup,
+                    Sequence       = A_Als_Jump_Run_Left,
+                    bLoopAnimation = false,
+                    PlayRate       = Main.InAirState.JumpPlayRate
+                )
+            );
+        }
+
+        State RightFoot
+        {
+            Pose = TwoWayBlend(
+                AlphaBoolBlend      = (BlendOption = Linear),
+                AlphaScaleBiasClamp = (
+                    bMapRange             = true,
+                    bInterpResult         = true,
+                    InRange               = (Min = 200, Max = 500),
+                    InterpSpeedIncreasing = 5,
+                    InterpSpeedDecreasing = 5
+                ),
+                Alpha               = Main.LocomotionState.Speed,
+                A                   = SequencePlayer(
+                    GroupName      = "Jump",
+                    Method         = SyncGroup,
+                    Sequence       = A_Als_Jump_Walk_Right,
+                    StartPosition  = 0.12,
+                    bLoopAnimation = false,
+                    PlayRate       = Main.InAirState.JumpPlayRate
+                ),
+                B                   = SequencePlayer(
+                    GroupName      = "Jump",
+                    Method         = SyncGroup,
+                    Sequence       = A_Als_Jump_Run_Right,
+                    bLoopAnimation = false,
+                    PlayRate       = Main.InAirState.JumpPlayRate
+                )
+            );
+        }
+
+        State Loop
+        {
+            Pose = SequencePlayer(
+                GroupName = "Flail",
+                Method    = SyncGroup,
+                Sequence  = A_Als_Jump_Loop,
+                PlayRate  = Main.InAirState.JumpPlayRate
+            );
+        }
+
+        State Flail
+        {
+            Pose = SequencePlayer(
+                GroupName = "Flail",
+                Method    = SyncGroup,
+                Sequence  = A_Als_Flail,
+                PlayRate  = 1.2
+            );
+        }
+
+        Conduit EntryConduit;
+
+        Transitions = {
+            LeftFoot     -> Loop      : Auto [ AutomaticRuleTriggerTime = 0; Inertialize ];
+            Loop         -> Flail     : true [ Blend = 1 ];
+            RightFoot    -> Loop      : Auto [ AutomaticRuleTriggerTime = 0; Inertialize ];
+            EntryConduit -> LeftFoot  : Main.FeetState.FootPlantedAmount <= 0;
+            EntryConduit -> RightFoot : Main.FeetState.FootPlantedAmount > 0;
+        }
+    }
+
+    StateMachine LocomotionStates
+    {
+        Entry = Grounded;
+
+        State Grounded
+        {
+            OnExit = Main.StopTransitionAndTurnInPlaceAnimations();
+
+            Pose = Grounded;
+        }
+
+        State Fall
+        {
+            Base = TwoWayBlend(
+                AlphaBoolBlend      = (BlendOption = Linear),
+                AlphaScaleBiasClamp = (
+                    bMapRange             = true,
+                    bInterpResult         = true,
+                    InRange               = (Min = -500, Max = -3000),
+                    InterpSpeedIncreasing = 5,
+                    InterpSpeedDecreasing = 5
+                ),
+                Alpha               = Main.InAirState.VerticalVelocityWorldSpace,
+                A                   = TwoWayBlend(
+                    AlphaBoolBlend      = (BlendOption = Linear),
+                    AlphaScaleBiasClamp = (
+                        bMapRange             = true,
+                        bInterpResult         = true,
+                        InRange               = (Max = -1000),
+                        InterpSpeedIncreasing = 5,
+                        InterpSpeedDecreasing = 5
+                    ),
+                    Alpha               = Main.InAirState.VerticalVelocityWorldSpace,
+                    A                   = SequencePlayer(
+                        GroupName = "Fall",
+                        Method    = SyncGroup,
+                        Sequence  = A_Als_Fall_Fast
+                    ),
+                    B                   = SequencePlayer(
+                        GroupName = "Fall",
+                        Method    = SyncGroup,
+                        Sequence  = A_Als_Fall
+                    )
+                ),
+                B                   = SequencePlayer(Sequence = A_Als_Flail)
+            );
+
+            Pose = {
+                TwoWayBlend(
+                    AlphaBoolBlend      = (BlendOption = Linear),
+                    AlphaScaleBiasClamp = (
+                        bInterpResult         = true,
+                        InterpSpeedIncreasing = 20,
+                        InterpSpeedDecreasing = 5
+                    ),
+                    Alpha               = Main.InAirState.GroundPredictionAmount,
+                    A                   = ApplyAdditive(
+                        AlphaBoolBlend = (BlendOption = Linear),
+                        Base           = Base,
+                        Additive       = BlendSpaceEvaluator(
+                            BlendSpace = BS_Als_Air_Lean,
+                            X          = Main.LeanState.RightAmount,
+                            Y          = Main.LeanState.ForwardAmount
+                        )
+                    ),
+                    B                   = TwoWayBlend(
+                        AlphaBoolBlend      = (BlendOption = Linear),
+                        AlphaScaleBiasClamp = (bMapRange = true, InRange = (Min = -1000, Max = -500)),
+                        Alpha               = Main.InAirState.VerticalVelocityWorldSpace,
+                        A                   = SequenceEvaluator(
+                            Sequence      = A_Als_Land_Heavy,
+                            ExplicitFrame = 0
+                        ),
+                        B                   = SequenceEvaluator(
+                            Sequence      = A_Als_Land_Light,
+                            ExplicitFrame = 0
+                        )
+                    )
+                );
+                ModifyCurve(Alpha = Main.InAirState.GroundPredictionAmount, FootLeftIk = 1, FootRightIk = 1);
+                ModifyCurve(PoseStanding = 1, PoseInAir = 1);
+                Call(Self.RefreshInAir);
+            };
+        }
+
+        State Jump [ bAlwaysResetOnEntry = true ]
+        {
+            BasePose = {
+                JumpStates;
+                Inertialization(bResetOnBecomingRelevant = true);
+            };
+
+            Pose = {
+                TwoWayBlend(
+                    AlphaBoolBlend      = (BlendOption = Linear),
+                    AlphaScaleBiasClamp = (
+                        bInterpResult         = true,
+                        InterpSpeedIncreasing = 20,
+                        InterpSpeedDecreasing = 5
+                    ),
+                    Alpha               = Main.InAirState.GroundPredictionAmount,
+                    A                   = ApplyAdditive(
+                        AlphaBoolBlend = (BlendOption = Linear),
+                        Base           = BasePose,
+                        Additive       = BlendSpaceEvaluator(
+                            BlendSpace = BS_Als_Air_Lean,
+                            X          = Main.LeanState.RightAmount,
+                            Y          = Main.LeanState.ForwardAmount
+                        )
+                    ),
+                    B                   = TwoWayBlend(
+                        AlphaBoolBlend      = (BlendOption = Linear),
+                        AlphaScaleBiasClamp = (bMapRange = true, InRange = (Min = -1000, Max = -500)),
+                        Alpha               = Main.InAirState.VerticalVelocityWorldSpace,
+                        A                   = SequenceEvaluator(
+                            Sequence      = A_Als_Land_Heavy,
+                            ExplicitFrame = 0
+                        ),
+                        B                   = SequenceEvaluator(
+                            Sequence      = A_Als_Land_Light,
+                            ExplicitFrame = 0
+                        )
+                    )
+                );
+                ModifyCurve(Alpha = Main.InAirState.GroundPredictionAmount, FootLeftIk = 1, FootRightIk = 1);
+                ModifyCurve(PoseStanding = 1, PoseInAir = 1);
+                Call(Self.RefreshInAir);
+            };
+        }
+
+        State Land
+        {
+            Pose = {
+                TwoWayBlend(
+                    AlphaBoolBlend      = (BlendOption = Linear),
+                    AlphaScaleBiasClamp = (bMapRange = true, InRange = (Min = -500, Max = -1000)),
+                    Alpha               = Main.InAirState.VerticalVelocityWorldSpace,
+                    A                   = SequencePlayer(
+                        GroupName      = "Land",
+                        Method         = SyncGroup,
+                        Sequence       = A_Als_Land_Light,
+                        bLoopAnimation = false
+                    ),
+                    B                   = SequencePlayer(
+                        GroupName      = "Land",
+                        Method         = SyncGroup,
+                        Sequence       = A_Als_Land_Heavy,
+                        bLoopAnimation = false
+                    )
+                );
+                ModifyCurve(
+                    FootLeftIk    = 1,
+                    FootRightIk   = 1,
+                    FootLeftLock  = 1,
+                    FootRightLock = 1,
+                    PoseStanding  = 1,
+                    PoseGrounded  = 1
+                );
+                Call(Self.RefreshRotateInPlace);
+            };
+        }
+
+        State LandMovement
+        {
+            ApplyMeshSpaceAdditive1 = ApplyMeshSpaceAdditive(
+                AlphaBoolBlend      = (BlendOption = Linear),
+                AlphaScaleBiasClamp = (
+                    bMapRange             = true,
+                    bInterpResult         = true,
+                    OutRange              = (Min = 1, Max = 0.5),
+                    InterpSpeedIncreasing = 2.5,
+                    InterpSpeedDecreasing = 20
+                ),
+                Alpha               = Main.RotationMode == "Als.RotationMode.Aiming" ? 1 : 0,
+                Base                = Grounded,
+                Additive            = TwoWayBlend(
+                    AlphaBoolBlend      = (BlendOption = Linear),
+                    AlphaScaleBiasClamp = (
+                        bMapRange = true,
+                        InRange   = (Min = -750, Max = -1500),
+                        OutRange  = (Max = 0.75)
+                    ),
+                    Alpha               = Main.InAirState.VerticalVelocityWorldSpace,
+                    A                   = SequencePlayer(
+                        GroupName      = "Land",
+                        Method         = SyncGroup,
+                        Sequence       = A_Als_Land_Light_Additive,
+                        PlayRate       = 1.75,
+                        bLoopAnimation = false
+                    ),
+                    B                   = SequencePlayer(
+                        GroupName      = "Land",
+                        Method         = SyncGroup,
+                        Sequence       = A_Als_Land_Heavy_Additive,
+                        PlayRate       = 1.5,
+                        bLoopAnimation = false
+                    )
+                )
+            );
+
+            Pose = TwoWayBlend(
+                AlphaBoolBlend      = (BlendOption = Linear),
+                AlphaScaleBiasClamp = (
+                    bMapRange    = true,
+                    bClampResult = true,
+                    InRange      = (Max = -200),
+                    OutRange     = (Min = 0.25),
+                    ClampMin     = 0.25
+                ),
+                Alpha               = Main.InAirState.VerticalVelocityWorldSpace,
+                A                   = Grounded,
+                B                   = ApplyMeshSpaceAdditive1
+            );
+        }
+
+        Conduit LandConduct = Main.LocomotionMode == "Als.LocomotionMode.Grounded";
+        Alias GroundedAlias = [ Fall, Jump ];
+        Alias InAirAlias = [ Grounded, Land, LandMovement ];
+
+        Transitions = {
+            Land          -> Grounded     : Auto                                                                         [ Blend = 0.8; Curve = Cubic; AutomaticRuleTriggerTime = 0; TransitionStart = (NotifyName = "LandToGrounded"); BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:QuickFeetBlend") ];
+            Land          -> LandMovement : Main.LocomotionState.bHasInput || Main.RotateInPlaceState.bRotatingLeft || Main.RotateInPlaceState.bRotatingRight || Main.LocomotionState.Speed >= 650;
+            LandMovement  -> Grounded     : Auto                                                                         [ Blend = 0.3 ];
+            LandConduct   -> Land         : true                                                                         [ Blend = 0.1; Inertialize ];
+            LandConduct   -> LandMovement : Main.LocomotionState.bHasInput || Main.MovementBase.bHasRelativeLocation     [ Blend = 0.1; Inertialize ];
+            GroundedAlias -> Grounded     : Main.LocomotionMode == "Als.LocomotionMode.Grounded";
+            Jump          -> LandConduct  : true;
+            Fall          -> LandConduct  : true;
+            InAirAlias    -> Jump         : Main.LocomotionMode == "Als.LocomotionMode.InAir" && Main.InAirState.bJumped [ Blend = 0.1; Inertialize ];
+            InAirAlias    -> Fall         : Main.LocomotionMode == "Als.LocomotionMode.InAir"                            [ Priority = 2; Blend = 0.6; Inertialize ];
+            Land          -> Grounded     : Main.Stance != "Als.Stance.Standing";
+        }
+    }
+}

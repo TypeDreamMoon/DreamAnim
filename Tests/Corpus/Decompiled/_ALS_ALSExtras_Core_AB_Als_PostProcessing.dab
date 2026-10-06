@@ -1,0 +1,27 @@
+AnimBlueprint(Name="ALSExtras/Core/AB_Als_PostProcessing", Root="Plugin.ALS")
+{
+    Settings = {
+        Parent   = AnimInstance;
+        Skeleton = SK_Als;
+    }
+
+    Graph = {
+        Output = {
+            LayeredBoneBlend(
+                LayerSetup = [ bones(clavicle_l, clavicle_r, ik_hand_root) ],
+                BasePose   = SequenceEvaluator(Sequence = A_Als_Stand_Pose, ExplicitFrame = 0),
+                BlendPoses = [ Input(InPose) ]
+            );
+            LocalToComponentSpace();
+            Constraint(
+                BoneToModify      = (BoneName = "ik_hand_gun"),
+                ConstraintSetup   = [
+                    (TargetBone = (BoneName = "VB hand_r_to_ik_hand_gun"), TransformType = Parent)
+                ],
+                ConstraintWeights = [ 1 ],
+                AlphaBoolBlend    = (BlendOption = Linear)
+            );
+            ComponentToLocalSpace();
+        };
+    }
+}

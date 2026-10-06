@@ -1,0 +1,340 @@
+// Renamed from the Blueprint:
+//   CrouchingStates <- "Crouching States"
+//   MoveBackward <- "Move Backward"
+//   MoveForward <- "Move Forward"
+//   MoveLeftBackward <- "Move Left Backward"
+//   MoveLeftForward <- "Move Left Forward"
+//   MoveRightBackward <- "Move Right Backward"
+//   MoveRightForward <- "Move Right Forward"
+//   MovementStates <- "Movement States"
+//   RotateLeft <- "Rotate Left"
+//   RotateRight <- "Rotate Right"
+AnimBlueprint(Name="ALS/Character/AnimationInstances/Stances/AB_Als_Crouching", Root="Plugin.ALS")
+{
+    Settings = {
+        Parent                                = AlsLinkedAnimationInstance;
+        Skeleton                              = SK_Als;
+        bEnableLinkedAnimLayerInstanceSharing = true;
+    }
+
+    Aliases = { Main = Self.GetParent(); }
+
+    Notifies = { StopQuick = Main.PlayQuickStopAnimation(); }
+
+    Graph = {
+        MoveBackward = SequencePlayer(
+            GroupName = "Movement",
+            Method    = SyncGroup,
+            Sequence  = A_Als_Crouch_Walk_Backward,
+            PlayRate  = Main.CrouchingState.PlayRate
+        ) [ Cached ];
+
+        MoveForward = SequencePlayer(
+            GroupName = "Movement",
+            Method    = SyncGroup,
+            Sequence  = A_Als_Crouch_Walk_Forward,
+            PlayRate  = Main.CrouchingState.PlayRate
+        ) [ Cached ];
+
+        MoveLeftBackward = SequencePlayer(
+            GroupName = "Movement",
+            Method    = SyncGroup,
+            Sequence  = A_Als_Crouch_Walk_Left_Backward,
+            PlayRate  = Main.CrouchingState.PlayRate
+        ) [ Cached ];
+
+        MoveLeftForward = SequencePlayer(
+            GroupName = "Movement",
+            Method    = SyncGroup,
+            Sequence  = A_Als_Crouch_Walk_Left_Forward,
+            PlayRate  = Main.CrouchingState.PlayRate
+        ) [ Cached ];
+
+        Movement = {
+            ApplyAdditive(
+                AlphaBoolBlend = (BlendOption = Linear),
+                AlphaCurveName = "Weight_Gait",
+                Base           = TwoWayBlend(
+                    AlphaBoolBlend      = (BlendOption = Linear),
+                    AlphaScaleBiasClamp = (bInterpResult = true),
+                    Alpha               = Main.CrouchingState.StrideBlendAmount,
+                    A                   = SequenceEvaluator(
+                        Sequence      = A_Als_Crouch_Walk_Pose,
+                        ExplicitFrame = 0
+                    ),
+                    B                   = MovementStates
+                ),
+                Additive       = BlendSpaceEvaluator(
+                    BlendSpace = BS_Als_Lean,
+                    X          = Main.LeanState.RightAmount,
+                    Y          = Main.LeanState.ForwardAmount
+                )
+            );
+            ModifyCurve(PoseMoving = 1);
+            Call(Self.RefreshCrouchingMovement);
+            Call(Self.RefreshGroundedMovement);
+        } [ Cached ];
+
+        MoveRightBackward = SequencePlayer(
+            GroupName = "Movement",
+            Method    = SyncGroup,
+            Sequence  = A_Als_Crouch_Walk_Right_Backward,
+            PlayRate  = Main.CrouchingState.PlayRate
+        ) [ Cached ];
+
+        MoveRightForward = SequencePlayer(
+            GroupName = "Movement",
+            Method    = SyncGroup,
+            Sequence  = A_Als_Crouch_Walk_Right_Forward,
+            PlayRate  = Main.CrouchingState.PlayRate
+        ) [ Cached ];
+
+        Output = {
+            CrouchingStates;
+            Inertialization(FilteredCurves = [ "RotationYawSpeed" ], bResetOnBecomingRelevant = true);
+            ModifyCurve(PoseCrouching = 1);
+            Call(Self.RefreshRotateInPlace);
+        };
+    }
+
+    StateMachine CrouchingStates
+    {
+        Entry = Idle;
+
+        State Idle
+        {
+            OnExit = Main.StopTransitionAndTurnInPlaceAnimations();
+
+            Pose = {
+                SequenceEvaluator(Sequence = A_Als_Crouch_Pose, ExplicitFrame = 0);
+                ModifyCurve(FootLeftLock = 1, FootRightLock = 1, AllowTransitions = 1);
+                Slot("TurnInPlaceCrouching");
+                ModifyCurve(ApplyMode = Scale, RotationYawSpeed = Main.TurnInPlaceState.PlayRate);
+                Call(Self.RefreshTurnInPlace);
+                Call(Self.InitializeTurnInPlace, On = BecomeRelevant);
+                Call(Self.RefreshDynamicTransitions);
+            };
+        }
+
+        State Move
+        {
+            OnEnter = Main.StopTransitionAndTurnInPlaceAnimations();
+
+            Pose = Movement;
+        }
+
+        State RotateLeft
+        {
+            Pose = {
+                SequencePlayer(
+                    Sequence       = A_Als_Crouch_Rotate_90_Left,
+                    PlayRate       = Main.RotateInPlaceState.PlayRate,
+                    bLoopAnimation = Main.RotateInPlaceState.bRotatingLeft
+                );
+                ModifyCurve(ApplyMode = Scale, RotationYawSpeed = Main.RotateInPlaceState.PlayRate);
+            };
+        }
+
+        State RotateRight
+        {
+            Pose = {
+                SequencePlayer(
+                    Sequence       = A_Als_Crouch_Rotate_90_Right,
+                    PlayRate       = Main.RotateInPlaceState.PlayRate,
+                    bLoopAnimation = Main.RotateInPlaceState.bRotatingRight
+                );
+                ModifyCurve(ApplyMode = Scale, RotationYawSpeed = Main.RotateInPlaceState.PlayRate);
+            };
+        }
+
+        State Stop
+        {
+            OnEnter = Main.PlayTransitionRightAnimation(PlayRate = 1.5, StartTime = 0.2);
+
+            Pose = {
+                LayeredBoneBlend(
+                    LayerSetup              = [
+                        bones(thigh_l, ik_foot_l, "VB foot_l"),
+                        bones(thigh_r, ik_foot_r, "VB foot_r")
+                    ],
+                    BlendWeights            = [ 1, 1 ],
+                    bMeshSpaceRotationBlend = true,
+                    BasePose                = Movement,
+                    BlendPoses              = [
+                        SequenceEvaluator(Sequence = A_Als_Crouch_Walk_Pose, ExplicitFrame = 0),
+                        SequenceEvaluator(Sequence = A_Als_Crouch_Walk_Pose, ExplicitFrame = 0)
+                    ]
+                );
+                ModifyCurve(FootLeftLock = 1, FootRightLock = 1);
+            };
+        }
+
+        Rules = {
+            RotateLeft  = Main.RotateInPlaceState.bRotatingLeft;
+            Move        = Main.LocomotionState.bMovingSmooth;
+            RotateRight = Main.RotateInPlaceState.bRotatingRight;
+        }
+
+        Transitions = {
+            Idle        -> RotateLeft  : RotateLeft                                                    [ Priority = 2; Inertialize ];
+            RotateLeft  -> Idle        : Auto                                                          [ Blend = 0 ];
+            RotateLeft  -> Idle        : Move                                                          [ Blend = 0.4 ];
+            Idle        -> RotateRight : RotateRight                                                   [ Priority = 2; Inertialize ];
+            RotateRight -> Idle        : Auto                                                          [ Blend = 0 ];
+            RotateRight -> Idle        : Move                                                          [ Blend = 0.4 ];
+            RotateLeft  -> RotateRight : RotateRight                                                   [ Priority = 2; Inertialize ];
+            RotateRight -> RotateLeft  : RotateLeft                                                    [ Priority = 2; Inertialize ];
+            Idle        -> Move        : Move;
+            Move        -> Idle        : !Main.LocomotionState.bMovingSmooth                           [ Priority = 2; TransitionStart = (NotifyName = "StopQuick") ];
+            Move        -> Stop        : !Main.LocomotionState.bMovingSmooth && StateWeight(Move) >= 1 [ Blend = 0.1 ];
+            Stop        -> Idle        : StateWeight(Stop) >= 1                                        [ Blend = 0.5; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:QuickFeetBlend") ];
+        }
+    }
+
+    StateMachine MovementStates
+    {
+        Entry = MoveForward;
+
+        State MoveForward
+        {
+            Pose = {
+                MultiWayBlend(
+                    Poses         = [ MoveForward, MoveBackward, MoveLeftForward, MoveRightForward ],
+                    DesiredAlphas = [
+                        Main.GroundedState.VelocityBlend.ForwardAmount,
+                        Main.GroundedState.VelocityBlend.BackwardAmount,
+                        Main.GroundedState.VelocityBlend.LeftAmount,
+                        Main.GroundedState.VelocityBlend.RightAmount
+                    ]
+                );
+                ModifyCurve(RotationYawOffset = Main.GroundedState.RotationYawOffsets.ForwardAngle);
+                Call(Self.SetHipsDirection, On = BecomeRelevant);
+            };
+        }
+
+        State MoveBackward
+        {
+            Pose = {
+                MultiWayBlend(
+                    Poses         = [ MoveForward, MoveBackward, MoveLeftBackward, MoveRightBackward ],
+                    DesiredAlphas = [
+                        Main.GroundedState.VelocityBlend.ForwardAmount,
+                        Main.GroundedState.VelocityBlend.BackwardAmount,
+                        Main.GroundedState.VelocityBlend.LeftAmount,
+                        Main.GroundedState.VelocityBlend.RightAmount
+                    ]
+                );
+                ModifyCurve(RotationYawOffset = Main.GroundedState.RotationYawOffsets.BackwardAngle);
+                Call(Self.SetHipsDirection, NewHipsDirection = Backward, On = BecomeRelevant);
+            };
+        }
+
+        State MoveRightForward
+        {
+            Pose = {
+                MultiWayBlend(
+                    Poses         = [ MoveForward, MoveBackward, MoveLeftBackward, MoveRightForward ],
+                    DesiredAlphas = [
+                        Main.GroundedState.VelocityBlend.ForwardAmount,
+                        Main.GroundedState.VelocityBlend.BackwardAmount,
+                        Main.GroundedState.VelocityBlend.LeftAmount,
+                        Main.GroundedState.VelocityBlend.RightAmount
+                    ]
+                );
+                ModifyCurve(RotationYawOffset = Main.GroundedState.RotationYawOffsets.RightAngle);
+                Call(Self.SetHipsDirection, NewHipsDirection = RightForward, On = BecomeRelevant);
+            };
+        }
+
+        State MoveRightBackward
+        {
+            Pose = {
+                MultiWayBlend(
+                    Poses         = [ MoveForward, MoveBackward, MoveLeftForward, MoveRightBackward ],
+                    DesiredAlphas = [
+                        Main.GroundedState.VelocityBlend.ForwardAmount,
+                        Main.GroundedState.VelocityBlend.BackwardAmount,
+                        Main.GroundedState.VelocityBlend.LeftAmount,
+                        Main.GroundedState.VelocityBlend.RightAmount
+                    ]
+                );
+                ModifyCurve(RotationYawOffset = Main.GroundedState.RotationYawOffsets.RightAngle);
+                Call(Self.SetHipsDirection, NewHipsDirection = RightBackward, On = BecomeRelevant);
+            };
+        }
+
+        State MoveLeftForward
+        {
+            Pose = {
+                MultiWayBlend(
+                    Poses         = [ MoveForward, MoveBackward, MoveLeftForward, MoveRightBackward ],
+                    DesiredAlphas = [
+                        Main.GroundedState.VelocityBlend.ForwardAmount,
+                        Main.GroundedState.VelocityBlend.BackwardAmount,
+                        Main.GroundedState.VelocityBlend.LeftAmount,
+                        Main.GroundedState.VelocityBlend.RightAmount
+                    ]
+                );
+                ModifyCurve(RotationYawOffset = Main.GroundedState.RotationYawOffsets.LeftAngle);
+                Call(Self.SetHipsDirection, NewHipsDirection = LeftForward, On = BecomeRelevant);
+            };
+        }
+
+        State MoveLeftBackward
+        {
+            Pose = {
+                MultiWayBlend(
+                    Poses         = [ MoveForward, MoveBackward, MoveLeftBackward, MoveRightForward ],
+                    DesiredAlphas = [
+                        Main.GroundedState.VelocityBlend.ForwardAmount,
+                        Main.GroundedState.VelocityBlend.BackwardAmount,
+                        Main.GroundedState.VelocityBlend.LeftAmount,
+                        Main.GroundedState.VelocityBlend.RightAmount
+                    ]
+                );
+                ModifyCurve(RotationYawOffset = Main.GroundedState.RotationYawOffsets.LeftAngle);
+                Call(Self.SetHipsDirection, NewHipsDirection = LeftBackward, On = BecomeRelevant);
+            };
+        }
+
+        Rules = {
+            MoveBackward = Main.GroundedState.MovementDirection.bBackward;
+            MoveForward  = Main.GroundedState.MovementDirection.bForward;
+            MoveRight    = Main.GroundedState.MovementDirection.bRight;
+            MoveLeft     = Main.GroundedState.MovementDirection.bLeft;
+            SetHipsLeft  = Main.GroundedState.HipsDirectionLockAmount <= -0.5 && Main.FeetState.FeetCrossingAmount <= 0;
+            SetHipsRight = Main.GroundedState.HipsDirectionLockAmount >= 0.5 && Main.FeetState.FeetCrossingAmount <= 0;
+        }
+
+        Transitions = {
+            MoveForward       -> MoveBackward      : MoveBackward [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveBackward      -> MoveForward       : MoveForward  [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveForward       -> MoveRightForward  : MoveRight    [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveForward       -> MoveLeftForward   : MoveLeft     [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveBackward      -> MoveRightBackward : MoveRight    [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveBackward      -> MoveLeftBackward  : MoveLeft     [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveRightForward  -> MoveForward       : MoveForward  [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveLeftForward   -> MoveForward       : MoveForward  [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveLeftBackward  -> MoveBackward      : MoveBackward [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveRightBackward -> MoveBackward      : MoveBackward [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveLeftForward   -> MoveRightBackward : MoveRight    [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveRightForward  -> MoveLeftBackward  : MoveLeft     [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveRightBackward -> MoveLeftForward   : MoveLeft     [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveLeftBackward  -> MoveRightForward  : MoveRight    [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveLeftBackward  -> MoveLeftForward   : MoveForward  [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveLeftForward   -> MoveLeftBackward  : MoveBackward [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveRightBackward -> MoveRightForward  : MoveForward  [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveRightForward  -> MoveRightBackward : MoveBackward [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveRightForward  -> MoveRightBackward : SetHipsLeft  [ Priority = 2; Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveLeftForward   -> MoveLeftBackward  : SetHipsRight [ Priority = 2; Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveLeftBackward  -> MoveLeftForward   : SetHipsLeft  [ Priority = 2; Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveRightBackward -> MoveRightForward  : SetHipsRight [ Priority = 2; Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveRightBackward -> MoveRightForward : Abs(Main.GroundedState.HipsDirectionLockAmount) < 0.5 && Main.FeetState.FeetCrossingAmount <= 0 && StateWeight(
+                MoveRightBackward
+            ) >= 1 [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveLeftBackward -> MoveLeftForward : Abs(Main.GroundedState.HipsDirectionLockAmount) < 0.5 && Main.FeetState.FeetCrossingAmount <= 0 && StateWeight(
+                MoveLeftBackward
+            ) >= 1 [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+        }
+    }
+}

@@ -1,0 +1,459 @@
+// Renamed from the Blueprint:
+//   LookStates_2 <- "Look States"
+//   VelocityDirection <- "Velocity Direction"
+//   ViewDirection <- "View Direction"
+//   ViewMode <- "View Mode"
+AnimBlueprint(Name="ALSCamera/AB_Als_Camera", Root="Plugin.ALS")
+{
+    Settings = {
+        Parent   = AlsCameraAnimationInstance;
+        Skeleton = SK_Als_Camera;
+    }
+
+    Graph = {
+        LookStates_2 = LookStates [ Cached ];
+
+        ModifyCurve1 = {
+            LookStates_2;
+            ModifyCurve(ApplyMode = Scale, CameraOffsetY = 1);
+        };
+
+        ModifyCurve2 = {
+            LookStates_2;
+            ModifyCurve(ApplyMode = Scale, CameraOffsetY = -1);
+        };
+
+        Shoulder = BlendListByBool(
+            BlendTime        = 0.5,
+            BlendType        = Custom,
+            CustomBlendCurve = CF_Als_CameraBlend_Quick,
+            bActiveValue     = Self.bRightShoulder,
+            BlendPose        = [ ModifyCurve1, ModifyCurve2 ]
+        ) [ Cached ];
+
+        ModifyCurve3 = {
+            Shoulder;
+            ModifyCurve(FirstPersonOverride = 0);
+        };
+
+        ModifyCurve4 = {
+            Shoulder;
+            ModifyCurve(FirstPersonOverride = 1, TraceOverride = 1);
+        };
+
+        ViewMode = GameplayTagsBlend(
+            ActiveTag = Self.ViewMode,
+            BlendPose = { Default = ModifyCurve3; "Als.ViewMode.FirstPerson" = ModifyCurve4; },
+            BlendTime = 0.1
+        ) [ Cached ];
+
+        ModifyCurve5 = {
+            ViewMode;
+            ModifyCurve(LocationLagX = 0.15, LocationLagY = 0.15, LocationLagZ = 0.25);
+        };
+
+        ModifyCurve6 = {
+            ViewMode;
+            ModifyCurve(LocationLagX = 0.15, LocationLagY = 0.15, LocationLagZ = 0.15, TraceOverride = 1);
+        };
+
+        ModifyCurve7 = {
+            LocalRefPose();
+            ModifyCurve(
+                CameraOffsetX = -320,
+                CameraOffsetY = 0,
+                CameraOffsetZ = 50,
+                PivotOffsetZ  = 25,
+                LocationLagX  = 0.15,
+                LocationLagY  = 0.15,
+                LocationLagZ  = 0.05,
+                RotationLag   = 0.05,
+                TraceOverride = 1
+            );
+        };
+
+        Output = GameplayTagsBlend(
+            BlendType = Cubic,
+            ActiveTag = Self.LocomotionAction,
+            BlendPose = {
+                Default                           = ViewMode;
+                "Als.LocomotionAction.Mantling"   = ModifyCurve5;
+                "Als.LocomotionAction.Rolling"    = ModifyCurve6;
+                "Als.LocomotionAction.Ragdolling" = ModifyCurve7;
+            },
+            BlendTime = {
+                Default                           = 0.4;
+                "Als.LocomotionAction.Mantling"   = 0.2;
+                "Als.LocomotionAction.Rolling"    = 0.2;
+                "Als.LocomotionAction.Ragdolling" = 1;
+            }
+        );
+    }
+
+    StateMachine LookStates
+    {
+        Entry = VelocityDirection;
+
+        State VelocityDirection
+        {
+            ModifyCurve8 = {
+                LocalRefPose();
+                ModifyCurve(
+                    CameraOffsetX = -325,
+                    CameraOffsetY = 0,
+                    CameraOffsetZ = 20,
+                    LocationLagX  = 0.15,
+                    LocationLagY  = 0.15,
+                    LocationLagZ  = 0.05
+                );
+            };
+
+            ModifyCurve9 = {
+                LocalRefPose();
+                ModifyCurve(
+                    CameraOffsetX = -325,
+                    CameraOffsetY = 0,
+                    CameraOffsetZ = 20,
+                    LocationLagX  = 0.15,
+                    LocationLagY  = 0.15,
+                    LocationLagZ  = 0.05
+                );
+            };
+
+            ModifyCurve10 = {
+                LocalRefPose();
+                ModifyCurve(
+                    CameraOffsetX = -325,
+                    CameraOffsetY = 0,
+                    CameraOffsetZ = 20,
+                    LocationLagX  = 0.15,
+                    LocationLagY  = 0.15,
+                    LocationLagZ  = 0.05
+                );
+            };
+
+            ModifyCurve11 = {
+                GameplayTagsBlend(
+                    BlendType      = Cubic,
+                    ChildUpateMode = ResetChildOnActivate,
+                    ActiveTag      = Self.Gait,
+                    BlendPose      = {
+                        Default              = ModifyCurve8;
+                        "Als.Gait.Running"   = ModifyCurve9;
+                        "Als.Gait.Sprinting" = ModifyCurve10;
+                    },
+                    BlendTime      = 1
+                );
+                ModifyCurve(PivotOffsetZ = 50);
+            };
+
+            ModifyCurve12 = {
+                LocalRefPose();
+                ModifyCurve(
+                    CameraOffsetX = -325,
+                    CameraOffsetY = 0,
+                    CameraOffsetZ = 20,
+                    LocationLagX  = 0.15,
+                    LocationLagY  = 0.15,
+                    LocationLagZ  = 0.05
+                );
+            };
+
+            ModifyCurve13 = {
+                LocalRefPose();
+                ModifyCurve(
+                    CameraOffsetX = -325,
+                    CameraOffsetY = 0,
+                    CameraOffsetZ = 20,
+                    LocationLagX  = 0.15,
+                    LocationLagY  = 0.15,
+                    LocationLagZ  = 0.05
+                );
+            };
+
+            ModifyCurve14 = {
+                LocalRefPose();
+                ModifyCurve(
+                    CameraOffsetX = -325,
+                    CameraOffsetY = 0,
+                    CameraOffsetZ = 20,
+                    LocationLagX  = 0.15,
+                    LocationLagY  = 0.15,
+                    LocationLagZ  = 0.05
+                );
+            };
+
+            ModifyCurve15 = {
+                GameplayTagsBlend(
+                    BlendType      = Cubic,
+                    ChildUpateMode = ResetChildOnActivate,
+                    ActiveTag      = Self.Gait,
+                    BlendPose      = {
+                        Default              = ModifyCurve12;
+                        "Als.Gait.Running"   = ModifyCurve13;
+                        "Als.Gait.Sprinting" = ModifyCurve14;
+                    },
+                    BlendTime      = 1
+                );
+                ModifyCurve(PivotOffsetZ = 30);
+            };
+
+            Pose = {
+                GameplayTagsBlend(
+                    BlendType = Cubic,
+                    ActiveTag = Self.Stance,
+                    BlendPose = { Default = ModifyCurve11; "Als.Stance.Crouching" = ModifyCurve15; },
+                    BlendTime = 2
+                );
+                ModifyCurve(RotationLag = 0.05, TraceOverride = 1);
+            };
+        }
+
+        State ViewDirection
+        {
+            ModifyCurve16 = {
+                LocalRefPose();
+                ModifyCurve(
+                    CameraOffsetX = -280,
+                    CameraOffsetY = 70,
+                    CameraOffsetZ = 35,
+                    LocationLagX  = 0.1,
+                    LocationLagY  = 0.1,
+                    LocationLagZ  = 0.05
+                );
+            };
+
+            ModifyCurve17 = {
+                LocalRefPose();
+                ModifyCurve(
+                    CameraOffsetX = -275,
+                    CameraOffsetY = 75,
+                    CameraOffsetZ = 35,
+                    LocationLagX  = 0.15,
+                    LocationLagY  = 0.1,
+                    LocationLagZ  = 0.05
+                );
+            };
+
+            ModifyCurve18 = {
+                LocalRefPose();
+                ModifyCurve(
+                    CameraOffsetX = -250,
+                    CameraOffsetY = 70,
+                    CameraOffsetZ = 5,
+                    LocationLagX  = 0.05,
+                    LocationLagY  = 0.15,
+                    LocationLagZ  = 0.05
+                );
+            };
+
+            ModifyCurve19 = {
+                GameplayTagsBlend(
+                    BlendType      = Cubic,
+                    ChildUpateMode = ResetChildOnActivate,
+                    ActiveTag      = Self.Gait,
+                    BlendPose      = {
+                        Default              = ModifyCurve16;
+                        "Als.Gait.Running"   = ModifyCurve17;
+                        "Als.Gait.Sprinting" = ModifyCurve18;
+                    },
+                    BlendTime      = { Default = 1.5; "Als.Gait.Running" = 2; "Als.Gait.Sprinting" = 0.35; }
+                );
+                ModifyCurve(PivotOffsetZ = 40);
+            };
+
+            ModifyCurve20 = {
+                LocalRefPose();
+                ModifyCurve(
+                    CameraOffsetX = -250,
+                    CameraOffsetY = 55,
+                    CameraOffsetZ = 35,
+                    LocationLagX  = 0.15,
+                    LocationLagY  = 0.15,
+                    LocationLagZ  = 0.05
+                );
+            };
+
+            ModifyCurve21 = {
+                LocalRefPose();
+                ModifyCurve(
+                    CameraOffsetX = -250,
+                    CameraOffsetY = 55,
+                    CameraOffsetZ = 35,
+                    LocationLagX  = 0.15,
+                    LocationLagY  = 0.15,
+                    LocationLagZ  = 0.05
+                );
+            };
+
+            ModifyCurve22 = {
+                LocalRefPose();
+                ModifyCurve(
+                    CameraOffsetX = -250,
+                    CameraOffsetY = 55,
+                    CameraOffsetZ = 35,
+                    LocationLagX  = 0.05,
+                    LocationLagY  = 0.15,
+                    LocationLagZ  = 0.05
+                );
+            };
+
+            ModifyCurve23 = {
+                GameplayTagsBlend(
+                    BlendType      = Cubic,
+                    ChildUpateMode = ResetChildOnActivate,
+                    ActiveTag      = Self.Gait,
+                    BlendPose      = {
+                        Default              = ModifyCurve20;
+                        "Als.Gait.Running"   = ModifyCurve21;
+                        "Als.Gait.Sprinting" = ModifyCurve22;
+                    },
+                    BlendTime      = 1.5
+                );
+                ModifyCurve(PivotOffsetZ = 25);
+            };
+
+            Pose = {
+                GameplayTagsBlend(
+                    BlendType = Cubic,
+                    ActiveTag = Self.Stance,
+                    BlendPose = { Default = ModifyCurve19; "Als.Stance.Crouching" = ModifyCurve23; },
+                    BlendTime = 1.75
+                );
+                ModifyCurve(RotationLag = 0.05);
+            };
+        }
+
+        State Aiming
+        {
+            ModifyCurve24 = {
+                LocalRefPose();
+                ModifyCurve(
+                    CameraOffsetX = -200,
+                    CameraOffsetY = 70,
+                    CameraOffsetZ = 20,
+                    LocationLagX  = 0.05,
+                    LocationLagY  = 0.05,
+                    LocationLagZ  = 0.05
+                );
+            };
+
+            ModifyCurve25 = {
+                LocalRefPose();
+                ModifyCurve(
+                    CameraOffsetX = -200,
+                    CameraOffsetY = 70,
+                    CameraOffsetZ = 20,
+                    LocationLagX  = 0.05,
+                    LocationLagY  = 0.05,
+                    LocationLagZ  = 0.05
+                );
+            };
+
+            ModifyCurve26 = {
+                LocalRefPose();
+                ModifyCurve(
+                    CameraOffsetX = -200,
+                    CameraOffsetY = 70,
+                    CameraOffsetZ = 5,
+                    LocationLagX  = 0.05,
+                    LocationLagY  = 0.15,
+                    LocationLagZ  = 0.05
+                );
+            };
+
+            ModifyCurve27 = {
+                GameplayTagsBlend(
+                    BlendType      = Cubic,
+                    ChildUpateMode = ResetChildOnActivate,
+                    ActiveTag      = Self.Gait,
+                    BlendPose      = {
+                        Default              = ModifyCurve24;
+                        "Als.Gait.Running"   = ModifyCurve25;
+                        "Als.Gait.Sprinting" = ModifyCurve26;
+                    },
+                    BlendTime      = { Default = 1; "Als.Gait.Running" = 1; "Als.Gait.Sprinting" = 0.35; }
+                );
+                ModifyCurve(PivotOffsetZ = 50);
+            };
+
+            ModifyCurve28 = {
+                LocalRefPose();
+                ModifyCurve(
+                    CameraOffsetX = -200,
+                    CameraOffsetY = 60,
+                    CameraOffsetZ = 35,
+                    LocationLagX  = 0.05,
+                    LocationLagY  = 0.05,
+                    LocationLagZ  = 0.05
+                );
+            };
+
+            ModifyCurve29 = {
+                LocalRefPose();
+                ModifyCurve(
+                    CameraOffsetX = -200,
+                    CameraOffsetY = 60,
+                    CameraOffsetZ = 35,
+                    LocationLagX  = 0.05,
+                    LocationLagY  = 0.05,
+                    LocationLagZ  = 0.05
+                );
+            };
+
+            ModifyCurve30 = {
+                LocalRefPose();
+                ModifyCurve(
+                    CameraOffsetX = -200,
+                    CameraOffsetY = 60,
+                    CameraOffsetZ = 35,
+                    LocationLagX  = 0.05,
+                    LocationLagY  = 0.05,
+                    LocationLagZ  = 0.05
+                );
+            };
+
+            ModifyCurve31 = {
+                GameplayTagsBlend(
+                    BlendType      = Cubic,
+                    ChildUpateMode = ResetChildOnActivate,
+                    ActiveTag      = Self.Gait,
+                    BlendPose      = {
+                        Default              = ModifyCurve28;
+                        "Als.Gait.Running"   = ModifyCurve29;
+                        "Als.Gait.Sprinting" = ModifyCurve30;
+                    },
+                    BlendTime      = 1
+                );
+                ModifyCurve(PivotOffsetZ = 30);
+            };
+
+            Pose = {
+                GameplayTagsBlend(
+                    BlendType = Cubic,
+                    ActiveTag = Self.Stance,
+                    BlendPose = { Default = ModifyCurve27; "Als.Stance.Crouching" = ModifyCurve31; },
+                    BlendTime = 1
+                );
+                ModifyCurve(RotationLag = 0.015);
+            };
+        }
+
+        Rules = {
+            VelocityDirection = Self.RotationMode == "Als.RotationMode.VelocityDirection" || !IsValid(
+                Self.RotationMode
+            );
+            ViewDirection = Self.RotationMode == "Als.RotationMode.ViewDirection";
+            Aiming        = Self.RotationMode == "Als.RotationMode.Aiming";
+        }
+
+        Transitions = {
+            ViewDirection     -> VelocityDirection : VelocityDirection [ Blend = 1; Curve = Custom; CustomBlendCurve = CF_Als_CameraBlend_Smooth ];
+            Aiming            -> ViewDirection     : ViewDirection     [ Blend = 1; Curve = Custom; CustomBlendCurve = CF_Als_CameraBlend_Smooth ];
+            VelocityDirection -> Aiming            : Aiming            [ Blend = 0.35; Curve = Custom; CustomBlendCurve = CF_Als_CameraBlend_Quick ];
+            VelocityDirection -> ViewDirection     : ViewDirection     [ Blend = 1; Curve = Custom; CustomBlendCurve = CF_Als_CameraBlend_Smooth ];
+            Aiming            -> VelocityDirection : VelocityDirection [ Blend = 1; Curve = Custom; CustomBlendCurve = CF_Als_CameraBlend_Smooth ];
+            ViewDirection     -> Aiming            : Aiming            [ Blend = 0.35; Curve = Custom; CustomBlendCurve = CF_Als_CameraBlend_Quick ];
+        }
+    }
+}

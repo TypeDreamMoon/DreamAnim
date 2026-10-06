@@ -1,0 +1,2047 @@
+// Renamed from the Blueprint:
+//   ArmLeft <- "Arm Left"
+//   ArmRight <- "Arm Right"
+//   BasePoses <- "Base Poses"
+//   CrouchingAlias <- "Crouching Alias"
+//   CrouchingBackward <- "Crouching Backward"
+//   CrouchingForward <- "Crouching Forward"
+//   CrouchingInput <- "Crouching Input"
+//   CrouchingLeftBackward <- "Crouching Left Backward"
+//   CrouchingLeftForward <- "Crouching Left Forward"
+//   CrouchingMovement <- "Crouching Movement"
+//   CrouchingRightBackward <- "Crouching Right Backward"
+//   CrouchingRightForward <- "Crouching Right Forward"
+//   CrouchingStance <- "Crouching Stance"
+//   CrouchingStates <- "Crouching States"
+//   CrouchingToStanding <- "Crouching To Standing"
+//   EntryConduit <- "Entry Conduit"
+//   FirstPivot <- "First Pivot"
+//   GroundedAlias <- "Grounded Alias"
+//   GroundedInput <- "Grounded Input"
+//   GroundedLocomotionMode <- "Grounded Locomotion Mode"
+//   GroundedStates <- "Grounded States"
+//   InAirAlias <- "In Air Alias"
+//   JumpStates <- "Jump States"
+//   LandConduct <- "Land Conduct"
+//   LandMovement <- "Land Movement"
+//   LeftFoot <- "Left Foot"
+//   LockLeftFoot <- "Lock Left Foot"
+//   LockRightFoot <- "Lock Right Foot"
+//   LocomotionAdditiveLocalSpace <- "Locomotion Additive Local Space"
+//   LocomotionAdditiveMeshSpace <- "Locomotion Additive Mesh Space"
+//   LocomotionInput <- "Locomotion Input"
+//   LocomotionStates <- "Locomotion States"
+//   MoveBackward <- "Move Backward"
+//   MoveForward <- "Move Forward"
+//   MoveLeftBackward <- "Move Left Backward"
+//   MoveLeftForward <- "Move Left Forward"
+//   MoveRightBackward <- "Move Right Backward"
+//   MoveRightForward <- "Move Right Forward"
+//   MovementDetails <- "Movement Details"
+//   MovementDetailsStates <- "Movement Details States"
+//   MovementStates <- "Movement States"
+//   MovementStates_2 <- "Movement States_2"
+//   OverlayInput <- "Overlay Input"
+//   PlantLeftFoot <- "Plant Left Foot"
+//   PlantRightFoot <- "Plant Right Foot"
+//   RagdollingInput <- "Ragdolling Input"
+//   RightFoot <- "Right Foot"
+//   RotateLeft <- "Rotate Left"
+//   RotateRight <- "Rotate Right"
+//   RunStart <- "Run Start"
+//   RunStartFromWalk <- "Run Start From Walk"
+//   SecondPivot <- "Second Pivot"
+//   StandingAlias <- "Standing Alias"
+//   StandingBackward <- "Standing Backward"
+//   StandingForward <- "Standing Forward"
+//   StandingForwardBase <- "Standing Forward Base"
+//   StandingInput <- "Standing Input"
+//   StandingLeftBackward <- "Standing Left Backward"
+//   StandingLeftForward <- "Standing Left Forward"
+//   StandingMovement <- "Standing Movement"
+//   StandingRightBackward <- "Standing Right Backward"
+//   StandingRightForward <- "Standing Right Forward"
+//   StandingStance <- "Standing Stance"
+//   StandingStates <- "Standing States"
+//   StandingToCrouching <- "Standing To Crouching"
+//   StopStates <- "Stop States"
+//   ViewInput <- "View Input"
+AnimBlueprint(Name="ALS/Character/AB_Als_Monolithic", Root="Plugin.ALS")
+{
+    Settings = {
+        Parent                                = AlsAnimationInstance;
+        Skeleton                              = SK_Als;
+        Implements                            = [ ALI_Overlay ];
+        bEnableLinkedAnimLayerInstanceSharing = true;
+    }
+
+    Notifies = {
+        ActivatePivot  = Self.ActivatePivot();
+        StopQuick      = Self.PlayQuickStopAnimation();
+        LandToGrounded = Self.PlayTransitionRightAnimation(BlendInDuration = 0.1, PlayRate = 1.4);
+    }
+
+    Graph = {
+        LocomotionPose = {
+            LinkedAnimLayer(
+                Layer  = "GroundedLocomotionMode",
+                Tag    = "Grounded",
+                Inputs = {
+                    StandingInput  = LinkedAnimLayer(Layer = "StandingStance", Tag = "Standing");
+                    CrouchingInput = LinkedAnimLayer(Layer = "CrouchingStance", Tag = "Crouching");
+                }
+            );
+            Slot("Transition");
+            LinkedAnimLayer(Layer = "Locomotion", Tag = "Locomotion");
+            Slot("PostLocomotion");
+        };
+
+        OverlayPose = {
+            LinkedAnimLayer(
+                Interface     = ALI_Overlay,
+                Layer         = "Overlay",
+                InstanceClass = AB_Als_Default,
+                Tag           = "Overlay"
+            );
+            Inertialization(bResetOnBecomingRelevant = true);
+        };
+
+        Output = {
+            LinkedAnimLayer(
+                Layer  = "Layering",
+                Tag    = "Layering",
+                Inputs = { LocomotionInput = LocomotionPose; OverlayInput = OverlayPose; }
+            );
+            LinkedAnimLayer(Layer = "Head", Tag = "Head");
+            ControlRig(
+                ControlRigAssetReference = (BlueprintRigClass = CR_Als),
+                AlphaInputType           = Bool,
+                AlphaBoolBlend           = (BlendOption = Linear),
+                bResetInputPoseToInitial = false,
+                Tag                      = "ControlRig",
+                RigInput                 = Self.GetControlRigInput()
+            );
+            LinkedAnimLayer(Layer = "Ragdolling", Tag = "Ragdolling");
+        };
+    }
+
+    Layer Layering [ LayerGroup = "Default Shared Group" ]
+    {
+        Slot1 = {
+            Overlay;
+            Slot("ArmLeft");
+        };
+
+        ArmLeft = TwoWayBlend(
+            AlphaBoolBlend = (BlendOption = Linear),
+            Alpha          = Self.LayeringState.ArmLeftBlendAmount,
+            A              = Locomotion,
+            B              = ApplyAdditive(
+                AlphaBoolBlend = (BlendOption = Linear),
+                Alpha          = Self.LayeringState.ArmLeftAdditiveBlendAmount,
+                Base           = TwoWayBlend(
+                    AlphaBoolBlend = (BlendOption = Linear),
+                    Alpha          = Self.LayeringState.ArmLeftSlotBlendAmount,
+                    A              = Overlay,
+                    B              = Slot1
+                ),
+                Additive       = LocomotionAdditiveLocalSpace
+            )
+        ) [ Cached ];
+
+        Slot2 = {
+            Overlay;
+            Slot("ArmRight");
+        };
+
+        ArmRight = TwoWayBlend(
+            AlphaBoolBlend = (BlendOption = Linear),
+            Alpha          = Self.LayeringState.ArmRightBlendAmount,
+            A              = Locomotion,
+            B              = ApplyAdditive(
+                AlphaBoolBlend = (BlendOption = Linear),
+                Alpha          = Self.LayeringState.ArmRightAdditiveBlendAmount,
+                Base           = TwoWayBlend(
+                    AlphaBoolBlend = (BlendOption = Linear),
+                    Alpha          = Self.LayeringState.ArmRightSlotBlendAmount,
+                    A              = Overlay,
+                    B              = Slot2
+                ),
+                Additive       = LocomotionAdditiveLocalSpace
+            )
+        ) [ Cached ];
+
+        BasePoses = MultiWayBlend(
+            Poses         = [
+                SequenceEvaluator(Sequence = A_Als_Stand_Pose, ExplicitFrame = 0),
+                SequenceEvaluator(Sequence = A_Als_Crouch_Pose, ExplicitFrame = 0)
+            ],
+            DesiredAlphas = [ Self.PoseState.StandingAmount, Self.PoseState.CrouchingAmount ]
+        ) [ Cached ];
+
+        Slot3 = {
+            Overlay;
+            Slot("Head");
+        };
+
+        Head = TwoWayBlend(
+            AlphaBoolBlend = (BlendOption = Linear),
+            Alpha          = Self.LayeringState.HeadBlendAmount,
+            A              = Locomotion,
+            B              = ApplyMeshSpaceAdditive(
+                AlphaBoolBlend = (BlendOption = Linear),
+                Alpha          = Self.LayeringState.HeadAdditiveBlendAmount,
+                Base           = TwoWayBlend(
+                    AlphaBoolBlend = (BlendOption = Linear),
+                    Alpha          = Self.LayeringState.HeadSlotBlendAmount,
+                    A              = Overlay,
+                    B              = Slot3
+                ),
+                Additive       = LocomotionAdditiveMeshSpace
+            )
+        ) [ Cached ];
+
+        Slot4 = {
+            Overlay;
+            Slot("Legs");
+        };
+
+        Legs = TwoWayBlend(
+            AlphaBoolBlend = (BlendOption = Linear),
+            Alpha          = Self.LayeringState.LegsBlendAmount,
+            A              = Locomotion,
+            B              = ApplyMeshSpaceAdditive(
+                AlphaBoolBlend = (BlendOption = Linear),
+                Base           = TwoWayBlend(
+                    AlphaBoolBlend = (BlendOption = Linear),
+                    Alpha          = Self.LayeringState.LegsSlotBlendAmount,
+                    A              = Overlay,
+                    B              = Slot4
+                ),
+                Additive       = LocomotionAdditiveMeshSpace
+            )
+        ) [ Cached ];
+
+        Locomotion = Input(LocomotionInput) [ Cached ];
+        LocomotionAdditiveLocalSpace = MakeDynamicAdditive(
+            Base     = BasePoses,
+            Additive = Locomotion
+        ) [ Cached ];
+        LocomotionAdditiveMeshSpace = MakeDynamicAdditive(
+            bMeshSpaceAdditive = true,
+            Base               = BasePoses,
+            Additive           = Locomotion
+        ) [ Cached ];
+        Overlay = Input(OverlayInput) [ Cached ];
+
+        Slot5 = {
+            Overlay;
+            Slot("Pelvis");
+        };
+
+        Pelvis = TwoWayBlend(
+            AlphaBoolBlend = (BlendOption = Linear),
+            Alpha          = Self.LayeringState.PelvisBlendAmount,
+            A              = Locomotion,
+            B              = ApplyMeshSpaceAdditive(
+                AlphaBoolBlend = (BlendOption = Linear),
+                Base           = TwoWayBlend(
+                    AlphaBoolBlend = (BlendOption = Linear),
+                    Alpha          = Self.LayeringState.PelvisSlotBlendAmount,
+                    A              = Overlay,
+                    B              = Slot5
+                ),
+                Additive       = LocomotionAdditiveMeshSpace
+            )
+        ) [ Cached ];
+
+        Slot6 = {
+            Overlay;
+            Slot("Spine");
+        };
+
+        Spine = TwoWayBlend(
+            AlphaBoolBlend = (BlendOption = Linear),
+            Alpha          = Self.LayeringState.SpineBlendAmount,
+            A              = Locomotion,
+            B              = ApplyMeshSpaceAdditive(
+                AlphaBoolBlend = (BlendOption = Linear),
+                Alpha          = Self.LayeringState.SpineAdditiveBlendAmount,
+                Base           = TwoWayBlend(
+                    AlphaBoolBlend = (BlendOption = Linear),
+                    Alpha          = Self.LayeringState.SpineSlotBlendAmount,
+                    A              = Overlay,
+                    B              = Slot6
+                ),
+                Additive       = LocomotionAdditiveMeshSpace
+            )
+        ) [ Cached ];
+
+        Base = LayeredBoneBlend(
+            LayerSetup              = [ bones(neck_01) ],
+            bMeshSpaceRotationBlend = true,
+            BasePose                = LayeredBoneBlend(
+                LayerSetup              = [ bones(spine_01, Depth = 3) ],
+                bMeshSpaceRotationBlend = true,
+                BasePose                = LayeredBoneBlend(
+                    LayerSetup              = [
+                        (
+                            BranchFilters = [
+                                (BoneName = "pelvis"),
+                                (BoneName = "thigh_l", BlendDepth = -1),
+                                (BoneName = "thigh_r", BlendDepth = -1)
+                            ]
+                        )
+                    ],
+                    bMeshSpaceRotationBlend = true,
+                    BasePose                = Legs,
+                    BlendPoses              = [ Pelvis ]
+                ),
+                BlendPoses              = [ Spine ]
+            ),
+            BlendPoses              = [ Head ]
+        );
+
+        BasePose = LayeredBoneBlend(
+            LayerSetup   = [ bones(clavicle_l, Depth = 1), bones(clavicle_r, Depth = 1) ],
+            BasePose     = LayeredBoneBlend(
+                LayerSetup              = [ bones(clavicle_r, Depth = 1) ],
+                bMeshSpaceRotationBlend = true,
+                BasePose                = LayeredBoneBlend(
+                    LayerSetup              = [ bones(clavicle_l, Depth = 1) ],
+                    bMeshSpaceRotationBlend = true,
+                    BasePose                = Base,
+                    BlendPoses              = [ ArmLeft ],
+                    BlendWeights            = [ Self.LayeringState.ArmLeftMeshSpaceBlendAmount ]
+                ),
+                BlendPoses              = [ ArmRight ],
+                BlendWeights            = [ Self.LayeringState.ArmRightMeshSpaceBlendAmount ]
+            ),
+            BlendPoses   = [ ArmLeft, ArmRight ],
+            BlendWeights = [
+                Self.LayeringState.ArmLeftLocalSpaceBlendAmount,
+                Self.LayeringState.ArmRightLocalSpaceBlendAmount
+            ]
+        );
+
+        Curve = {
+            Overlay;
+            ModifyCurve(
+                LayerHeadSlot     = 0,
+                LayerArmLeftSlot  = 0,
+                LayerArmRightSlot = 0,
+                LayerSpineSlot    = 0,
+                LayerPelvisSlot   = 0,
+                LayerLegsSlot     = 0
+            );
+            Slot("Curves");
+        };
+
+        Unused1 = LayeredBoneBlend(
+            LayerSetup   = [
+                bones(clavicle_l, Depth = 1),
+                bones(clavicle_r, Depth = 1),
+                bones(
+                    index_01_l,
+                    middle_01_l,
+                    ring_01_l,
+                    pinky_01_l,
+                    thumb_01_l,
+                    "VB hand_l_to_hand_r",
+                    "VB hand_l_to_ik_hand_gun"
+                ),
+                bones(
+                    index_01_r,
+                    middle_01_r,
+                    ring_01_r,
+                    pinky_01_r,
+                    thumb_01_r,
+                    "VB hand_r_to_hand_r",
+                    "VB hand_r_to_ik_hand_gun"
+                )
+            ],
+            BasePose     = LayeredBoneBlend(
+                LayerSetup              = [
+                    (
+                        BranchFilters = [
+                            (BoneName = "pelvis"),
+                            (BoneName = "thigh_l", BlendDepth = -1),
+                            (BoneName = "thigh_r", BlendDepth = -1)
+                        ]
+                    ),
+                    bones(spine_01, Depth = 3),
+                    bones(neck_01),
+                    bones(clavicle_l, Depth = 1),
+                    bones(clavicle_r, Depth = 1)
+                ],
+                bMeshSpaceRotationBlend = true,
+                BasePose                = Legs,
+                BlendPoses              = [ Pelvis, Spine, Head, ArmLeft, ArmRight ],
+                BlendWeights            = [
+                    1,
+                    1,
+                    1,
+                    Self.LayeringState.ArmLeftMeshSpaceBlendAmount,
+                    Self.LayeringState.ArmRightMeshSpaceBlendAmount
+                ]
+            ),
+            BlendPoses   = [ ArmLeft, ArmRight, Overlay, Overlay ],
+            BlendWeights = [
+                Self.LayeringState.ArmLeftLocalSpaceBlendAmount,
+                Self.LayeringState.ArmRightLocalSpaceBlendAmount,
+                Self.LayeringState.HandLeftBlendAmount,
+                Self.LayeringState.HandRightBlendAmount
+            ]
+        );
+
+        Output = CurvesBlend(
+            BlendMode = Override,
+            BasePose  = LayeredBoneBlend(
+                LayerSetup   = [
+                    bones(
+                        index_01_l,
+                        middle_01_l,
+                        ring_01_l,
+                        pinky_01_l,
+                        thumb_01_l,
+                        "VB hand_l_to_hand_r",
+                        "VB hand_l_to_ik_hand_gun"
+                    ),
+                    bones(
+                        index_01_r,
+                        middle_01_r,
+                        ring_01_r,
+                        pinky_01_r,
+                        thumb_01_r,
+                        "VB hand_r_to_hand_r",
+                        "VB hand_r_to_ik_hand_gun"
+                    )
+                ],
+                BasePose     = BasePose,
+                BlendPoses   = [ Overlay, Overlay ],
+                BlendWeights = [
+                    Self.LayeringState.HandLeftBlendAmount,
+                    Self.LayeringState.HandRightBlendAmount
+                ]
+            ),
+            CurvePose = CurvesBlend(BasePose = Locomotion, CurvePose = Curve)
+        );
+    }
+
+    Layer Ragdolling [ LayerGroup = "Default Shared Group" ] = GameplayTagsBlend(
+        BlendType = Linear,
+        ActiveTag = Self.LocomotionAction,
+        BlendPose = {
+            Default = Input(RagdollingInput);
+            "Als.LocomotionAction.Ragdolling" = GameplayTagsBlend(
+                BlendType = Linear,
+                ActiveTag = Self.LocomotionAction,
+                BlendPose = {
+                    Default = PoseSnapshot(
+                        Mode     = SnapshotPin,
+                        Snapshot = Self.RagdollingState.FinalRagdollPose
+                    );
+                    "Als.LocomotionAction.Ragdolling" = SequencePlayer(
+                        Sequence = A_Als_Flail,
+                        PlayRate = Self.RagdollingState.FlailPlayRate
+                    );
+                },
+                BlendTime = 0
+            );
+        },
+        BlendTime = { Default = 0.4; "Als.LocomotionAction.Ragdolling" = 0.5; }
+    );
+
+    Layer Head [ LayerGroup = "Default Shared Group" ]
+    {
+        Additive = {
+            BlendSpaceEvaluator(
+                BlendSpace     = BS_Als_Look,
+                NormalizedTime = Self.HeadState.YawAmount,
+                X              = Self.HeadState.PitchAngle
+            );
+            Call(Self.RefreshHead);
+            Call(Self.InitializeHead, On = BecomeRelevant);
+        };
+
+        Output = ApplyMeshSpaceAdditive(
+            AlphaBoolBlend = (BlendOption = Linear),
+            Alpha          = Self.ViewState.HeadBlendAmount,
+            Base           = Input(ViewInput),
+            Additive       = Additive
+        );
+    }
+
+    Layer Locomotion [ LayerGroup = "Default Shared Group" ]
+    {
+        Grounded = Input(GroundedInput) [ Cached ];
+
+        Output = {
+            LocomotionStates;
+            Inertialization(FilteredCurves = [ "RotationYawSpeed" ], bResetOnBecomingRelevant = true);
+            Call(Self.InitializeLean, On = BecomeRelevant);
+        };
+    }
+
+    Layer GroundedLocomotionMode [ LayerGroup = "Default Shared Group" ]
+    {
+        Crouching = Input(CrouchingInput) [ Cached ];
+        Standing  = Input(StandingInput) [ Cached ];
+
+        Output = {
+            GroundedStates;
+            Inertialization(FilteredCurves = [ "RotationYawSpeed" ], bResetOnBecomingRelevant = true);
+            ModifyCurve(PoseGrounded = 1, FootLeftIk = 1, FootRightIk = 1);
+            Call(Self.RefreshGrounded);
+            Call(Self.InitializeGrounded, On = BecomeRelevant);
+        };
+    }
+
+    Layer StandingStance [ LayerGroup = "Default Shared Group" ]
+    {
+        MovementDetails = {
+            MovementDetailsStates;
+            Inertialization(bResetOnBecomingRelevant = true);
+            Call(Self.RefreshStandingMovement);
+            Call(Self.InitializeStandingMovement, On = BecomeRelevant);
+            Call(Self.RefreshGroundedMovement);
+        } [ Cached ];
+
+        StandingBackward = BlendSpacePlayer(
+            GroupName     = "Movement",
+            Method        = SyncGroup,
+            StartPosition = 0.2,
+            BlendSpace    = BS_Als_WalkRun_Backward,
+            X             = Self.StandingState.StrideBlendAmount,
+            Y             = Self.StandingState.WalkRunBlendAmount,
+            PlayRate      = Self.StandingState.PlayRate
+        ) [ Cached ];
+
+        GameplayTagsBlend1 = GameplayTagsBlend(
+            BlendType = Cubic,
+            ActiveTag = Self.Gait,
+            BlendPose = {
+                Default = StandingForwardBase;
+                "Als.Gait.Sprinting" = TwoWayBlend(
+                    bResetChildOnActivation = true,
+                    AlphaBoolBlend          = (BlendOption = Linear),
+                    AlphaScaleBiasClamp     = (
+                        bMapRange             = true,
+                        bInterpResult         = true,
+                        InRange               = (Max = 0.25),
+                        InterpSpeedIncreasing = 20,
+                        InterpSpeedDecreasing = 4
+                    ),
+                    Alpha                   = Self.StandingState.SprintAccelerationAmount,
+                    A                       = SequencePlayer(
+                        GroupName     = "Movement",
+                        Method        = SyncGroup,
+                        Sequence      = A_Als_Sprint,
+                        StartPosition = 0.166667,
+                        PlayRate      = Self.StandingState.PlayRate
+                    ),
+                    B                       = SequencePlayer(
+                        GroupName     = "Movement",
+                        Method        = SyncGroup,
+                        Sequence      = A_Als_Sprint_Acceleration,
+                        PlayRateBasis = 0.833333,
+                        StartPosition = 0.166667,
+                        PlayRate      = Self.StandingState.PlayRate
+                    )
+                );
+            },
+            BlendTime = { Default = 0.3; "Als.Gait.Sprinting" = 0.2; }
+        );
+
+        StandingForward = TwoWayBlend(
+            AlphaBoolBlend = (BlendOption = Linear),
+            Alpha          = Self.StandingState.SprintBlockAmount,
+            A              = GameplayTagsBlend1,
+            B              = StandingForwardBase
+        ) [ Cached ];
+
+        StandingForwardBase = BlendSpacePlayer(
+            GroupName     = "Movement",
+            Method        = SyncGroup,
+            StartPosition = 0.2,
+            BlendSpace    = BS_Als_WalkRun_Forward,
+            X             = Self.StandingState.StrideBlendAmount,
+            Y             = Self.StandingState.WalkRunBlendAmount,
+            PlayRate      = Self.StandingState.PlayRate
+        ) [ Cached ];
+
+        StandingLeftBackward = BlendSpacePlayer(
+            GroupName     = "Movement",
+            Method        = SyncGroup,
+            StartPosition = 0.2,
+            BlendSpace    = BS_Als_WalkRun_Left_Backward,
+            X             = Self.StandingState.StrideBlendAmount,
+            Y             = Self.StandingState.WalkRunBlendAmount,
+            PlayRate      = Self.StandingState.PlayRate
+        ) [ Cached ];
+
+        StandingLeftForward = BlendSpacePlayer(
+            GroupName     = "Movement",
+            Method        = SyncGroup,
+            StartPosition = 0.2,
+            BlendSpace    = BS_Als_WalkRun_Left_Forward,
+            X             = Self.StandingState.StrideBlendAmount,
+            Y             = Self.StandingState.WalkRunBlendAmount,
+            PlayRate      = Self.StandingState.PlayRate
+        ) [ Cached ];
+
+        StandingMovement = {
+            ApplyAdditive(
+                AlphaBoolBlend      = (BlendOption = Linear),
+                AlphaScaleBiasClamp = (
+                    bClampResult          = true,
+                    bInterpResult         = true,
+                    ClampMin              = 0.5,
+                    InterpSpeedIncreasing = 20,
+                    InterpSpeedDecreasing = 1
+                ),
+                Alpha               = Self.PoseState.UnweightedGaitRunningAmount,
+                Base                = MovementStates,
+                Additive            = BlendSpaceEvaluator(
+                    BlendSpace = BS_Als_Lean,
+                    X          = Self.LeanState.RightAmount,
+                    Y          = Self.LeanState.ForwardAmount
+                )
+            );
+            ModifyCurve(PoseMoving = 1);
+        } [ Cached ];
+
+        StandingRightBackward = BlendSpacePlayer(
+            GroupName     = "Movement",
+            Method        = SyncGroup,
+            StartPosition = 0.2,
+            BlendSpace    = BS_Als_WalkRun_Right_Backward,
+            X             = Self.StandingState.StrideBlendAmount,
+            Y             = Self.StandingState.WalkRunBlendAmount,
+            PlayRate      = Self.StandingState.PlayRate
+        ) [ Cached ];
+
+        StandingRightForward = BlendSpacePlayer(
+            GroupName     = "Movement",
+            Method        = SyncGroup,
+            StartPosition = 0.2,
+            BlendSpace    = BS_Als_WalkRun_Right_Forward,
+            X             = Self.StandingState.StrideBlendAmount,
+            Y             = Self.StandingState.WalkRunBlendAmount,
+            PlayRate      = Self.StandingState.PlayRate
+        ) [ Cached ];
+
+        Output = {
+            StandingStates;
+            Inertialization(FilteredCurves = [ "RotationYawSpeed" ], bResetOnBecomingRelevant = true);
+            ModifyCurve(PoseStanding = 1);
+            Call(Self.RefreshRotateInPlace);
+        };
+    }
+
+    Layer CrouchingStance [ LayerGroup = "Default Shared Group" ]
+    {
+        CrouchingBackward = SequencePlayer(
+            GroupName = "Movement",
+            Method    = SyncGroup,
+            Sequence  = A_Als_Crouch_Walk_Backward,
+            PlayRate  = Self.CrouchingState.PlayRate
+        ) [ Cached ];
+
+        CrouchingForward = SequencePlayer(
+            GroupName = "Movement",
+            Method    = SyncGroup,
+            Sequence  = A_Als_Crouch_Walk_Forward,
+            PlayRate  = Self.CrouchingState.PlayRate
+        ) [ Cached ];
+
+        CrouchingLeftBackward = SequencePlayer(
+            GroupName = "Movement",
+            Method    = SyncGroup,
+            Sequence  = A_Als_Crouch_Walk_Left_Backward,
+            PlayRate  = Self.CrouchingState.PlayRate
+        ) [ Cached ];
+
+        CrouchingLeftForward = SequencePlayer(
+            GroupName = "Movement",
+            Method    = SyncGroup,
+            Sequence  = A_Als_Crouch_Walk_Left_Forward,
+            PlayRate  = Self.CrouchingState.PlayRate
+        ) [ Cached ];
+
+        CrouchingMovement = {
+            ApplyAdditive(
+                AlphaBoolBlend = (BlendOption = Linear),
+                AlphaCurveName = "Weight_Gait",
+                Base           = TwoWayBlend(
+                    AlphaBoolBlend      = (BlendOption = Linear),
+                    AlphaScaleBiasClamp = (bInterpResult = true),
+                    Alpha               = Self.CrouchingState.StrideBlendAmount,
+                    A                   = SequenceEvaluator(
+                        Sequence      = A_Als_Crouch_Walk_Pose,
+                        ExplicitFrame = 0
+                    ),
+                    B                   = MovementStates_2
+                ),
+                Additive       = BlendSpaceEvaluator(
+                    BlendSpace = BS_Als_Lean,
+                    X          = Self.LeanState.RightAmount,
+                    Y          = Self.LeanState.ForwardAmount
+                )
+            );
+            ModifyCurve(PoseMoving = 1);
+            Call(Self.RefreshCrouchingMovement);
+            Call(Self.RefreshGroundedMovement);
+        } [ Cached ];
+
+        CrouchingRightBackward = SequencePlayer(
+            GroupName = "Movement",
+            Method    = SyncGroup,
+            Sequence  = A_Als_Crouch_Walk_Right_Backward,
+            PlayRate  = Self.CrouchingState.PlayRate
+        ) [ Cached ];
+
+        CrouchingRightForward = SequencePlayer(
+            GroupName = "Movement",
+            Method    = SyncGroup,
+            Sequence  = A_Als_Crouch_Walk_Right_Forward,
+            PlayRate  = Self.CrouchingState.PlayRate
+        ) [ Cached ];
+
+        Output = {
+            CrouchingStates;
+            Inertialization(FilteredCurves = [ "RotationYawSpeed" ], bResetOnBecomingRelevant = true);
+            ModifyCurve(PoseCrouching = 1);
+            Call(Self.RefreshRotateInPlace);
+        };
+    }
+
+    Layer Overlay [ LayerGroup = "Default Shared Group" ] = LocalRefPose();
+
+    StateMachine JumpStates [ bAllowConduitEntryStates = true ]
+    {
+        Entry = EntryConduit;
+
+        State LeftFoot
+        {
+            Pose = TwoWayBlend(
+                AlphaBoolBlend      = (BlendOption = Linear),
+                AlphaScaleBiasClamp = (
+                    bMapRange             = true,
+                    bInterpResult         = true,
+                    InRange               = (Min = 200, Max = 500),
+                    InterpSpeedIncreasing = 5,
+                    InterpSpeedDecreasing = 5
+                ),
+                Alpha               = Self.LocomotionState.Speed,
+                A                   = SequencePlayer(
+                    GroupName      = "Jump",
+                    Method         = SyncGroup,
+                    Sequence       = A_Als_Jump_Walk_Left,
+                    StartPosition  = 0.12,
+                    bLoopAnimation = false,
+                    PlayRate       = Self.InAirState.JumpPlayRate
+                ),
+                B                   = SequencePlayer(
+                    GroupName      = "Jump",
+                    Method         = SyncGroup,
+                    Sequence       = A_Als_Jump_Run_Left,
+                    bLoopAnimation = false,
+                    PlayRate       = Self.InAirState.JumpPlayRate
+                )
+            );
+        }
+
+        State RightFoot
+        {
+            Pose = TwoWayBlend(
+                AlphaBoolBlend      = (BlendOption = Linear),
+                AlphaScaleBiasClamp = (
+                    bMapRange             = true,
+                    bInterpResult         = true,
+                    InRange               = (Min = 200, Max = 500),
+                    InterpSpeedIncreasing = 5,
+                    InterpSpeedDecreasing = 5
+                ),
+                Alpha               = Self.LocomotionState.Speed,
+                A                   = SequencePlayer(
+                    GroupName      = "Jump",
+                    Method         = SyncGroup,
+                    Sequence       = A_Als_Jump_Walk_Right,
+                    StartPosition  = 0.12,
+                    bLoopAnimation = false,
+                    PlayRate       = Self.InAirState.JumpPlayRate
+                ),
+                B                   = SequencePlayer(
+                    GroupName      = "Jump",
+                    Method         = SyncGroup,
+                    Sequence       = A_Als_Jump_Run_Right,
+                    bLoopAnimation = false,
+                    PlayRate       = Self.InAirState.JumpPlayRate
+                )
+            );
+        }
+
+        State Loop
+        {
+            Pose = SequencePlayer(
+                GroupName = "Flail",
+                Method    = SyncGroup,
+                Sequence  = A_Als_Jump_Loop,
+                PlayRate  = Self.InAirState.JumpPlayRate
+            );
+        }
+
+        State Flail
+        {
+            Pose = SequencePlayer(
+                GroupName = "Flail",
+                Method    = SyncGroup,
+                Sequence  = A_Als_Flail,
+                PlayRate  = 1.2
+            );
+        }
+
+        Conduit EntryConduit;
+
+        Transitions = {
+            LeftFoot     -> Loop      : Auto [ AutomaticRuleTriggerTime = 0; Inertialize ];
+            Loop         -> Flail     : true [ Blend = 1 ];
+            RightFoot    -> Loop      : Auto [ AutomaticRuleTriggerTime = 0; Inertialize ];
+            EntryConduit -> LeftFoot  : Self.FeetState.FootPlantedAmount <= 0;
+            EntryConduit -> RightFoot : Self.FeetState.FootPlantedAmount > 0;
+        }
+    }
+
+    StateMachine LocomotionStates
+    {
+        Entry = Grounded;
+
+        State Grounded
+        {
+            OnExit = Self.StopTransitionAndTurnInPlaceAnimations();
+
+            Pose = Grounded;
+        }
+
+        State Fall
+        {
+            Base1 = TwoWayBlend(
+                AlphaBoolBlend      = (BlendOption = Linear),
+                AlphaScaleBiasClamp = (
+                    bMapRange             = true,
+                    bInterpResult         = true,
+                    InRange               = (Min = -500, Max = -3000),
+                    InterpSpeedIncreasing = 5,
+                    InterpSpeedDecreasing = 5
+                ),
+                Alpha               = Self.InAirState.VerticalVelocityWorldSpace,
+                A                   = TwoWayBlend(
+                    AlphaBoolBlend      = (BlendOption = Linear),
+                    AlphaScaleBiasClamp = (
+                        bMapRange             = true,
+                        bInterpResult         = true,
+                        InRange               = (Max = -1000),
+                        InterpSpeedIncreasing = 5,
+                        InterpSpeedDecreasing = 5
+                    ),
+                    Alpha               = Self.InAirState.VerticalVelocityWorldSpace,
+                    A                   = SequencePlayer(
+                        GroupName = "Fall",
+                        Method    = SyncGroup,
+                        Sequence  = A_Als_Fall_Fast
+                    ),
+                    B                   = SequencePlayer(
+                        GroupName = "Fall",
+                        Method    = SyncGroup,
+                        Sequence  = A_Als_Fall
+                    )
+                ),
+                B                   = SequencePlayer(Sequence = A_Als_Flail)
+            );
+
+            Pose = {
+                TwoWayBlend(
+                    AlphaBoolBlend      = (BlendOption = Linear),
+                    AlphaScaleBiasClamp = (
+                        bInterpResult         = true,
+                        InterpSpeedIncreasing = 20,
+                        InterpSpeedDecreasing = 5
+                    ),
+                    Alpha               = Self.InAirState.GroundPredictionAmount,
+                    A                   = ApplyAdditive(
+                        AlphaBoolBlend = (BlendOption = Linear),
+                        Base           = Base1,
+                        Additive       = BlendSpaceEvaluator(
+                            BlendSpace = BS_Als_Air_Lean,
+                            X          = Self.LeanState.RightAmount,
+                            Y          = Self.LeanState.ForwardAmount
+                        )
+                    ),
+                    B                   = TwoWayBlend(
+                        AlphaBoolBlend      = (BlendOption = Linear),
+                        AlphaScaleBiasClamp = (bMapRange = true, InRange = (Min = -1000, Max = -500)),
+                        Alpha               = Self.InAirState.VerticalVelocityWorldSpace,
+                        A                   = SequenceEvaluator(
+                            Sequence      = A_Als_Land_Heavy,
+                            ExplicitFrame = 0
+                        ),
+                        B                   = SequenceEvaluator(
+                            Sequence      = A_Als_Land_Light,
+                            ExplicitFrame = 0
+                        )
+                    )
+                );
+                ModifyCurve(Alpha = Self.InAirState.GroundPredictionAmount, FootLeftIk = 1, FootRightIk = 1);
+                ModifyCurve(PoseStanding = 1, PoseInAir = 1);
+                Call(Self.RefreshInAir);
+            };
+        }
+
+        State Jump [ bAlwaysResetOnEntry = true ]
+        {
+            Base2 = {
+                JumpStates;
+                Inertialization(bResetOnBecomingRelevant = true);
+            };
+
+            Pose = {
+                TwoWayBlend(
+                    AlphaBoolBlend      = (BlendOption = Linear),
+                    AlphaScaleBiasClamp = (
+                        bInterpResult         = true,
+                        InterpSpeedIncreasing = 20,
+                        InterpSpeedDecreasing = 5
+                    ),
+                    Alpha               = Self.InAirState.GroundPredictionAmount,
+                    A                   = ApplyAdditive(
+                        AlphaBoolBlend = (BlendOption = Linear),
+                        Base           = Base2,
+                        Additive       = BlendSpaceEvaluator(
+                            BlendSpace = BS_Als_Air_Lean,
+                            X          = Self.LeanState.RightAmount,
+                            Y          = Self.LeanState.ForwardAmount
+                        )
+                    ),
+                    B                   = TwoWayBlend(
+                        AlphaBoolBlend      = (BlendOption = Linear),
+                        AlphaScaleBiasClamp = (bMapRange = true, InRange = (Min = -1000, Max = -500)),
+                        Alpha               = Self.InAirState.VerticalVelocityWorldSpace,
+                        A                   = SequenceEvaluator(
+                            Sequence      = A_Als_Land_Heavy,
+                            ExplicitFrame = 0
+                        ),
+                        B                   = SequenceEvaluator(
+                            Sequence      = A_Als_Land_Light,
+                            ExplicitFrame = 0
+                        )
+                    )
+                );
+                ModifyCurve(Alpha = Self.InAirState.GroundPredictionAmount, FootLeftIk = 1, FootRightIk = 1);
+                ModifyCurve(PoseStanding = 1, PoseInAir = 1);
+                Call(Self.RefreshInAir);
+            };
+        }
+
+        State Land
+        {
+            Pose = {
+                TwoWayBlend(
+                    AlphaBoolBlend      = (BlendOption = Linear),
+                    AlphaScaleBiasClamp = (bMapRange = true, InRange = (Min = -500, Max = -1000)),
+                    Alpha               = Self.InAirState.VerticalVelocityWorldSpace,
+                    A                   = SequencePlayer(
+                        GroupName      = "Land",
+                        Method         = SyncGroup,
+                        Sequence       = A_Als_Land_Light,
+                        bLoopAnimation = false
+                    ),
+                    B                   = SequencePlayer(
+                        GroupName      = "Land",
+                        Method         = SyncGroup,
+                        Sequence       = A_Als_Land_Heavy,
+                        bLoopAnimation = false
+                    )
+                );
+                ModifyCurve(
+                    FootLeftIk    = 1,
+                    FootRightIk   = 1,
+                    FootLeftLock  = 1,
+                    FootRightLock = 1,
+                    PoseStanding  = 1,
+                    PoseGrounded  = 1
+                );
+                Call(Self.RefreshRotateInPlace);
+            };
+        }
+
+        State LandMovement
+        {
+            ApplyMeshSpaceAdditive1 = ApplyMeshSpaceAdditive(
+                AlphaBoolBlend      = (BlendOption = Linear),
+                AlphaScaleBiasClamp = (
+                    bMapRange             = true,
+                    bInterpResult         = true,
+                    OutRange              = (Min = 1, Max = 0.5),
+                    InterpSpeedIncreasing = 2.5,
+                    InterpSpeedDecreasing = 20
+                ),
+                Alpha               = Self.RotationMode == "Als.RotationMode.Aiming" ? 1 : 0,
+                Base                = Grounded,
+                Additive            = TwoWayBlend(
+                    AlphaBoolBlend      = (BlendOption = Linear),
+                    AlphaScaleBiasClamp = (
+                        bMapRange = true,
+                        InRange   = (Min = -750, Max = -1500),
+                        OutRange  = (Max = 0.75)
+                    ),
+                    Alpha               = Self.InAirState.VerticalVelocityWorldSpace,
+                    A                   = SequencePlayer(
+                        GroupName      = "Land",
+                        Method         = SyncGroup,
+                        Sequence       = A_Als_Land_Light_Additive,
+                        PlayRate       = 1.75,
+                        bLoopAnimation = false
+                    ),
+                    B                   = SequencePlayer(
+                        GroupName      = "Land",
+                        Method         = SyncGroup,
+                        Sequence       = A_Als_Land_Heavy_Additive,
+                        PlayRate       = 1.5,
+                        bLoopAnimation = false
+                    )
+                )
+            );
+
+            Pose = TwoWayBlend(
+                AlphaBoolBlend      = (BlendOption = Linear),
+                AlphaScaleBiasClamp = (
+                    bMapRange    = true,
+                    bClampResult = true,
+                    InRange      = (Max = -200),
+                    OutRange     = (Min = 0.25),
+                    ClampMin     = 0.25
+                ),
+                Alpha               = Self.InAirState.VerticalVelocityWorldSpace,
+                A                   = Grounded,
+                B                   = ApplyMeshSpaceAdditive1
+            );
+        }
+
+        Conduit LandConduct = Self.LocomotionMode == "Als.LocomotionMode.Grounded";
+        Alias GroundedAlias = [ Fall, Jump ];
+        Alias InAirAlias = [ Grounded, Land, LandMovement ];
+
+        Transitions = {
+            Land          -> Grounded     : Auto                                                                         [ Blend = 0.8; Curve = Cubic; AutomaticRuleTriggerTime = 0; TransitionStart = (NotifyName = "LandToGrounded"); BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:QuickFeetBlend") ];
+            Land          -> LandMovement : Self.LocomotionState.bHasInput || Self.RotateInPlaceState.bRotatingLeft || Self.RotateInPlaceState.bRotatingRight || Self.LocomotionState.Speed >= 650;
+            LandMovement  -> Grounded     : Auto                                                                         [ Blend = 0.3 ];
+            LandConduct   -> Land         : true                                                                         [ Blend = 0.1; Inertialize ];
+            LandConduct   -> LandMovement : Self.LocomotionState.bHasInput || Self.MovementBase.bHasRelativeLocation     [ Blend = 0.1; Inertialize ];
+            GroundedAlias -> Grounded     : Self.LocomotionMode == "Als.LocomotionMode.Grounded";
+            Jump          -> LandConduct  : true;
+            Fall          -> LandConduct  : true;
+            InAirAlias    -> Jump         : Self.LocomotionMode == "Als.LocomotionMode.InAir" && Self.InAirState.bJumped [ Blend = 0.1; Inertialize ];
+            InAirAlias    -> Fall         : Self.LocomotionMode == "Als.LocomotionMode.InAir"                            [ Priority = 2; Blend = 0.75; Inertialize ];
+            Land          -> Grounded     : Self.Stance != "Als.Stance.Standing";
+        }
+    }
+
+    StateMachine GroundedStates [ MaxTransitionsPerFrame = 1; bAllowConduitEntryStates = true ]
+    {
+        Entry = EntryConduit;
+
+        State Standing
+        {
+            Pose = {
+                Standing;
+                Call(Self.ResetGroundedEntryMode, On = BecomeRelevant);
+            };
+        }
+
+        State Crouching
+        {
+            Pose = {
+                Crouching;
+                Call(Self.ResetGroundedEntryMode, On = BecomeRelevant);
+            };
+        }
+
+        State StandingToCrouching
+        {
+            OnEnter = Self.StopTransitionAndTurnInPlaceAnimations();
+
+            Pose = SequencePlayer(Sequence = A_Als_StandToCrouch, PlayRate = 1.2, bLoopAnimation = false);
+        }
+
+        State CrouchingToStanding
+        {
+            OnEnter = Self.StopTransitionAndTurnInPlaceAnimations();
+
+            Pose = SequencePlayer(Sequence = A_Als_CrouchToStand, PlayRate = 1.2, bLoopAnimation = false);
+        }
+
+        State Roll
+        {
+            OnExit = Self.PlayTransitionRightAnimation(PlayRate = 1.5, StartTime = 0.2);
+
+            Pose = {
+                SequenceEvaluator(Sequence = A_Als_Roll, ExplicitFrame = 45);
+                ModifyCurve(FootLeftLock = 1, FootRightLock = 1);
+                Call(Self.ResetGroundedEntryMode, On = BecomeRelevant);
+            };
+        }
+
+        Conduit EntryConduit;
+        Alias StandingAlias = [ Crouching, CrouchingToStanding, StandingToCrouching ];
+        Alias CrouchingAlias = [ CrouchingToStanding, Standing, StandingToCrouching ];
+
+        Transitions = {
+            StandingToCrouching -> Crouching : Auto [ Blend = 0 ];
+            CrouchingToStanding -> Standing  : Auto [ Blend = 0 ];
+            Roll -> Standing : Self.Stance == "Als.Stance.Standing" || !IsValid(
+                Self.Stance
+            ) [ Blend = 0.6; Curve = Cubic ];
+            Roll          -> Crouching : Self.Stance == "Als.Stance.Crouching"                                                                                                                                                      [ Blend = 0.6; Curve = Cubic ];
+            StandingAlias -> Standing  : (Self.Stance == "Als.Stance.Standing" || !IsValid(Self.Stance)) && (Self.LocomotionState.bMovingSmooth || Self.RotateInPlaceState.bRotatingLeft || Self.RotateInPlaceState.bRotatingRight) [ Blend = 0.5; Curve = Custom; CustomBlendCurve = CF_Als_StanceChange ];
+            StandingAlias -> CrouchingToStanding : Self.Stance == "Als.Stance.Standing" || !IsValid(
+                Self.Stance
+            ) [ Priority = 2; Blend = 0.3; Inertialize ];
+            CrouchingAlias -> Crouching           : Self.Stance == "Als.Stance.Crouching" && (Self.LocomotionState.bMovingSmooth || Self.RotateInPlaceState.bRotatingLeft || Self.RotateInPlaceState.bRotatingRight) [ Blend = 0.5; Curve = Custom; CustomBlendCurve = CF_Als_StanceChange ];
+            CrouchingAlias -> StandingToCrouching : Self.Stance == "Als.Stance.Crouching"                                                                                                                            [ Priority = 2; Blend = 0.3; Inertialize ];
+            EntryConduit   -> Standing            : Self.PoseState.StandingAmount >= 0.5                                                                                                                             [ Priority = 2 ];
+            EntryConduit   -> Roll                : Self.GroundedEntryMode == "Als.GroundedEntryMode.FromRoll" && !(Self.LocomotionState.bHasInput || Self.RotateInPlaceState.bRotatingLeft || Self.RotateInPlaceState.bRotatingRight);
+            EntryConduit   -> Crouching           : Self.PoseState.CrouchingAmount >= 0.5                                                                                                                            [ Priority = 2 ];
+            EntryConduit   -> Standing            : true                                                                                                                                                             [ Priority = 3 ];
+        }
+    }
+
+    StateMachine MovementDetailsStates [ MaxTransitionsPerFrame = 1; bSkipFirstUpdateTransition = false ]
+    {
+        Entry = Walk;
+
+        State RunStartFromWalk
+        {
+            Pose = ApplyAdditive(
+                AlphaBoolBlend = (BlendOption = Linear),
+                Base           = StandingMovement,
+                Additive       = MultiWayBlend(
+                    bAdditiveNode = true,
+                    Poses         = [
+                        SequencePlayer(
+                            GroupName      = "Run Start",
+                            Method         = SyncGroup,
+                            Sequence       = A_Als_Acceleration_Forward,
+                            PlayRate       = 1.25,
+                            StartPosition  = 0.1,
+                            bLoopAnimation = false
+                        ),
+                        SequencePlayer(
+                            GroupName      = "Run Start",
+                            Method         = SyncGroup,
+                            Sequence       = A_Als_Acceleration_Backward,
+                            PlayRate       = 1.25,
+                            StartPosition  = 0.1,
+                            bLoopAnimation = false
+                        ),
+                        SequencePlayer(
+                            GroupName      = "Run Start",
+                            Method         = SyncGroup,
+                            Sequence       = A_Als_Acceleration_Left,
+                            PlayRate       = 1.25,
+                            StartPosition  = 0.1,
+                            bLoopAnimation = false
+                        ),
+                        SequencePlayer(
+                            GroupName      = "Run Start",
+                            Method         = SyncGroup,
+                            Sequence       = A_Als_Acceleration_Right,
+                            PlayRate       = 1.25,
+                            StartPosition  = 0.1,
+                            bLoopAnimation = false
+                        )
+                    ],
+                    DesiredAlphas = [
+                        Self.GroundedState.VelocityBlend.ForwardAmount,
+                        Self.GroundedState.VelocityBlend.BackwardAmount,
+                        Self.GroundedState.VelocityBlend.LeftAmount,
+                        Self.GroundedState.VelocityBlend.RightAmount
+                    ]
+                )
+            );
+        }
+
+        State Walk { Pose = StandingMovement; }
+        State Run { Pose = StandingMovement; }
+
+        State FirstPivot
+        {
+            Pose = {
+                ApplyAdditive(
+                    AlphaBoolBlend = (BlendOption = Linear),
+                    Base           = StandingMovement,
+                    Additive       = MultiWayBlend(
+                        bAdditiveNode = true,
+                        Poses         = [
+                            SequencePlayer(
+                                GroupName      = "First Pivot",
+                                Method         = SyncGroup,
+                                Sequence       = A_Als_Acceleration_Forward,
+                                PlayRate       = 1.25,
+                                StartPosition  = 0.25,
+                                bLoopAnimation = false
+                            ),
+                            SequencePlayer(
+                                GroupName      = "First Pivot",
+                                Method         = SyncGroup,
+                                Sequence       = A_Als_Acceleration_Backward,
+                                PlayRate       = 1.25,
+                                StartPosition  = 0.25,
+                                bLoopAnimation = false
+                            ),
+                            SequencePlayer(
+                                GroupName      = "First Pivot",
+                                Method         = SyncGroup,
+                                Sequence       = A_Als_Acceleration_Left,
+                                PlayRate       = 1.25,
+                                StartPosition  = 0.25,
+                                bLoopAnimation = false
+                            ),
+                            SequencePlayer(
+                                GroupName      = "First Pivot",
+                                Method         = SyncGroup,
+                                Sequence       = A_Als_Acceleration_Right,
+                                PlayRate       = 1.25,
+                                StartPosition  = 0.25,
+                                bLoopAnimation = false
+                            )
+                        ],
+                        DesiredAlphas = [
+                            Self.GroundedState.VelocityBlend.ForwardAmount,
+                            Self.GroundedState.VelocityBlend.BackwardAmount,
+                            Self.GroundedState.VelocityBlend.LeftAmount,
+                            Self.GroundedState.VelocityBlend.RightAmount
+                        ]
+                    )
+                );
+                Call(Self.ResetPivot, On = BecomeRelevant);
+            };
+        }
+
+        State SecondPivot
+        {
+            Pose = {
+                ApplyAdditive(
+                    AlphaBoolBlend = (BlendOption = Linear),
+                    Base           = StandingMovement,
+                    Additive       = MultiWayBlend(
+                        Poses         = [
+                            SequencePlayer(
+                                GroupName      = "Second Pivot",
+                                Method         = SyncGroup,
+                                Sequence       = A_Als_Acceleration_Forward,
+                                PlayRate       = 1.25,
+                                StartPosition  = 0.25,
+                                bLoopAnimation = false
+                            ),
+                            SequencePlayer(
+                                GroupName      = "Second Pivot",
+                                Method         = SyncGroup,
+                                Sequence       = A_Als_Acceleration_Backward,
+                                PlayRate       = 1.25,
+                                StartPosition  = 0.25,
+                                bLoopAnimation = false
+                            ),
+                            SequencePlayer(
+                                GroupName      = "Second Pivot",
+                                Method         = SyncGroup,
+                                Sequence       = A_Als_Acceleration_Left,
+                                PlayRate       = 1.25,
+                                StartPosition  = 0.25,
+                                bLoopAnimation = false
+                            ),
+                            SequencePlayer(
+                                GroupName      = "Second Pivot",
+                                Method         = SyncGroup,
+                                Sequence       = A_Als_Acceleration_Right,
+                                PlayRate       = 1.25,
+                                StartPosition  = 0.25,
+                                bLoopAnimation = false
+                            )
+                        ],
+                        DesiredAlphas = [
+                            Self.GroundedState.VelocityBlend.ForwardAmount,
+                            Self.GroundedState.VelocityBlend.BackwardAmount,
+                            Self.GroundedState.VelocityBlend.LeftAmount,
+                            Self.GroundedState.VelocityBlend.RightAmount
+                        ]
+                    )
+                );
+                Call(Self.ResetPivot, On = BecomeRelevant);
+            };
+        }
+
+        State RunStart
+        {
+            Pose = ApplyAdditive(
+                AlphaBoolBlend = (BlendOption = Linear),
+                Base           = StandingMovement,
+                Additive       = MultiWayBlend(
+                    bAdditiveNode = true,
+                    Poses         = [
+                        SequencePlayer(
+                            GroupName      = "Run Start",
+                            Method         = SyncGroup,
+                            Sequence       = A_Als_Acceleration_Forward,
+                            PlayRate       = 1.25,
+                            StartPosition  = 0.15,
+                            bLoopAnimation = false
+                        ),
+                        SequencePlayer(
+                            GroupName      = "Run Start",
+                            Method         = SyncGroup,
+                            Sequence       = A_Als_Acceleration_Backward,
+                            PlayRate       = 1.25,
+                            StartPosition  = 0.15,
+                            bLoopAnimation = false
+                        ),
+                        SequencePlayer(
+                            GroupName      = "Run Start",
+                            Method         = SyncGroup,
+                            Sequence       = A_Als_Acceleration_Left,
+                            PlayRate       = 1.25,
+                            StartPosition  = 0.15,
+                            bLoopAnimation = false
+                        ),
+                        SequencePlayer(
+                            GroupName      = "Run Start",
+                            Method         = SyncGroup,
+                            Sequence       = A_Als_Acceleration_Right,
+                            PlayRate       = 1.25,
+                            StartPosition  = 0.15,
+                            bLoopAnimation = false
+                        )
+                    ],
+                    DesiredAlphas = [
+                        Self.GroundedState.VelocityBlend.ForwardAmount,
+                        Self.GroundedState.VelocityBlend.BackwardAmount,
+                        Self.GroundedState.VelocityBlend.LeftAmount,
+                        Self.GroundedState.VelocityBlend.RightAmount
+                    ]
+                )
+            );
+        }
+
+        Rules = { SwitchPivot = Self.StandingState.bPivotActive; }
+
+        Transitions = {
+            Run              -> Walk        : (Self.Gait == "Als.Gait.Walking" || !IsValid(Self.Gait)) && Self.PoseState.UnweightedGaitRunningAmount < 0.2 [ Blend = 0.1 ];
+            RunStartFromWalk -> Run         : Auto                                                                                                         [ Blend = 0.1; AutomaticRuleTriggerTime = 0 ];
+            Run              -> FirstPivot  : Self.StandingState.bPivotActive                                                                              [ Blend = 0.1; Inertialize ];
+            FirstPivot       -> Run         : Auto                                                                                                         [ AutomaticRuleTriggerTime = 0; Inertialize ];
+            FirstPivot       -> SecondPivot : SwitchPivot                                                                                                  [ Blend = 0.1; Inertialize ];
+            SecondPivot      -> FirstPivot  : SwitchPivot                                                                                                  [ Blend = 0.1; Inertialize ];
+            SecondPivot      -> Run         : Auto                                                                                                         [ AutomaticRuleTriggerTime = 0; Inertialize ];
+            RunStart         -> Run         : Auto                                                                                                         [ AutomaticRuleTriggerTime = 0 ];
+            Walk             -> Run         : (Self.Gait == "Als.Gait.Running" || Self.Gait == "Als.Gait.Sprinting") && Self.PoseState.GroundedAmount < 1;
+            Walk -> RunStart : (Self.Gait == "Als.Gait.Running" || Self.Gait == "Als.Gait.Sprinting") && Self.PoseState.GroundedAmount >= 1 && MachineWeight(
+                StandingStates
+            ) < 1 [ Blend = 0.1; Inertialize ];
+            Walk -> RunStartFromWalk : (Self.Gait == "Als.Gait.Running" || Self.Gait == "Als.Gait.Sprinting") && Self.PoseState.GroundedAmount >= 1 && MachineWeight(
+                StandingStates
+            ) >= 1 [ Blend = 0.1; Inertialize ];
+        }
+    }
+
+    StateMachine StopStates [ bSkipFirstUpdateTransition = false ]
+    {
+        Entry = Entry;
+
+        State Entry { Pose = MovementDetails; }
+
+        State LockLeftFoot
+        {
+            OnEnter = Self.PlayTransitionAnimation(
+                Sequence  = A_Als_Stop_Left,
+                PlayRate  = 1.5,
+                StartTime = 0.4
+            );
+
+            Pose = {
+                MovementDetails;
+                ModifyCurve(FootLeftLock = 1);
+            };
+        }
+
+        State LockRightFoot
+        {
+            OnEnter = Self.PlayTransitionAnimation(
+                Sequence  = A_Als_Stop_Right,
+                PlayRate  = 1.5,
+                StartTime = 0.4
+            );
+
+            Pose = {
+                MovementDetails;
+                ModifyCurve(FootRightLock = 1);
+            };
+        }
+
+        State PlantLeftFoot
+        {
+            OnEnter = Self.PlayTransitionAnimation(
+                Sequence  = A_Als_Stop_Left,
+                PlayRate  = 1.5,
+                StartTime = 0.4
+            );
+
+            MultiWayBlend1 = MultiWayBlend(
+                Poses         = [
+                    SequenceEvaluator(Sequence = A_Als_Walk_Forward, ExplicitFrame = 4),
+                    SequenceEvaluator(Sequence = A_Als_Walk_Backward, ExplicitFrame = 4),
+                    BlendListByEnum(
+                        BoundEnum       = EAlsHipsDirection,
+                        BlendType       = Linear,
+                        ActiveEnumValue = Self.GroundedState.HipsDirection,
+                        BlendPose       = {
+                            Default = SequenceEvaluator(
+                                Sequence      = A_Als_Walk_Left_Forward,
+                                ExplicitFrame = 6
+                            );
+                            LeftBackward = SequenceEvaluator(
+                                Sequence      = A_Als_Walk_Left_Backward,
+                                ExplicitFrame = 4
+                            );
+                        },
+                        BlendTime       = 0
+                    ),
+                    BlendListByEnum(
+                        BoundEnum       = EAlsHipsDirection,
+                        BlendType       = Linear,
+                        ActiveEnumValue = Self.GroundedState.HipsDirection,
+                        BlendPose       = {
+                            Default = SequenceEvaluator(
+                                Sequence      = A_Als_Walk_Right_Forward,
+                                ExplicitFrame = 7
+                            );
+                            RightBackward = SequenceEvaluator(
+                                Sequence      = A_Als_Walk_Right_Backward,
+                                ExplicitFrame = 7
+                            );
+                        },
+                        BlendTime       = { Default = 0; RightBackward = 0.1; }
+                    )
+                ],
+                DesiredAlphas = [
+                    Self.GroundedState.VelocityBlend.ForwardAmount,
+                    Self.GroundedState.VelocityBlend.BackwardAmount,
+                    Self.GroundedState.VelocityBlend.LeftAmount,
+                    Self.GroundedState.VelocityBlend.RightAmount
+                ]
+            );
+
+            Pose = {
+                LayeredBoneBlend(
+                    LayerSetup              = [ bones(thigh_l, ik_foot_l, "VB foot_l") ],
+                    bMeshSpaceRotationBlend = true,
+                    BasePose                = MovementDetails,
+                    BlendPoses              = [ MultiWayBlend1 ]
+                );
+                ModifyCurve(FootLeftLock = 1);
+            };
+        }
+
+        State PlantRightFoot
+        {
+            OnEnter = Self.PlayTransitionAnimation(
+                Sequence  = A_Als_Stop_Right,
+                PlayRate  = 1.5,
+                StartTime = 0.4
+            );
+
+            MultiWayBlend2 = MultiWayBlend(
+                Poses         = [
+                    SequenceEvaluator(Sequence = A_Als_Walk_Forward, ExplicitFrame = 21),
+                    SequenceEvaluator(Sequence = A_Als_Walk_Backward, ExplicitFrame = 21),
+                    BlendListByEnum(
+                        BoundEnum       = EAlsHipsDirection,
+                        BlendType       = Linear,
+                        ActiveEnumValue = Self.GroundedState.HipsDirection,
+                        BlendPose       = {
+                            Default = SequenceEvaluator(
+                                Sequence      = A_Als_Walk_Left_Forward,
+                                ExplicitFrame = 24
+                            );
+                            LeftBackward = SequenceEvaluator(
+                                Sequence      = A_Als_Walk_Left_Backward,
+                                ExplicitFrame = 24
+                            );
+                        },
+                        BlendTime       = 0
+                    ),
+                    BlendListByEnum(
+                        BoundEnum       = EAlsHipsDirection,
+                        BlendType       = Linear,
+                        ActiveEnumValue = Self.GroundedState.HipsDirection,
+                        BlendPose       = {
+                            Default = SequenceEvaluator(
+                                Sequence      = A_Als_Walk_Right_Forward,
+                                ExplicitFrame = 23
+                            );
+                            RightBackward = SequenceEvaluator(
+                                Sequence      = A_Als_Walk_Right_Backward,
+                                ExplicitFrame = 21
+                            );
+                        },
+                        BlendTime       = { Default = 0; RightBackward = 0.1; }
+                    )
+                ],
+                DesiredAlphas = [
+                    Self.GroundedState.VelocityBlend.ForwardAmount,
+                    Self.GroundedState.VelocityBlend.BackwardAmount,
+                    Self.GroundedState.VelocityBlend.LeftAmount,
+                    Self.GroundedState.VelocityBlend.RightAmount
+                ]
+            );
+
+            Pose = {
+                LayeredBoneBlend(
+                    LayerSetup              = [ bones(thigh_r, ik_foot_r, "VB foot_r") ],
+                    bMeshSpaceRotationBlend = true,
+                    BasePose                = MovementDetails,
+                    BlendPoses              = [ MultiWayBlend2 ]
+                );
+                ModifyCurve(FootRightLock = 1);
+            };
+        }
+
+        Transitions = {
+            Entry -> LockLeftFoot   : Self.FeetState.FootPlantedAmount <= -0.5 [ Blend = 0 ];
+            Entry -> LockRightFoot  : Self.FeetState.FootPlantedAmount > 0.5   [ Blend = 0 ];
+            Entry -> PlantLeftFoot  : Self.FeetState.FootPlantedAmount <= 0    [ Priority = 2; Blend = 0.1 ];
+            Entry -> PlantRightFoot : Self.FeetState.FootPlantedAmount > 0     [ Priority = 2; Blend = 0.1 ];
+        }
+    }
+
+    StateMachine StandingStates
+    {
+        Entry = Idle;
+
+        State Idle
+        {
+            OnExit = Self.StopTransitionAndTurnInPlaceAnimations();
+
+            Pose = {
+                SequenceEvaluator(Sequence = A_Als_Stand_Pose, ExplicitFrame = 0);
+                ModifyCurve(FootLeftLock = 1, FootRightLock = 1, AllowTransitions = 1);
+                Slot("TurnInPlaceStanding");
+                ModifyCurve(ApplyMode = Scale, RotationYawSpeed = Self.TurnInPlaceState.PlayRate);
+                Call(Self.RefreshTurnInPlace);
+                Call(Self.InitializeTurnInPlace, On = BecomeRelevant);
+                Call(Self.RefreshDynamicTransitions);
+            };
+        }
+
+        State Move
+        {
+            OnEnter = Self.StopTransitionAndTurnInPlaceAnimations();
+
+            Pose = MovementDetails;
+        }
+
+        State Stop { Pose = StopStates; }
+
+        State RotateLeft
+        {
+            Pose = {
+                SequencePlayer(
+                    Sequence       = A_Als_Rotate_90_Left,
+                    PlayRate       = Self.RotateInPlaceState.PlayRate,
+                    bLoopAnimation = Self.RotateInPlaceState.bRotatingLeft
+                );
+                ModifyCurve(ApplyMode = Scale, RotationYawSpeed = Self.RotateInPlaceState.PlayRate);
+            };
+        }
+
+        State RotateRight
+        {
+            Pose = {
+                SequencePlayer(
+                    Sequence       = A_Als_Rotate_90_Right,
+                    PlayRate       = Self.RotateInPlaceState.PlayRate,
+                    bLoopAnimation = Self.RotateInPlaceState.bRotatingRight
+                );
+                ModifyCurve(ApplyMode = Scale, RotationYawSpeed = Self.RotateInPlaceState.PlayRate);
+            };
+        }
+
+        Rules = {
+            Move        = Self.LocomotionState.bMovingSmooth;
+            RotateLeft  = Self.RotateInPlaceState.bRotatingLeft;
+            RotateRight = Self.RotateInPlaceState.bRotatingRight;
+        }
+
+        Transitions = {
+            Idle        -> Move        : Move;
+            Move        -> Stop        : !Self.LocomotionState.bMovingSmooth && StateWeight(Move) >= 1 [ Blend = 0 ];
+            Stop        -> Idle        : StateWeight(Stop) >= 1                                        [ Blend = 0.3 ];
+            Move        -> Idle        : !Self.LocomotionState.bMovingSmooth                           [ Priority = 2; TransitionStart = (NotifyName = "StopQuick") ];
+            Idle        -> RotateLeft  : RotateLeft;
+            Idle        -> RotateRight : RotateRight;
+            RotateLeft  -> Idle        : Auto                                                          [ Blend = 0 ];
+            RotateRight -> Idle        : Auto                                                          [ Blend = 0 ];
+            RotateLeft  -> RotateRight : RotateRight                                                   [ Inertialize ];
+            RotateRight -> RotateLeft  : RotateLeft                                                    [ Inertialize ];
+            RotateLeft  -> Idle        : Move;
+            RotateRight -> Idle        : Move;
+        }
+    }
+
+    StateMachine MovementStates
+    {
+        Entry = MoveForward;
+
+        State MoveForward
+        {
+            Pose = {
+                MultiWayBlend(
+                    Poses         = [
+                        StandingForward,
+                        StandingBackward,
+                        StandingLeftForward,
+                        StandingRightForward
+                    ],
+                    DesiredAlphas = [
+                        Self.GroundedState.VelocityBlend.ForwardAmount,
+                        Self.GroundedState.VelocityBlend.BackwardAmount,
+                        Self.GroundedState.VelocityBlend.LeftAmount,
+                        Self.GroundedState.VelocityBlend.RightAmount
+                    ]
+                );
+                ModifyCurve(RotationYawOffset = Self.GroundedState.RotationYawOffsets.ForwardAngle);
+                Call(Self.SetHipsDirection, On = BecomeRelevant);
+            };
+        }
+
+        State MoveBackward
+        {
+            Pose = {
+                MultiWayBlend(
+                    Poses         = [
+                        StandingForward,
+                        StandingBackward,
+                        StandingLeftBackward,
+                        StandingRightBackward
+                    ],
+                    DesiredAlphas = [
+                        Self.GroundedState.VelocityBlend.ForwardAmount,
+                        Self.GroundedState.VelocityBlend.BackwardAmount,
+                        Self.GroundedState.VelocityBlend.LeftAmount,
+                        Self.GroundedState.VelocityBlend.RightAmount
+                    ]
+                );
+                ModifyCurve(RotationYawOffset = Self.GroundedState.RotationYawOffsets.BackwardAngle);
+                Call(Self.SetHipsDirection, NewHipsDirection = Backward, On = BecomeRelevant);
+            };
+        }
+
+        State MoveRightForward
+        {
+            Pose = {
+                MultiWayBlend(
+                    Poses         = [
+                        StandingForward,
+                        StandingBackward,
+                        StandingLeftBackward,
+                        StandingRightForward
+                    ],
+                    DesiredAlphas = [
+                        Self.GroundedState.VelocityBlend.ForwardAmount,
+                        Self.GroundedState.VelocityBlend.BackwardAmount,
+                        Self.GroundedState.VelocityBlend.LeftAmount,
+                        Self.GroundedState.VelocityBlend.RightAmount
+                    ]
+                );
+                ModifyCurve(RotationYawOffset = Self.GroundedState.RotationYawOffsets.RightAngle);
+                Call(Self.SetHipsDirection, NewHipsDirection = RightForward, On = BecomeRelevant);
+            };
+        }
+
+        State MoveRightBackward
+        {
+            Pose = {
+                MultiWayBlend(
+                    Poses         = [
+                        StandingForward,
+                        StandingBackward,
+                        StandingLeftForward,
+                        StandingRightBackward
+                    ],
+                    DesiredAlphas = [
+                        Self.GroundedState.VelocityBlend.ForwardAmount,
+                        Self.GroundedState.VelocityBlend.BackwardAmount,
+                        Self.GroundedState.VelocityBlend.LeftAmount,
+                        Self.GroundedState.VelocityBlend.RightAmount
+                    ]
+                );
+                ModifyCurve(RotationYawOffset = Self.GroundedState.RotationYawOffsets.RightAngle);
+                Call(Self.SetHipsDirection, NewHipsDirection = RightBackward, On = BecomeRelevant);
+            };
+        }
+
+        State MoveLeftForward
+        {
+            Pose = {
+                MultiWayBlend(
+                    Poses         = [
+                        StandingForward,
+                        StandingBackward,
+                        StandingLeftForward,
+                        StandingRightBackward
+                    ],
+                    DesiredAlphas = [
+                        Self.GroundedState.VelocityBlend.ForwardAmount,
+                        Self.GroundedState.VelocityBlend.BackwardAmount,
+                        Self.GroundedState.VelocityBlend.LeftAmount,
+                        Self.GroundedState.VelocityBlend.RightAmount
+                    ]
+                );
+                ModifyCurve(RotationYawOffset = Self.GroundedState.RotationYawOffsets.LeftAngle);
+                Call(Self.SetHipsDirection, NewHipsDirection = LeftForward, On = BecomeRelevant);
+            };
+        }
+
+        State MoveLeftBackward
+        {
+            Pose = {
+                MultiWayBlend(
+                    Poses         = [
+                        StandingForward,
+                        StandingBackward,
+                        StandingLeftBackward,
+                        StandingRightForward
+                    ],
+                    DesiredAlphas = [
+                        Self.GroundedState.VelocityBlend.ForwardAmount,
+                        Self.GroundedState.VelocityBlend.BackwardAmount,
+                        Self.GroundedState.VelocityBlend.LeftAmount,
+                        Self.GroundedState.VelocityBlend.RightAmount
+                    ]
+                );
+                ModifyCurve(RotationYawOffset = Self.GroundedState.RotationYawOffsets.LeftAngle);
+                Call(Self.SetHipsDirection, NewHipsDirection = LeftBackward, On = BecomeRelevant);
+            };
+        }
+
+        Rules = {
+            MoveBackward = Self.GroundedState.MovementDirection.bBackward;
+            MoveForward  = Self.GroundedState.MovementDirection.bForward;
+            MoveRight    = Self.GroundedState.MovementDirection.bRight;
+            MoveLeft     = Self.GroundedState.MovementDirection.bLeft;
+            SetHipsLeft  = Self.GroundedState.HipsDirectionLockAmount <= -0.5 && Self.FeetState.FeetCrossingAmount <= 0;
+            SetHipsRight = Self.GroundedState.HipsDirectionLockAmount >= 0.5 && Self.FeetState.FeetCrossingAmount <= 0;
+        }
+
+        Transitions = {
+            MoveForward       -> MoveBackward      : MoveBackward [ Blend = 0.5; Curve = Cubic; TransitionStart = (NotifyName = "ActivatePivot"); BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveBackward      -> MoveForward       : MoveForward  [ Blend = 0.5; Curve = Cubic; TransitionStart = (NotifyName = "ActivatePivot"); BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveForward       -> MoveRightForward  : MoveRight    [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveForward       -> MoveLeftForward   : MoveLeft     [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveBackward      -> MoveRightBackward : MoveRight    [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveBackward      -> MoveLeftBackward  : MoveLeft     [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveRightForward  -> MoveForward       : MoveForward  [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveLeftForward   -> MoveForward       : MoveForward  [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveLeftBackward  -> MoveBackward      : MoveBackward [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveRightBackward -> MoveBackward      : MoveBackward [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveLeftForward   -> MoveRightBackward : MoveRight    [ Blend = 0.5; Curve = Cubic; TransitionStart = (NotifyName = "ActivatePivot"); BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveRightForward  -> MoveLeftBackward  : MoveLeft     [ Blend = 0.5; Curve = Cubic; TransitionStart = (NotifyName = "ActivatePivot"); BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveRightBackward -> MoveLeftForward   : MoveLeft     [ Blend = 0.5; Curve = Cubic; TransitionStart = (NotifyName = "ActivatePivot"); BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveLeftBackward  -> MoveRightForward  : MoveRight    [ Blend = 0.5; Curve = Cubic; TransitionStart = (NotifyName = "ActivatePivot"); BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveLeftBackward  -> MoveLeftForward   : MoveForward  [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveLeftForward   -> MoveLeftBackward  : MoveBackward [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveRightBackward -> MoveRightForward  : MoveForward  [ Blend = 0.75; Curve = QuadraticInOut; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveRightForward  -> MoveRightBackward : MoveBackward [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveRightForward  -> MoveRightBackward : SetHipsLeft  [ Priority = 2; Blend = 0.75; Curve = QuadraticInOut; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveLeftForward   -> MoveLeftBackward  : SetHipsRight [ Priority = 2; Blend = 0.75; Curve = QuadraticInOut; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveLeftBackward  -> MoveLeftForward   : SetHipsLeft  [ Priority = 2; Blend = 0.75; Curve = QuadraticInOut; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveRightBackward -> MoveRightForward  : SetHipsRight [ Priority = 2; Blend = 0.75; Curve = QuadraticInOut; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveLeftBackward -> MoveLeftForward : Abs(Self.GroundedState.HipsDirectionLockAmount) < 0.5 && Self.FeetState.FeetCrossingAmount <= 0 && StateWeight(
+                MoveLeftBackward
+            ) >= 1 [ Blend = 0.75; Curve = QuadraticInOut; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveRightBackward -> MoveRightForward : Abs(Self.GroundedState.HipsDirectionLockAmount) < 0.5 && Self.FeetState.FeetCrossingAmount <= 0 && StateWeight(
+                MoveRightBackward
+            ) >= 1 [ Blend = 0.75; Curve = QuadraticInOut; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+        }
+    }
+
+    StateMachine CrouchingStates
+    {
+        Entry = Idle;
+
+        State Idle
+        {
+            OnExit = Self.StopTransitionAndTurnInPlaceAnimations();
+
+            Pose = {
+                SequenceEvaluator(Sequence = A_Als_Crouch_Pose, ExplicitFrame = 0);
+                ModifyCurve(FootLeftLock = 1, FootRightLock = 1, AllowTransitions = 1);
+                Slot("TurnInPlaceCrouching");
+                ModifyCurve(ApplyMode = Scale, RotationYawSpeed = Self.TurnInPlaceState.PlayRate);
+                Call(Self.RefreshTurnInPlace);
+                Call(Self.InitializeTurnInPlace, On = BecomeRelevant);
+                Call(Self.RefreshDynamicTransitions);
+            };
+        }
+
+        State Move
+        {
+            OnEnter = Self.StopTransitionAndTurnInPlaceAnimations();
+
+            Pose = CrouchingMovement;
+        }
+
+        State RotateLeft
+        {
+            Pose = {
+                SequencePlayer(
+                    Sequence       = A_Als_Crouch_Rotate_90_Left,
+                    PlayRate       = Self.RotateInPlaceState.PlayRate,
+                    bLoopAnimation = Self.RotateInPlaceState.bRotatingLeft
+                );
+                ModifyCurve(ApplyMode = Scale, RotationYawSpeed = Self.RotateInPlaceState.PlayRate);
+            };
+        }
+
+        State RotateRight
+        {
+            Pose = {
+                SequencePlayer(
+                    Sequence       = A_Als_Crouch_Rotate_90_Right,
+                    PlayRate       = Self.RotateInPlaceState.PlayRate,
+                    bLoopAnimation = Self.RotateInPlaceState.bRotatingRight
+                );
+                ModifyCurve(ApplyMode = Scale, RotationYawSpeed = Self.RotateInPlaceState.PlayRate);
+            };
+        }
+
+        State Stop
+        {
+            OnEnter = Self.PlayTransitionRightAnimation(PlayRate = 1.5, StartTime = 0.2);
+
+            Pose = {
+                LayeredBoneBlend(
+                    LayerSetup              = [
+                        bones(thigh_l, ik_foot_l, "VB foot_l"),
+                        bones(thigh_r, ik_foot_r, "VB foot_r")
+                    ],
+                    BlendWeights            = [ 1, 1 ],
+                    bMeshSpaceRotationBlend = true,
+                    BasePose                = CrouchingMovement,
+                    BlendPoses              = [
+                        SequenceEvaluator(Sequence = A_Als_Crouch_Walk_Pose, ExplicitFrame = 0),
+                        SequenceEvaluator(Sequence = A_Als_Crouch_Walk_Pose, ExplicitFrame = 0)
+                    ]
+                );
+                ModifyCurve(FootLeftLock = 1, FootRightLock = 1);
+            };
+        }
+
+        Rules = {
+            RotateLeft  = Self.RotateInPlaceState.bRotatingLeft;
+            Move        = Self.LocomotionState.bMovingSmooth;
+            RotateRight = Self.RotateInPlaceState.bRotatingRight;
+        }
+
+        Transitions = {
+            Idle        -> RotateLeft  : RotateLeft                                                    [ Priority = 2; Inertialize ];
+            RotateLeft  -> Idle        : Auto                                                          [ Blend = 0 ];
+            RotateLeft  -> Idle        : Move                                                          [ Blend = 0.4 ];
+            Idle        -> RotateRight : RotateRight                                                   [ Priority = 2; Inertialize ];
+            RotateRight -> Idle        : Auto                                                          [ Blend = 0 ];
+            RotateRight -> Idle        : Move                                                          [ Blend = 0.4 ];
+            RotateLeft  -> RotateRight : RotateRight                                                   [ Priority = 2; Inertialize ];
+            RotateRight -> RotateLeft  : RotateLeft                                                    [ Priority = 2; Inertialize ];
+            Idle        -> Move        : Move;
+            Move        -> Idle        : !Self.LocomotionState.bMovingSmooth                           [ Priority = 2; TransitionStart = (NotifyName = "StopQuick") ];
+            Move        -> Stop        : !Self.LocomotionState.bMovingSmooth && StateWeight(Move) >= 1 [ Blend = 0.1 ];
+            Stop        -> Idle        : StateWeight(Stop) >= 1                                        [ Blend = 0.5; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:QuickFeetBlend") ];
+        }
+    }
+
+    StateMachine MovementStates_2
+    {
+        Entry = MoveForward;
+
+        State MoveForward
+        {
+            Pose = {
+                MultiWayBlend(
+                    Poses         = [
+                        CrouchingForward,
+                        CrouchingBackward,
+                        CrouchingLeftForward,
+                        CrouchingRightForward
+                    ],
+                    DesiredAlphas = [
+                        Self.GroundedState.VelocityBlend.ForwardAmount,
+                        Self.GroundedState.VelocityBlend.BackwardAmount,
+                        Self.GroundedState.VelocityBlend.LeftAmount,
+                        Self.GroundedState.VelocityBlend.RightAmount
+                    ]
+                );
+                ModifyCurve(RotationYawOffset = Self.GroundedState.RotationYawOffsets.ForwardAngle);
+                Call(Self.SetHipsDirection, On = BecomeRelevant);
+            };
+        }
+
+        State MoveBackward
+        {
+            Pose = {
+                MultiWayBlend(
+                    Poses         = [
+                        CrouchingForward,
+                        CrouchingBackward,
+                        CrouchingLeftBackward,
+                        CrouchingRightBackward
+                    ],
+                    DesiredAlphas = [
+                        Self.GroundedState.VelocityBlend.ForwardAmount,
+                        Self.GroundedState.VelocityBlend.BackwardAmount,
+                        Self.GroundedState.VelocityBlend.LeftAmount,
+                        Self.GroundedState.VelocityBlend.RightAmount
+                    ]
+                );
+                ModifyCurve(RotationYawOffset = Self.GroundedState.RotationYawOffsets.BackwardAngle);
+                Call(Self.SetHipsDirection, NewHipsDirection = Backward, On = BecomeRelevant);
+            };
+        }
+
+        State MoveRightForward
+        {
+            Pose = {
+                MultiWayBlend(
+                    Poses         = [
+                        CrouchingForward,
+                        CrouchingBackward,
+                        CrouchingLeftBackward,
+                        CrouchingRightForward
+                    ],
+                    DesiredAlphas = [
+                        Self.GroundedState.VelocityBlend.ForwardAmount,
+                        Self.GroundedState.VelocityBlend.BackwardAmount,
+                        Self.GroundedState.VelocityBlend.LeftAmount,
+                        Self.GroundedState.VelocityBlend.RightAmount
+                    ]
+                );
+                ModifyCurve(RotationYawOffset = Self.GroundedState.RotationYawOffsets.RightAngle);
+                Call(Self.SetHipsDirection, NewHipsDirection = RightForward, On = BecomeRelevant);
+            };
+        }
+
+        State MoveRightBackward
+        {
+            Pose = {
+                MultiWayBlend(
+                    Poses         = [
+                        CrouchingForward,
+                        CrouchingBackward,
+                        CrouchingLeftForward,
+                        CrouchingRightBackward
+                    ],
+                    DesiredAlphas = [
+                        Self.GroundedState.VelocityBlend.ForwardAmount,
+                        Self.GroundedState.VelocityBlend.BackwardAmount,
+                        Self.GroundedState.VelocityBlend.LeftAmount,
+                        Self.GroundedState.VelocityBlend.RightAmount
+                    ]
+                );
+                ModifyCurve(RotationYawOffset = Self.GroundedState.RotationYawOffsets.BackwardAngle);
+                Call(Self.SetHipsDirection, NewHipsDirection = RightBackward, On = BecomeRelevant);
+            };
+        }
+
+        State MoveLeftForward
+        {
+            Pose = {
+                MultiWayBlend(
+                    Poses         = [
+                        CrouchingForward,
+                        CrouchingBackward,
+                        CrouchingLeftForward,
+                        CrouchingRightBackward
+                    ],
+                    DesiredAlphas = [
+                        Self.GroundedState.VelocityBlend.ForwardAmount,
+                        Self.GroundedState.VelocityBlend.BackwardAmount,
+                        Self.GroundedState.VelocityBlend.LeftAmount,
+                        Self.GroundedState.VelocityBlend.RightAmount
+                    ]
+                );
+                ModifyCurve(RotationYawOffset = Self.GroundedState.RotationYawOffsets.LeftAngle);
+                Call(Self.SetHipsDirection, NewHipsDirection = LeftForward, On = BecomeRelevant);
+            };
+        }
+
+        State MoveLeftBackward
+        {
+            Pose = {
+                MultiWayBlend(
+                    Poses         = [
+                        CrouchingForward,
+                        CrouchingBackward,
+                        CrouchingLeftBackward,
+                        CrouchingRightForward
+                    ],
+                    DesiredAlphas = [
+                        Self.GroundedState.VelocityBlend.ForwardAmount,
+                        Self.GroundedState.VelocityBlend.BackwardAmount,
+                        Self.GroundedState.VelocityBlend.LeftAmount,
+                        Self.GroundedState.VelocityBlend.RightAmount
+                    ]
+                );
+                ModifyCurve(RotationYawOffset = Self.GroundedState.RotationYawOffsets.LeftAngle);
+                Call(Self.SetHipsDirection, NewHipsDirection = LeftBackward, On = BecomeRelevant);
+            };
+        }
+
+        Rules = {
+            MoveBackward = Self.GroundedState.MovementDirection.bBackward;
+            MoveForward  = Self.GroundedState.MovementDirection.bForward;
+            MoveRight    = Self.GroundedState.MovementDirection.bRight;
+            MoveLeft     = Self.GroundedState.MovementDirection.bLeft;
+            SetHipsLeft  = Self.GroundedState.HipsDirectionLockAmount <= -0.5 && Self.FeetState.FeetCrossingAmount <= 0;
+            SetHipsRight = Self.GroundedState.HipsDirectionLockAmount >= 0.5 && Self.FeetState.FeetCrossingAmount <= 0;
+        }
+
+        Transitions = {
+            MoveForward       -> MoveBackward      : MoveBackward [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveBackward      -> MoveForward       : MoveForward  [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveForward       -> MoveRightForward  : MoveRight    [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveForward       -> MoveLeftForward   : MoveLeft     [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveBackward      -> MoveRightBackward : MoveRight    [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveBackward      -> MoveLeftBackward  : MoveLeft     [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveRightForward  -> MoveForward       : MoveForward  [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveLeftForward   -> MoveForward       : MoveForward  [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveLeftBackward  -> MoveBackward      : MoveBackward [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveRightBackward -> MoveBackward      : MoveBackward [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveLeftForward   -> MoveRightBackward : MoveRight    [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveRightForward  -> MoveLeftBackward  : MoveLeft     [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveRightBackward -> MoveLeftForward   : MoveLeft     [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveLeftBackward  -> MoveRightForward  : MoveRight    [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveLeftBackward  -> MoveLeftForward   : MoveForward  [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveLeftForward   -> MoveLeftBackward  : MoveBackward [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveRightBackward -> MoveRightForward  : MoveForward  [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveRightForward  -> MoveRightBackward : MoveBackward [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveRightForward  -> MoveRightBackward : SetHipsLeft  [ Priority = 2; Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveLeftForward   -> MoveLeftBackward  : SetHipsRight [ Priority = 2; Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveLeftBackward  -> MoveLeftForward   : SetHipsLeft  [ Priority = 2; Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveRightBackward -> MoveRightForward  : SetHipsRight [ Priority = 2; Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveRightBackward -> MoveRightForward : Abs(Self.GroundedState.HipsDirectionLockAmount) < 0.5 && Self.FeetState.FeetCrossingAmount <= 0 && StateWeight(
+                MoveRightBackward
+            ) >= 1 [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+            MoveLeftBackward -> MoveLeftForward : Abs(Self.GroundedState.HipsDirectionLockAmount) < 0.5 && Self.FeetState.FeetCrossingAmount <= 0 && StateWeight(
+                MoveLeftBackward
+            ) >= 1 [ Blend = 0.7; Curve = Cubic; BlendProfile = Path(Plugin.ALS, "ALS/Character/SK_Als:MoveDirectionChange") ];
+        }
+    }
+}

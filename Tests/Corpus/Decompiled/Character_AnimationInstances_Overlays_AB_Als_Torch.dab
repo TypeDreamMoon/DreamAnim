@@ -1,0 +1,101 @@
+AnimBlueprint(Name="ALS/Character/AnimationInstances/Overlays/AB_Als_Torch", Root="Plugin.ALS")
+{
+    Settings = {
+        Parent                                = AlsLinkedAnimationInstance;
+        Skeleton                              = SK_Als;
+        Implements                            = [ ALI_Overlay ];
+        bEnableLinkedAnimLayerInstanceSharing = true;
+    }
+
+    Aliases = { Main = Self.GetParent(); }
+
+    Graph = { Output = LinkedAnimLayer(Interface = ALI_Overlay, Layer = "Overlay"); }
+
+    Layer Overlay [ LayerGroup = "Default Shared Group"; BlendOptions = (BlendInTime = 0.2, BlendOutTime = 0.2) ]
+    {
+        MultiWayBlend1 = MultiWayBlend(
+            Poses         = [
+                TwoWayBlend(
+                    AlphaBoolBlend = (BlendOption = Linear),
+                    Alpha          = Main.PoseState.GaitWalkingAmount,
+                    A              = SequenceEvaluator(Sequence = A_Als_Torch_Poses, ExplicitFrame = 0),
+                    B              = SequenceEvaluator(Sequence = A_Als_Torch_Poses, ExplicitFrame = 0)
+                ),
+                SequenceEvaluator(Sequence = A_Als_Torch_Poses, ExplicitFrame = 4)
+            ],
+            DesiredAlphas = [ Main.PoseState.StandingAmount, Main.PoseState.CrouchingAmount ]
+        );
+
+        ApplyMeshSpaceAdditive1 = ApplyMeshSpaceAdditive(
+            AlphaBoolBlend = (BlendOption = Linear),
+            Base           = TwoWayBlend(
+                AlphaBoolBlend = (BlendOption = Linear),
+                Alpha          = Main.PoseState.GaitWalkingAmount,
+                A              = SequenceEvaluator(Sequence = A_Als_Torch_Poses, ExplicitFrame = 2),
+                B              = SequenceEvaluator(Sequence = A_Als_Torch_Poses, ExplicitFrame = 3)
+            ),
+            Additive       = SequenceEvaluator(
+                Sequence     = A_Als_Torch_Aim,
+                ExplicitTime = Main.ViewState.PitchAmount
+            )
+        );
+
+        MultiWayBlend2 = MultiWayBlend(
+            Poses         = [
+                ApplyMeshSpaceAdditive1,
+                ApplyMeshSpaceAdditive(
+                    AlphaBoolBlend = (BlendOption = Linear),
+                    Base           = SequenceEvaluator(Sequence = A_Als_Torch_Poses, ExplicitFrame = 5),
+                    Additive       = SequenceEvaluator(
+                        Sequence     = A_Als_Torch_Aim_Crouch,
+                        ExplicitTime = Main.ViewState.PitchAmount
+                    )
+                )
+            ],
+            DesiredAlphas = [ Main.PoseState.StandingAmount, Main.PoseState.CrouchingAmount ]
+        );
+
+        ModifyCurve1 = {
+            SequenceEvaluator(Sequence = A_Als_Torch_Poses, ExplicitFrame = 4);
+            ModifyCurve(LayerArmLeft = 3);
+        };
+
+        ModifyCurve2 = {
+            SequenceEvaluator(Sequence = A_Als_Torch_Poses, ExplicitFrame = 0);
+            ModifyCurve(LayerArmLeft = 3, LayerArmLeftAdditive = 0);
+        };
+
+        Output = GameplayTagsBlend(
+            BlendType = Linear,
+            ActiveTag = Main.LocomotionAction,
+            BlendPose = {
+                Default = ApplyAdditive(
+                    Alpha          = 0.5,
+                    AlphaBoolBlend = (BlendOption = Linear),
+                    Base           = GameplayTagsBlend(
+                        ActiveTag = Main.RotationMode,
+                        BlendPose = { Default = MultiWayBlend1; "Als.RotationMode.Aiming" = MultiWayBlend2; },
+                        BlendTime = { Default = 0.75; "Als.RotationMode.Aiming" = 0.2; }
+                    ),
+                    Additive       = SequencePlayer(
+                        GroupName = "Secondary Motion",
+                        Method    = SyncGroup,
+                        Sequence  = A_Als_Idle
+                    )
+                );
+                "Als.LocomotionAction.Mantling" = SequenceEvaluator(
+                    Sequence      = A_Als_Torch_Poses,
+                    ExplicitFrame = 0
+                );
+                "Als.LocomotionAction.GettingUp" = ModifyCurve1;
+                "Als.LocomotionAction.Rolling"   = ModifyCurve2;
+            },
+            BlendTime = {
+                Default                          = 0.5;
+                "Als.LocomotionAction.Mantling"  = 0.2;
+                "Als.LocomotionAction.GettingUp" = 0;
+                "Als.LocomotionAction.Rolling"   = 0.2;
+            }
+        );
+    }
+}

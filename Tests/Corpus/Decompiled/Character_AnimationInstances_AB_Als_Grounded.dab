@@ -1,0 +1,101 @@
+// Renamed from the Blueprint:
+//   CrouchingAlias <- "Crouching Alias"
+//   CrouchingInput <- "Crouching Input"
+//   CrouchingToStanding <- "Crouching To Standing"
+//   EntryConduit <- "Entry Conduit"
+//   GroundedStates <- "Grounded States"
+//   StandingAlias <- "Standing Alias"
+//   StandingInput <- "Standing Input"
+//   StandingToCrouching <- "Standing To Crouching"
+AnimBlueprint(Name="ALS/Character/AnimationInstances/AB_Als_Grounded", Root="Plugin.ALS")
+{
+    Settings = {
+        Parent                                = AlsLinkedAnimationInstance;
+        Skeleton                              = SK_Als;
+        bEnableLinkedAnimLayerInstanceSharing = true;
+    }
+
+    Aliases = { Main = Self.GetParent(); }
+
+    Graph = {
+        Crouching = Input(CrouchingInput) [ Cached ];
+        Standing  = Input(StandingInput) [ Cached ];
+
+        Output = {
+            GroundedStates;
+            Inertialization(bResetOnBecomingRelevant = true);
+            ModifyCurve(PoseGrounded = 1, FootLeftIk = 1, FootRightIk = 1);
+            Call(Self.RefreshGrounded);
+            Call(Self.InitializeGrounded, On = BecomeRelevant);
+        };
+    }
+
+    StateMachine GroundedStates [ MaxTransitionsPerFrame = 1; bAllowConduitEntryStates = true ]
+    {
+        Entry = EntryConduit;
+
+        State Standing
+        {
+            Pose = {
+                Standing;
+                Call(Self.ResetGroundedEntryMode, On = BecomeRelevant);
+            };
+        }
+
+        State Crouching
+        {
+            Pose = {
+                Crouching;
+                Call(Self.ResetGroundedEntryMode, On = BecomeRelevant);
+            };
+        }
+
+        State StandingToCrouching
+        {
+            OnEnter = Main.StopTransitionAndTurnInPlaceAnimations();
+
+            Pose = SequencePlayer(Sequence = A_Als_StandToCrouch, PlayRate = 1.2, bLoopAnimation = false);
+        }
+
+        State CrouchingToStanding
+        {
+            OnEnter = Main.StopTransitionAndTurnInPlaceAnimations();
+
+            Pose = SequencePlayer(Sequence = A_Als_CrouchToStand, PlayRate = 1.2, bLoopAnimation = false);
+        }
+
+        State Roll
+        {
+            OnExit = Main.PlayTransitionRightAnimation(PlayRate = 1.5, StartTime = 0.2);
+
+            Pose = {
+                SequenceEvaluator(Sequence = A_Als_Roll, ExplicitFrame = 45);
+                ModifyCurve(FootLeftLock = 1, FootRightLock = 1);
+                Call(Self.ResetGroundedEntryMode, On = BecomeRelevant);
+            };
+        }
+
+        Conduit EntryConduit;
+        Alias StandingAlias = [ Crouching, CrouchingToStanding, StandingToCrouching ];
+        Alias CrouchingAlias = [ CrouchingToStanding, Standing, StandingToCrouching ];
+
+        Transitions = {
+            StandingToCrouching -> Crouching : Auto [ Blend = 0 ];
+            CrouchingToStanding -> Standing  : Auto [ Blend = 0 ];
+            Roll -> Standing : Main.Stance == "Als.Stance.Standing" || !IsValid(
+                Main.Stance
+            ) [ Blend = 0.6; Curve = Cubic ];
+            Roll          -> Crouching : Main.Stance == "Als.Stance.Crouching"                                                                                                                                                      [ Blend = 0.6; Curve = Cubic ];
+            StandingAlias -> Standing  : (Main.Stance == "Als.Stance.Standing" || !IsValid(Main.Stance)) && (Main.LocomotionState.bMovingSmooth || Main.RotateInPlaceState.bRotatingLeft || Main.RotateInPlaceState.bRotatingRight) [ Blend = 0.5; Curve = Custom; CustomBlendCurve = CF_Als_StanceChange ];
+            StandingAlias -> CrouchingToStanding : Main.Stance == "Als.Stance.Standing" || !IsValid(
+                Main.Stance
+            ) [ Priority = 2; Blend = 0.3; Inertialize ];
+            CrouchingAlias -> Crouching           : Main.Stance == "Als.Stance.Crouching" && (Main.LocomotionState.bMovingSmooth || Main.RotateInPlaceState.bRotatingLeft || Main.RotateInPlaceState.bRotatingRight) [ Blend = 0.5; Curve = Custom; CustomBlendCurve = CF_Als_StanceChange ];
+            CrouchingAlias -> StandingToCrouching : Main.Stance == "Als.Stance.Crouching"                                                                                                                            [ Priority = 2; Blend = 0.3; Inertialize ];
+            EntryConduit   -> Standing            : Main.PoseState.StandingAmount >= 0.5                                                                                                                             [ Priority = 2 ];
+            EntryConduit   -> Roll                : Main.GroundedEntryMode == "Als.GroundedEntryMode.FromRoll" && !(Main.LocomotionState.bMovingSmooth || Main.RotateInPlaceState.bRotatingLeft || Main.RotateInPlaceState.bRotatingRight);
+            EntryConduit   -> Crouching           : Main.PoseState.CrouchingAmount >= 0.5                                                                                                                            [ Priority = 2 ];
+            EntryConduit   -> Standing            : true                                                                                                                                                             [ Priority = 3 ];
+        }
+    }
+}

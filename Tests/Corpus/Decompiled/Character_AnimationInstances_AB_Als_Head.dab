@@ -1,0 +1,31 @@
+// Renamed from the Blueprint:
+//   ViewInput <- "View Input"
+AnimBlueprint(Name="ALS/Character/AnimationInstances/AB_Als_Head", Root="Plugin.ALS")
+{
+    Settings = {
+        Parent                                = AlsLinkedAnimationInstance;
+        Skeleton                              = SK_Als;
+        bEnableLinkedAnimLayerInstanceSharing = true;
+    }
+
+    Aliases = { Main = Self.GetParent(); }
+
+    Graph = {
+        Additive = {
+            BlendSpaceEvaluator(
+                BlendSpace     = BS_Als_Look,
+                NormalizedTime = Main.HeadState.YawAmount,
+                X              = Main.HeadState.PitchAngle
+            );
+            Call(Self.RefreshHead);
+            Call(Self.InitializeHead, On = BecomeRelevant);
+        };
+
+        Output = ApplyMeshSpaceAdditive(
+            AlphaBoolBlend = (BlendOption = Linear),
+            Alpha          = Main.ViewState.HeadBlendAmount,
+            Base           = Input(ViewInput),
+            Additive       = Additive
+        );
+    }
+}

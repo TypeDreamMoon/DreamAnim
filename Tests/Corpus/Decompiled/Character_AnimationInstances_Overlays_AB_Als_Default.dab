@@ -1,0 +1,57 @@
+AnimBlueprint(Name="ALS/Character/AnimationInstances/Overlays/AB_Als_Default", Root="Plugin.ALS")
+{
+    Settings = {
+        Parent                                = AlsLinkedAnimationInstance;
+        Skeleton                              = SK_Als;
+        Implements                            = [ ALI_Overlay ];
+        bEnableLinkedAnimLayerInstanceSharing = true;
+    }
+
+    Aliases = { Main = Self.GetParent(); }
+
+    Graph = { Output = LinkedAnimLayer(Interface = ALI_Overlay, Layer = "Overlay"); }
+
+    Layer Overlay [ LayerGroup = "Default Shared Group"; BlendOptions = (BlendInTime = 0.2, BlendOutTime = 0.2) ]
+    {
+        MultiWayBlend1 = MultiWayBlend(
+            Poses         = [
+                TwoWayBlend(
+                    AlphaBoolBlend = (BlendOption = Linear),
+                    Alpha          = Main.PoseState.GaitWalkingAmount,
+                    A              = SequenceEvaluator(Sequence = A_Als_Default_Poses, ExplicitFrame = 0),
+                    B              = SequenceEvaluator(Sequence = A_Als_Default_Poses, ExplicitFrame = 1)
+                ),
+                SequenceEvaluator(Sequence = A_Als_Default_Poses, ExplicitFrame = 2)
+            ],
+            DesiredAlphas = [ Main.PoseState.StandingAmount, Main.PoseState.CrouchingAmount ]
+        );
+
+        Base = TwoWayBlend(
+            AlphaBoolBlend = (BlendOption = Linear),
+            Alpha          = Main.PoseState.InAirAmount,
+            A              = MultiWayBlend1,
+            B              = TwoWayBlend(
+                AlphaBoolBlend      = (BlendOption = Linear),
+                AlphaScaleBiasClamp = (
+                    bInterpResult         = true,
+                    InterpSpeedIncreasing = 20,
+                    InterpSpeedDecreasing = 5
+                ),
+                Alpha               = Main.InAirState.GroundPredictionAmount,
+                A                   = SequenceEvaluator(Sequence = A_Als_Default_Poses, ExplicitFrame = 1),
+                B                   = SequenceEvaluator(Sequence = A_Als_Default_Poses, ExplicitFrame = 0)
+            )
+        );
+
+        Output = ApplyAdditive(
+            Alpha          = 0.75,
+            AlphaBoolBlend = (BlendOption = Linear),
+            Base           = Base,
+            Additive       = SequencePlayer(
+                GroupName = "Secondary Motion",
+                Method    = SyncGroup,
+                Sequence  = A_Als_Idle
+            )
+        );
+    }
+}

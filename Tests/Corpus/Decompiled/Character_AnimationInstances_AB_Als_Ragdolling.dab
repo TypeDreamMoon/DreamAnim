@@ -1,0 +1,38 @@
+// Renamed from the Blueprint:
+//   RagdollingInput <- "Ragdolling Input"
+AnimBlueprint(Name="ALS/Character/AnimationInstances/AB_Als_Ragdolling", Root="Plugin.ALS")
+{
+    Settings = {
+        Parent                                = AlsLinkedAnimationInstance;
+        Skeleton                              = SK_Als;
+        bEnableLinkedAnimLayerInstanceSharing = true;
+    }
+
+    Aliases = { Main = Self.GetParent(); }
+
+    Graph = {
+        Output = GameplayTagsBlend(
+            BlendType = Linear,
+            ActiveTag = Main.LocomotionAction,
+            BlendPose = {
+                Default = Input(RagdollingInput);
+                "Als.LocomotionAction.Ragdolling" = GameplayTagsBlend(
+                    BlendType = Linear,
+                    ActiveTag = Main.LocomotionAction,
+                    BlendPose = {
+                        Default = PoseSnapshot(
+                            Mode     = SnapshotPin,
+                            Snapshot = Main.RagdollingState.FinalRagdollPose
+                        );
+                        "Als.LocomotionAction.Ragdolling" = SequencePlayer(
+                            Sequence = A_Als_Flail,
+                            PlayRate = Main.RagdollingState.FlailPlayRate
+                        );
+                    },
+                    BlendTime = 0
+                );
+            },
+            BlendTime = { Default = 0.4; "Als.LocomotionAction.Ragdolling" = 0.5; }
+        );
+    }
+}

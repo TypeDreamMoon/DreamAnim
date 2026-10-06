@@ -1,0 +1,63 @@
+// Renamed from the Blueprint:
+//   CrouchingInput <- "Crouching Input"
+//   GroundedInput <- "Grounded Input"
+//   LocomotionInput <- "Locomotion Input"
+//   OverlayInput <- "Overlay Input"
+//   RagdollingInput <- "Ragdolling Input"
+//   StandingInput <- "Standing Input"
+//   ViewInput <- "View Input"
+AnimBlueprint(Name="ALS/Character/AB_Als", Root="Plugin.ALS")
+{
+    Settings = {
+        Parent                                = AlsAnimationInstance;
+        Skeleton                              = SK_Als;
+        Implements                            = [ ALI_Overlay ];
+        bEnableLinkedAnimLayerInstanceSharing = true;
+    }
+
+    Graph = {
+        Locomotion = {
+            LinkedAnimGraph(
+                InstanceClass = AB_Als_Grounded,
+                Tag           = "Grounded",
+                Inputs        = {
+                    StandingInput  = LinkedAnimGraph(InstanceClass = AB_Als_Standing, Tag = "Standing");
+                    CrouchingInput = LinkedAnimGraph(InstanceClass = AB_Als_Crouching, Tag = "Crouching");
+                }
+            );
+            Slot("Transition");
+            LinkedAnimGraph(InstanceClass = AB_Als_Locomotion, Tag = "Locomotion");
+            Slot("PostLocomotion");
+        };
+
+        OverlayPose = {
+            LinkedAnimLayer(
+                Interface     = ALI_Overlay,
+                Layer         = "Overlay",
+                InstanceClass = AB_Als_Default,
+                Tag           = "Overlay"
+            );
+            Inertialization(bResetOnBecomingRelevant = true);
+        };
+
+        Output = {
+            LinkedAnimGraph(
+                InstanceClass = AB_Als_Layering,
+                Tag           = "Layering",
+                Inputs        = { LocomotionInput = Locomotion; OverlayInput = OverlayPose; }
+            );
+            LinkedAnimGraph(InstanceClass = AB_Als_Head, Tag = "View");
+            ControlRig(
+                ControlRigAssetReference = (BlueprintRigClass = CR_Als),
+                AlphaInputType           = Bool,
+                AlphaBoolBlend           = (BlendOption = Linear),
+                bResetInputPoseToInitial = false,
+                Tag                      = "ControlRig",
+                RigInput                 = Self.GetControlRigInput()
+            );
+            LinkedAnimGraph(InstanceClass = AB_Als_Ragdolling, Tag = "Ragdolling");
+        };
+    }
+
+    Layer Overlay [ LayerGroup = "Default Shared Group" ] = LocalRefPose();
+}

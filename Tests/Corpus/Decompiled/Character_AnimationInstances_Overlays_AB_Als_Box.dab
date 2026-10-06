@@ -1,0 +1,70 @@
+AnimBlueprint(Name="ALS/Character/AnimationInstances/Overlays/AB_Als_Box", Root="Plugin.ALS")
+{
+    Settings = {
+        Parent                                = AlsLinkedAnimationInstance;
+        Skeleton                              = SK_Als;
+        Implements                            = [ ALI_Overlay ];
+        bEnableLinkedAnimLayerInstanceSharing = true;
+    }
+
+    Aliases = { Main = Self.GetParent(); }
+
+    Graph = { Output = LinkedAnimLayer(Interface = ALI_Overlay, Layer = "Overlay"); }
+
+    Layer Overlay [ LayerGroup = "Default Shared Group"; BlendOptions = (BlendInTime = 0.2, BlendOutTime = 0.2) ]
+    {
+        Base = MultiWayBlend(
+            Poses         = [
+                TwoWayBlend(
+                    AlphaBoolBlend = (BlendOption = Linear),
+                    Alpha          = Main.PoseState.GaitWalkingAmount,
+                    A              = SequenceEvaluator(Sequence = A_Als_Box_Poses, ExplicitFrame = 0),
+                    B              = SequenceEvaluator(Sequence = A_Als_Box_Poses, ExplicitFrame = 1)
+                ),
+                SequenceEvaluator(Sequence = A_Als_Box_Poses, ExplicitFrame = 2)
+            ],
+            DesiredAlphas = [ Main.PoseState.StandingAmount, Main.PoseState.CrouchingAmount ]
+        );
+
+        ModifyCurve1 = {
+            SequenceEvaluator(Sequence = A_Als_Box_Poses, ExplicitFrame = 0);
+            ModifyCurve(LayerHeadAdditive = 0.5, LayerSpineAdditive = 0.5);
+        };
+
+        ModifyCurve2 = {
+            SequenceEvaluator(Sequence = A_Als_Box_Poses, ExplicitFrame = 2);
+            ModifyCurve(LayerArmLeft = 3, LayerArmRight = 3);
+        };
+
+        ModifyCurve3 = {
+            SequenceEvaluator(Sequence = A_Als_Box_Poses, ExplicitFrame = 0);
+            ModifyCurve(LayerArmLeft = 3, LayerArmRight = 3);
+        };
+
+        Output = GameplayTagsBlend(
+            BlendType = Linear,
+            ActiveTag = Main.LocomotionAction,
+            BlendPose = {
+                Default = ApplyAdditive(
+                    Alpha          = 0.75,
+                    AlphaBoolBlend = (BlendOption = Linear),
+                    Base           = Base,
+                    Additive       = SequencePlayer(
+                        GroupName = "Secondary Motion",
+                        Method    = SyncGroup,
+                        Sequence  = A_Als_Idle
+                    )
+                );
+                "Als.LocomotionAction.Mantling"  = ModifyCurve1;
+                "Als.LocomotionAction.GettingUp" = ModifyCurve2;
+                "Als.LocomotionAction.Rolling"   = ModifyCurve3;
+            },
+            BlendTime = {
+                Default                          = 0.5;
+                "Als.LocomotionAction.Mantling"  = 0.2;
+                "Als.LocomotionAction.GettingUp" = 0;
+                "Als.LocomotionAction.Rolling"   = 0.2;
+            }
+        );
+    }
+}
