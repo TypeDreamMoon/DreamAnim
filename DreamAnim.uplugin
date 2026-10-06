@@ -27,9 +27,20 @@
 			"LoadingPhase": "Default"
 		},
 		{
+			"Name": "DreamAnimCompiler",
+			"Type": "UncookedOnly",
+			"LoadingPhase": "Default"
+		},
+		{
 			"Name": "DreamAnimTests",
 			"Type": "UncookedOnly",
 			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "PropertyAccessEditor",
+			"Enabled": true
 		}
 	]
 }
