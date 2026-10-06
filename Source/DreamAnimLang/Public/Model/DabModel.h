@@ -120,6 +120,11 @@ namespace UE::DreamAnim::Model
 		FString ResultNodeId;
 		/** Properties of the result node itself (`LayerGroup` on a layer's root). */
 		TArray<FDabModelProperty> ResultProperties;
+		/**
+		 * The input poses of the AnimGraph or a layer, in the order the compiled function takes them: a linked
+		 * graph node feeds its pose pins to them by position, so the order is behaviour.
+		 */
+		TArray<FString> InputPoses;
 
 		DREAMANIMLANG_API const FDabModelNode* FindNode(const FString& Id) const;
 	};

@@ -5,7 +5,6 @@
 //   CrouchingAlias <- "Crouching Alias"
 //   CrouchingBackward <- "Crouching Backward"
 //   CrouchingForward <- "Crouching Forward"
-//   CrouchingInput <- "Crouching Input"
 //   CrouchingLeftBackward <- "Crouching Left Backward"
 //   CrouchingLeftForward <- "Crouching Left Forward"
 //   CrouchingMovement <- "Crouching Movement"
@@ -17,7 +16,6 @@
 //   EntryConduit <- "Entry Conduit"
 //   FirstPivot <- "First Pivot"
 //   GroundedAlias <- "Grounded Alias"
-//   GroundedInput <- "Grounded Input"
 //   GroundedLocomotionMode <- "Grounded Locomotion Mode"
 //   GroundedStates <- "Grounded States"
 //   InAirAlias <- "In Air Alias"
@@ -29,7 +27,6 @@
 //   LockRightFoot <- "Lock Right Foot"
 //   LocomotionAdditiveLocalSpace <- "Locomotion Additive Local Space"
 //   LocomotionAdditiveMeshSpace <- "Locomotion Additive Mesh Space"
-//   LocomotionInput <- "Locomotion Input"
 //   LocomotionStates <- "Locomotion States"
 //   MoveBackward <- "Move Backward"
 //   MoveForward <- "Move Forward"
@@ -41,10 +38,8 @@
 //   MovementDetailsStates <- "Movement Details States"
 //   MovementStates <- "Movement States"
 //   MovementStates_2 <- "Movement States_2"
-//   OverlayInput <- "Overlay Input"
 //   PlantLeftFoot <- "Plant Left Foot"
 //   PlantRightFoot <- "Plant Right Foot"
-//   RagdollingInput <- "Ragdolling Input"
 //   RightFoot <- "Right Foot"
 //   RotateLeft <- "Rotate Left"
 //   RotateRight <- "Rotate Right"
@@ -55,7 +50,6 @@
 //   StandingBackward <- "Standing Backward"
 //   StandingForward <- "Standing Forward"
 //   StandingForwardBase <- "Standing Forward Base"
-//   StandingInput <- "Standing Input"
 //   StandingLeftBackward <- "Standing Left Backward"
 //   StandingLeftForward <- "Standing Left Forward"
 //   StandingMovement <- "Standing Movement"
@@ -65,7 +59,6 @@
 //   StandingStates <- "Standing States"
 //   StandingToCrouching <- "Standing To Crouching"
 //   StopStates <- "Stop States"
-//   ViewInput <- "View Input"
 AnimBlueprint(Name="ALS/Character/AB_Als_Monolithic", Root="Plugin.ALS")
 {
     Settings = {
@@ -74,6 +67,8 @@ AnimBlueprint(Name="ALS/Character/AB_Als_Monolithic", Root="Plugin.ALS")
         Implements                            = [ ALI_Overlay ];
         bEnableLinkedAnimLayerInstanceSharing = true;
     }
+
+    Defaults = { Settings = AIS_Als_Default; }
 
     Notifies = {
         ActivatePivot  = Self.ActivatePivot();
@@ -87,8 +82,8 @@ AnimBlueprint(Name="ALS/Character/AB_Als_Monolithic", Root="Plugin.ALS")
                 Layer  = "GroundedLocomotionMode",
                 Tag    = "Grounded",
                 Inputs = {
-                    StandingInput  = LinkedAnimLayer(Layer = "StandingStance", Tag = "Standing");
-                    CrouchingInput = LinkedAnimLayer(Layer = "CrouchingStance", Tag = "Crouching");
+                    "Standing Input"  = LinkedAnimLayer(Layer = "StandingStance", Tag = "Standing");
+                    "Crouching Input" = LinkedAnimLayer(Layer = "CrouchingStance", Tag = "Crouching");
                 }
             );
             Slot("Transition");
@@ -110,7 +105,7 @@ AnimBlueprint(Name="ALS/Character/AB_Als_Monolithic", Root="Plugin.ALS")
             LinkedAnimLayer(
                 Layer  = "Layering",
                 Tag    = "Layering",
-                Inputs = { LocomotionInput = LocomotionPose; OverlayInput = OverlayPose; }
+                Inputs = { "Locomotion Input" = LocomotionPose; "Overlay Input" = OverlayPose; }
             );
             LinkedAnimLayer(Layer = "Head", Tag = "Head");
             ControlRig(
@@ -127,6 +122,8 @@ AnimBlueprint(Name="ALS/Character/AB_Als_Monolithic", Root="Plugin.ALS")
 
     Layer Layering [ LayerGroup = "Default Shared Group" ]
     {
+        Inputs = [ "Locomotion Input", "Overlay Input" ];
+
         Slot1 = {
             Overlay;
             Slot("ArmLeft");
@@ -222,7 +219,7 @@ AnimBlueprint(Name="ALS/Character/AB_Als_Monolithic", Root="Plugin.ALS")
             )
         ) [ Cached ];
 
-        Locomotion = Input(LocomotionInput) [ Cached ];
+        Locomotion = Input("Locomotion Input") [ Cached ];
         LocomotionAdditiveLocalSpace = MakeDynamicAdditive(
             Base     = BasePoses,
             Additive = Locomotion
@@ -232,7 +229,7 @@ AnimBlueprint(Name="ALS/Character/AB_Als_Monolithic", Root="Plugin.ALS")
             Base               = BasePoses,
             Additive           = Locomotion
         ) [ Cached ];
-        Overlay = Input(OverlayInput) [ Cached ];
+        Overlay = Input("Overlay Input") [ Cached ];
 
         Slot5 = {
             Overlay;
@@ -432,7 +429,7 @@ AnimBlueprint(Name="ALS/Character/AB_Als_Monolithic", Root="Plugin.ALS")
         BlendType = Linear,
         ActiveTag = Self.LocomotionAction,
         BlendPose = {
-            Default = Input(RagdollingInput);
+            Default = Input("Ragdolling Input");
             "Als.LocomotionAction.Ragdolling" = GameplayTagsBlend(
                 BlendType = Linear,
                 ActiveTag = Self.LocomotionAction,
@@ -467,14 +464,14 @@ AnimBlueprint(Name="ALS/Character/AB_Als_Monolithic", Root="Plugin.ALS")
         Output = ApplyMeshSpaceAdditive(
             AlphaBoolBlend = (BlendOption = Linear),
             Alpha          = Self.ViewState.HeadBlendAmount,
-            Base           = Input(ViewInput),
+            Base           = Input("View Input"),
             Additive       = Additive
         );
     }
 
     Layer Locomotion [ LayerGroup = "Default Shared Group" ]
     {
-        Grounded = Input(GroundedInput) [ Cached ];
+        Grounded = Input("Grounded Input") [ Cached ];
 
         Output = {
             LocomotionStates;
@@ -485,8 +482,9 @@ AnimBlueprint(Name="ALS/Character/AB_Als_Monolithic", Root="Plugin.ALS")
 
     Layer GroundedLocomotionMode [ LayerGroup = "Default Shared Group" ]
     {
-        Crouching = Input(CrouchingInput) [ Cached ];
-        Standing  = Input(StandingInput) [ Cached ];
+        Inputs    = [ "Standing Input", "Crouching Input" ];
+        Crouching = Input("Crouching Input") [ Cached ];
+        Standing  = Input("Standing Input") [ Cached ];
 
         Output = {
             GroundedStates;

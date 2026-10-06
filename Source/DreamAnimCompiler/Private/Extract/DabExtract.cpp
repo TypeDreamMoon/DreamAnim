@@ -3,6 +3,7 @@
 #include "Extract/DabExtract.h"
 
 #include "Animation/AnimBlueprint.h"
+#include "Animation/AnimClassInterface.h"
 #include "Animation/Skeleton.h"
 #include "AnimationGraph.h"
 #include "EdGraph/EdGraph.h"
@@ -127,6 +128,37 @@ namespace UE::DreamAnim::Compiler::ExtractPrivate
 				Ctx.OutModel.AssetSlots.Add(MoveTemp(Slot));
 			}
 			Ctx.OutModel.AssetSlots.Sort([](const Model::FDabModelAssetSlot& A, const Model::FDabModelAssetSlot& B) { return A.Name < B.Name; });
+		}
+
+		/**
+		 * A graph's input poses in the order its compiled function takes them; a Blueprint that never compiled
+		 * falls back to the order of its input pose nodes, which is what the compiler would use.
+		 */
+		void ReadInputPoseOrder(FDabExtractContext& Ctx, FName FunctionName, Model::FDabModelGraph& Graph)
+		{
+			const UClass* Class = Ctx.Blueprint.GeneratedClass ? Ctx.Blueprint.GeneratedClass.Get() : Ctx.Blueprint.SkeletonGeneratedClass.Get();
+			const IAnimClassInterface* AnimClass = Class ? IAnimClassInterface::GetFromClass(Class) : nullptr;
+			if (AnimClass)
+			{
+				for (const FAnimBlueprintFunction& Function : AnimClass->GetAnimBlueprintFunctions())
+				{
+					if (Function.Name == FunctionName)
+					{
+						for (const FName& Input : Function.InputPoseNames)
+						{
+							Graph.InputPoses.Add(Input.ToString());
+						}
+						return;
+					}
+				}
+			}
+			for (const Model::FDabModelNode& Node : Graph.Nodes)
+			{
+				if (!Node.InputPoseName.IsEmpty())
+				{
+					Graph.InputPoses.AddUnique(Node.InputPoseName);
+				}
+			}
 		}
 
 		void ExtractVariables(FDabExtractContext& Ctx)
@@ -313,6 +345,15 @@ namespace UE::DreamAnim::Compiler::ExtractPrivate
 				Layer.Graph.Name = Layer.Name;
 				ExtractAnimGraph(Ctx, *Graph, Layer.Name, Layer.Graph);
 				OutModel.Layers.Add(MoveTemp(Layer));
+			}
+		}
+
+		ReadInputPoseOrder(Ctx, UEdGraphSchema_K2::GN_AnimGraph, OutModel.AnimGraph);
+		for (Model::FDabModelLayer& Layer : OutModel.Layers)
+		{
+			if (!Layer.bDeclarationOnly)
+			{
+				ReadInputPoseOrder(Ctx, FName(*Layer.Name), Layer.Graph);
 			}
 		}
 

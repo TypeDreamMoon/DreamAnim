@@ -840,7 +840,8 @@ namespace UE::DreamAnim::Compiler::LowerPrivate
 			if (Node.ClassName == TEXT("AnimGraphNode_LinkedInputPose"))
 			{
 				TUniquePtr<FDabCallExpr> Input = MakeCall(MakeName(TEXT("Input")));
-				Input->Args.Add(MakeArgument(FString(), MakeName(Node.InputPoseName)));
+				// Input poses keep their engine names: a linked graph is found by them at run time.
+				Input->Args.Add(MakeArgument(FString(), IsDabIdentifierText(Node.InputPoseName) ? MakeName(Node.InputPoseName) : MakeString(Node.InputPoseName)));
 				Result = MoveTemp(Input);
 			}
 			else
@@ -877,7 +878,7 @@ namespace UE::DreamAnim::Compiler::LowerPrivate
 			{
 				return FString();
 			}
-			Base = Pin;
+			Base = MakeDabIdentifier(Pin);
 			for (const TCHAR* Suffix : { TEXT("Input"), TEXT("Pose") })
 			{
 				const int32 SuffixLength = FCString::Strlen(Suffix);
@@ -1285,9 +1286,20 @@ namespace UE::DreamAnim::Compiler::LowerPrivate
 			}
 		}
 
-		/** The graph's statements: caches, named poses, then the result under ResultName. */
+		/** The graph's statements: its input order, caches, named poses, then the result under ResultName. */
 		void Lower(const FString& ResultName)
 		{
+			if (Graph.InputPoses.Num() > 1)
+			{
+				// A linked graph feeds its pins to these by position.
+				TUniquePtr<FDabListExpr> Inputs = MakeUnique<FDabListExpr>();
+				for (const FString& Input : Graph.InputPoses)
+				{
+					Inputs->Items.Add(IsDabIdentifierText(Input) ? MakeName(Input) : MakeString(Input));
+				}
+				Out.Add(MakeAssign(TEXT("Inputs"), MoveTemp(Inputs)));
+			}
+
 			// Caches first, in name order, each as a named pose marked Cached.
 			TArray<const FDabModelNode*> Saves;
 			for (const FDabModelNode& Node : Graph.Nodes)

@@ -76,11 +76,6 @@ namespace UE::DreamAnim::Compiler::LowerNamesPrivate
 		}
 	};
 
-	bool IsLinkedGraphNode(const FDabModelNode& Node)
-	{
-		return Node.ClassName == TEXT("AnimGraphNode_LinkedAnimGraph") || Node.ClassName == TEXT("AnimGraphNode_LinkedAnimLayer");
-	}
-
 	/** State and machine names appear as bare names inside the getters StateWeight(S) and MachineWeight(M). */
 	void RenameGetterArguments(FDabExpr* Expr, const FScope& States, const FScope& Machines)
 	{
@@ -119,7 +114,7 @@ namespace UE::DreamAnim::Compiler::LowerNamesPrivate
 		});
 	}
 
-	void RenameGraph(FDabModelGraph& Graph, FScope& Caches, FScope& Inputs, const FScope& Machines, const FScope& States, const FScope& Layers)
+	void RenameGraph(FDabModelGraph& Graph, FScope& Caches, const FScope& Machines, const FScope& States, const FScope& Layers)
 	{
 		for (FDabModelNode& Node : Graph.Nodes)
 		{
@@ -140,21 +135,9 @@ namespace UE::DreamAnim::Compiler::LowerNamesPrivate
 			{
 				Node.CacheName = Caches.Get(Node.CacheName);
 			}
-			if (!Node.InputPoseName.IsEmpty())
-			{
-				Node.InputPoseName = Inputs.Get(Node.InputPoseName);
-			}
 			if (!Node.StateMachineName.IsEmpty())
 			{
 				Node.StateMachineName = Machines.Lookup(Node.StateMachineName);
-			}
-			if (IsLinkedGraphNode(Node))
-			{
-				// A linked graph's input pins are named after the target's input poses, which are renamed too.
-				for (FDabModelPoseLink& Link : Node.PoseInputs)
-				{
-					Link.PinName = Inputs.Get(Link.PinName);
-				}
 			}
 			for (FDabModelBinding& Binding : Node.Bindings)
 			{
@@ -174,7 +157,6 @@ namespace UE::DreamAnim::Compiler::LowerNamesPrivate
 			Machines.Get(Machine.Name);
 		}
 		FScope Caches;
-		FScope Inputs;
 		FScope Layers;
 		for (FDabModelLayer& Layer : Model.Layers)
 		{
@@ -247,16 +229,16 @@ namespace UE::DreamAnim::Compiler::LowerNamesPrivate
 			}
 		}
 
-		RenameGraph(Model.AnimGraph, Caches, Inputs, Machines, AllStates, Layers);
+		RenameGraph(Model.AnimGraph, Caches, Machines, AllStates, Layers);
 		for (FDabModelLayer& Layer : Model.Layers)
 		{
-			RenameGraph(Layer.Graph, Caches, Inputs, Machines, AllStates, Layers);
+			RenameGraph(Layer.Graph, Caches, Machines, AllStates, Layers);
 		}
 		for (FDabModelStateMachine& Machine : Model.StateMachines)
 		{
 			for (FDabModelState& State : Machine.States)
 			{
-				RenameGraph(State.Graph, Caches, Inputs, Machines, AllStates, Layers);
+				RenameGraph(State.Graph, Caches, Machines, AllStates, Layers);
 			}
 			for (FDabModelConduit& Conduit : Machine.Conduits)
 			{
@@ -270,7 +252,7 @@ namespace UE::DreamAnim::Compiler::LowerNamesPrivate
 
 		if (OutRenames)
 		{
-			for (const FScope* Scope : { &Machines, &Caches, &Inputs, &Layers })
+			for (const FScope* Scope : { &Machines, &Caches, &Layers })
 			{
 				for (const TPair<FString, FString>& Pair : Scope->Renames)
 				{

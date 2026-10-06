@@ -1,11 +1,9 @@
 // Renamed from the Blueprint:
 //   CrouchingAlias <- "Crouching Alias"
-//   CrouchingInput <- "Crouching Input"
 //   CrouchingToStanding <- "Crouching To Standing"
 //   EntryConduit <- "Entry Conduit"
 //   GroundedStates <- "Grounded States"
 //   StandingAlias <- "Standing Alias"
-//   StandingInput <- "Standing Input"
 //   StandingToCrouching <- "Standing To Crouching"
 AnimBlueprint(Name="ALS/Character/AnimationInstances/AB_Als_Grounded", Root="Plugin.ALS")
 {
@@ -18,8 +16,9 @@ AnimBlueprint(Name="ALS/Character/AnimationInstances/AB_Als_Grounded", Root="Plu
     Aliases = { Main = Self.GetParent(); }
 
     Graph = {
-        Crouching = Input(CrouchingInput) [ Cached ];
-        Standing  = Input(StandingInput) [ Cached ];
+        Inputs    = [ "Standing Input", "Crouching Input" ];
+        Crouching = Input("Crouching Input") [ Cached ];
+        Standing  = Input("Standing Input") [ Cached ];
 
         Output = {
             GroundedStates;

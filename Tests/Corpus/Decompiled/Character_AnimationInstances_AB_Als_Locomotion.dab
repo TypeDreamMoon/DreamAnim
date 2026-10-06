@@ -1,7 +1,6 @@
 // Renamed from the Blueprint:
 //   EntryConduit <- "Entry Conduit"
 //   GroundedAlias <- "Grounded Alias"
-//   GroundedInput <- "Grounded Input"
 //   InAirAlias <- "In Air Alias"
 //   JumpStates <- "Jump States"
 //   LandConduct <- "Land Conduct"
@@ -22,7 +21,7 @@ AnimBlueprint(Name="ALS/Character/AnimationInstances/AB_Als_Locomotion", Root="P
     Notifies = { LandToGrounded = Main.PlayTransitionRightAnimation(BlendInDuration = 0.1, PlayRate = 1.4); }
 
     Graph = {
-        Grounded = Input(GroundedInput) [ Cached ];
+        Grounded = Input("Grounded Input") [ Cached ];
 
         Output = {
             LocomotionStates;

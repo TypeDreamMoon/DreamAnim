@@ -186,7 +186,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		// Every name a graph can see, before any graph is built: caches are shared by the whole Blueprint.
 		static const TSet<FString> NoReserved;
 		static const TSet<FString> StateReserved = {TEXT("OnEnter"), TEXT("OnExit"), TEXT("OnBlended"), TEXT("Pose")};
-		static const TSet<FString> GraphReserved = {TEXT("Output")};
+		static const TSet<FString> GraphReserved = {TEXT("Output"), TEXT("Inputs")};
 		if (const FDabBlockExpr* Block = BlockOf(GraphStmt))
 		{
 			CollectGraphNames(Block->Statements, TEXT("Graph"), GraphReserved);

@@ -1,5 +1,3 @@
-// Renamed from the Blueprint:
-//   RagdollingInput <- "Ragdolling Input"
 AnimBlueprint(Name="ALS/Character/AnimationInstances/AB_Als_Ragdolling", Root="Plugin.ALS")
 {
     Settings = {
@@ -15,7 +13,7 @@ AnimBlueprint(Name="ALS/Character/AnimationInstances/AB_Als_Ragdolling", Root="P
             BlendType = Linear,
             ActiveTag = Main.LocomotionAction,
             BlendPose = {
-                Default = Input(RagdollingInput);
+                Default = Input("Ragdolling Input");
                 "Als.LocomotionAction.Ragdolling" = GameplayTagsBlend(
                     BlendType = Linear,
                     ActiveTag = Main.LocomotionAction,

@@ -269,6 +269,11 @@ namespace UE::DreamAnim::Model
 
 		void DumpGraph(FString& Out, int32 Depth, const FDabModelGraph& Graph)
 		{
+			if (!Graph.InputPoses.IsEmpty())
+			{
+				// In order: the order is what a linked graph node relies on.
+				Line(Out, Depth, TEXT("Inputs [") + FString::Join(Graph.InputPoses, TEXT(", ")) + TEXT("]"));
+			}
 			DumpProperties(Out, Depth, TEXT("ResultProperty"), Graph.ResultProperties);
 
 			FGraphDumper Dumper{Graph};

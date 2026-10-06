@@ -1008,8 +1008,23 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 		{
 			Ctx.AssignGuid(Graph.ResultNode, Graph.Path, TEXT("#Result"));
 		}
+		// Input pose nodes first and in the graph's input order: the compiled function takes them in node order,
+		// and linked graph nodes feed them by position.
+		TArray<const FDabModelNode*> Ordered;
 		for (const FDabModelNode& Model : Graph.Model->Nodes)
 		{
+			Ordered.Add(&Model);
+		}
+		const TArray<FString>& InputOrder = Graph.Model->InputPoses;
+		Ordered.StableSort([&InputOrder](const FDabModelNode& A, const FDabModelNode& B)
+		{
+			const int32 IndexA = A.InputPoseName.IsEmpty() ? MAX_int32 : InputOrder.IndexOfByKey(A.InputPoseName);
+			const int32 IndexB = B.InputPoseName.IsEmpty() ? MAX_int32 : InputOrder.IndexOfByKey(B.InputPoseName);
+			return (IndexA == INDEX_NONE ? MAX_int32 - 1 : IndexA) < (IndexB == INDEX_NONE ? MAX_int32 - 1 : IndexB);
+		});
+		for (const FDabModelNode* ModelPtr : Ordered)
+		{
+			const FDabModelNode& Model = *ModelPtr;
 			if (Graph.Nodes.Contains(Model.Id))
 			{
 				Ctx.Sink.Error(TEXT("DAB7005"), FDabSpan(), FString::Printf(TEXT("%s: two nodes with the id %s"), *Graph.Path, *Model.Id));

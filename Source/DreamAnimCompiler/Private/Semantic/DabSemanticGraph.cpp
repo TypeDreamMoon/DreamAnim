@@ -501,9 +501,10 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		{
 			if (Function.Name == Wanted || UE::DreamAnim::Compiler::MakeDabIdentifier(Function.Name.ToString()) == FunctionName)
 			{
+				// Input poses keep their engine names (written as strings when they are not identifiers).
 				for (const FName& Input : Function.InputPoseNames)
 				{
-					OutNames.Add(UE::DreamAnim::Compiler::MakeDabIdentifier(Input.ToString()));
+					OutNames.Add(Input.ToString());
 				}
 				return true;
 			}
@@ -690,6 +691,25 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 				Sink.Error(TEXT("DAB6011"), Statement->Span, FString::Printf(TEXT("%s holds named poses and `%s = ...;`; this statement is neither."), *Location, ResultName));
 				continue;
 			}
+			if (Assign->Name == TEXT("Inputs") && FCString::Strcmp(ResultName, TEXT("Output")) == 0)
+			{
+				// The graph's input poses in the order a linked graph node feeds them.
+				const FDabListExpr* List = Assign->Value ? SkipParens(*Assign->Value).As<FDabListExpr>() : nullptr;
+				if (!List)
+				{
+					Sink.Error(TEXT("DAB6011"), Assign->NameSpan, TEXT("`Inputs` lists the graph's input poses in order: Inputs = [ \"First Input\", Second ];"));
+					continue;
+				}
+				for (const FDabExprPtr& Item : List->Items)
+				{
+					FString Name;
+					if (Item && ReadNameOrStringText(*Item, Name))
+					{
+						Graph.InputPoses.AddUnique(Name);
+					}
+				}
+				continue;
+			}
 			if (Assign->Name == ResultName)
 			{
 				if (Result)
@@ -742,6 +762,23 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 				FString::Printf(TEXT("Write `%s = None;` for a graph that outputs nothing."), ResultName));
 		}
 
+		// Input poses not listed in `Inputs` follow in the order they are first written.
+		if (FCString::Strcmp(ResultName, TEXT("Output")) == 0)
+		{
+			for (const FDabStmtPtr& Statement : Statements)
+			{
+				TArray<FString> Written;
+				if (Statement)
+				{
+					CollectSemanticInputNames(*Statement, Written);
+				}
+				for (const FString& Name : Written)
+				{
+					Graph.InputPoses.AddUnique(Name);
+				}
+			}
+		}
+
 		// A named pose nothing uses still makes its nodes, so nothing written is lost.
 		for (const FString& Name : Scope.PoseOrder)
 		{
@@ -761,6 +798,13 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		Scope.Graph = &Graph;
 		Scope.Location = Location;
 		Graph.ResultNodeId = BuildPose(Value, Scope, TEXT("Output"), nullptr);
+		// `Layer X = Pose;` has no room for `Inputs`: its inputs are in the order they are written.
+		TArray<FString> Written;
+		CollectSemanticInputNames(Value, Written);
+		for (const FString& Name : Written)
+		{
+			Graph.InputPoses.AddUnique(Name);
+		}
 	}
 
 	FString FSemantic::BuildPose(const FDabExpr& InExpr, FGraphScope& Scope, const FString& IdHint, const FString* Feed)

@@ -24,6 +24,7 @@ Syntax and diagnostics of the front end are in `Grammar.md`. This file adds code
 | `Assets = { AnimSequence X; }` | `AssetSlots` |
 | `Notifies = { X = Call; }` or `X = { Call; Call; };` | `Notifies` (name without `AnimNotify_`) |
 | `Graph = { ...; Output = Pose; }` | `AnimGraph`; `Output` is the result |
+| `Inputs = [ "Standing Input", Crouching ];` in `Graph` or a layer | the graph's `InputPoses` in that order (a linked graph node feeds its pins to them by position); inputs not listed follow in the order `Input(...)` first appears |
 | `Layer X = Pose;` / `Layer X [meta] { ...; Output = Pose; }` | a layer; metadata → its graph's ResultProperties |
 | `StateMachine X [meta] { ... }` | a machine; metadata → its Properties |
 | `Template ...` | nothing (expanded before this pass) |
@@ -108,7 +109,7 @@ The decompiler's choices, in order of preference:
 4. Other nodes print inline as arguments. A pose argument that is a stack, or whose printed form would nest more than three calls deep, is pulled out into a named pose, named after the pin it feeds (`LocomotionInput` → `Locomotion`), else the node's `Tag`, else `<Type><n>`.
 5. An asset whose name no other registered asset has is written by that name (`A_Als_Idle`) instead of `Path(...)`.
 6. The conveniences above are recovered where the model allows it exactly (curve arguments, keyed blend maps, a single value for an array whose entries are all equal, `ExplicitFrame` without `bUseExplicitFrame`).
-7. Machine, state, conduit, alias, rule, cache, input-pose and layer names (and the matching pose-pin names of linked graph and layer nodes, and the `Layer` of linked layer nodes that name a layer of this Blueprint) become identifiers: characters other than letters, digits and `_` are dropped and the next letter is upper-cased (`Rotate Left` → `RotateLeft`, `(N) RB Movement` → `NRBMovement`); a clash gets `_2`. The original names are listed in a comment at the top of the file.
+7. Machine, state, conduit, alias, rule, cache and layer names (and the `Layer` of linked layer nodes that name a layer of this Blueprint) become identifiers: characters other than letters, digits and `_` are dropped and the next letter is upper-cased (`Rotate Left` → `RotateLeft`, `(N) RB Movement` → `NRBMovement`); a clash gets `_2`. The original names are listed in a comment at the top of the file. Input-pose names are not renamed: a linked graph's pins are found by them at run time, so they are written as strings when they are not identifiers (`Input("Standing Input")`, `Inputs = { "Standing Input" = Standing; }`).
 
 `NormalizeDabModelNames` applies rule 7 to a model; round-trip comparisons normalise the extracted model first.
 
