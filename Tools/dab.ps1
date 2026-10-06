@@ -63,7 +63,7 @@ function Invoke-Build {
     $buildBat = Join-Path $engineRoot 'Engine\Build\BatchFiles\Build.bat'
     & $buildBat "${hostName}Editor" Win64 Development "-Project=$uproject" -WaitMutex -NoHotReloadFromIDE *> $log
     $code = $LASTEXITCODE
-    $errors = @(Select-String -LiteralPath $log -Pattern 'error C\d+|error LNK\d+|error :|): error' | Select-Object -First 15 | ForEach-Object { $_.Line.Trim() })
+    $errors = @(Select-String -LiteralPath $log -Pattern 'error C\d+|error LNK\d+|error :|\): error' | Select-Object -First 15 | ForEach-Object { $_.Line.Trim() })
     if ($code -ne 0) {
         Write-Problem "Build failed (exit $code); log: $log"
         foreach ($e in $errors) { Write-Note $e }
@@ -119,7 +119,7 @@ function Get-Digest([string]$RunDir, [int]$Floor, [bool]$TimedOut, $ExitCode, [d
     $summary += ''; $summary += '## Tests'
     foreach ($t in $tests) {
         $summary += ('- {0} {1} ({2:N0} ms)' -f $t.State, $t.Path, ($t.Duration * 1000.0))
-        foreach ($i in ($t.Infos | Select-Object -First 20)) { $summary += "    - $i" }
+        foreach ($i in ($t.Infos | Select-Object -First 40)) { $summary += "    - $i" }
     }
     Set-Content -LiteralPath (Join-Path $RunDir 'summary.md') -Value ($summary -join "`n") -Encoding utf8
     Write-Step "Tests: $word"
