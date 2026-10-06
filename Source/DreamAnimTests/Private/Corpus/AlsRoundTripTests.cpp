@@ -7,10 +7,17 @@
 //   Semantic   check that text again: the model it gives must dump the same as the extracted one.
 //   Generate   generate a new Blueprint from that model next to the host's content, compile it, extract it
 //              again: it must compile without errors and dump the same as the original.
+//   PoseDiff   one test for the character: the ALS character driven through a fixed script once with the
+//              original Blueprints and once with the ones generated from their text, every bone of every
+//              frame compared.
 //
-// The three stages are separate tests so a failure says which half of the pipeline broke.
+// The stages are separate tests so a failure says which half of the pipeline broke.
 
 #include "Animation/AnimBlueprint.h"
+#include "Animation/AnimInstance.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Corpus/AlsPoseRecorder.h"
+#include "GameFramework/Character.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Extract/DabExtract.h"
 #include "Generate/DabGenerate.h"
@@ -133,6 +140,12 @@ namespace UE::DreamAnim::Tests
 			FFileHelper::SaveStringToFile(Expected, *FPaths::Combine(Dir, FString::Printf(TEXT("%s.%s.expected.txt"), *Name, Stage)), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
 			FFileHelper::SaveStringToFile(Actual, *FPaths::Combine(Dir, FString::Printf(TEXT("%s.%s.actual.txt"), *Name, Stage)), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
 		}
+
+		/** The Blueprint at ObjectPath, decompiled, checked and generated again under /Game/DreamAnimTests/Als: its class. */
+		/** Maps the printed value of a property (`Path(Plugin.ALS, "...")`) to the value to use instead. */
+		using FAlsPathMap = TMap<FString, FString>;
+
+		UClass* RegenerateAls(FAutomationTestBase& Test, const FString& ObjectPath, const FAlsPathMap& Retarget = FAlsPathMap(), const TCHAR* PackageSuffix = TEXT(""));
 
 		FString DecompileToText(const FDabModel& Model, const TMap<FString, FString>& Renames = TMap<FString, FString>())
 		{
@@ -285,6 +298,264 @@ namespace UE::DreamAnim::Tests
 		{
 			SaveModelDumps(ObjectPath, TEXT("generate"), ExpectedDump, ActualDump);
 			AddError(FString::Printf(TEXT("The generated Blueprint extracts to a different model (%s)."), *Difference));
+		}
+		return true;
+	}
+
+	namespace
+	{
+		/** `/ALS/ALS/X/Y.Y` as the checked model writes it: `Path(Plugin.ALS, "ALS/X/Y")`. */
+		FDabExprPtr MakeAlsPathExpr(const FString& ObjectPath)
+		{
+			const FString Package = FPackageName::ObjectPathToPackageName(ObjectPath);
+			FDabDiagnosticSink Sink;
+			FDabSourceText Source(TEXT("Path"), FString::Printf(TEXT("Path(Plugin.ALS, \"%s\")"), *Package.RightChop(5)));
+			return ParseDabExpression(Source, Sink);
+		}
+
+		/** The package a regenerated ALS Blueprint goes to. */
+		FString RegeneratedPackage(const FString& ObjectPath, const TCHAR* Suffix = TEXT(""))
+		{
+			return FString::Printf(TEXT("/Game/DreamAnimTests/Als/%s%s"),
+				*FPackageName::ObjectPathToPackageName(ObjectPath).Replace(TEXT("/ALS/ALS/"), TEXT("")).Replace(TEXT("/"), TEXT("_")), Suffix);
+		}
+
+		/** Node properties whose printed value is a key of Retarget take the mapped value instead. */
+		void RetargetModel(FDabModel& Model, const FAlsPathMap& Retarget)
+		{
+			const auto Graph = [&Retarget](FDabModelGraph& Target)
+			{
+				for (FDabModelNode& Node : Target.Nodes)
+				{
+					for (FDabModelProperty& Property : Node.Properties)
+					{
+						const FString* Replacement = Property.Value ? Retarget.Find(PrintDabExpr(*Property.Value)) : nullptr;
+						if (Replacement)
+						{
+							FDabDiagnosticSink Sink;
+							FDabSourceText Source(TEXT("Retarget"), *Replacement);
+							if (FDabExprPtr Parsed = ParseDabExpression(Source, Sink))
+							{
+								Property.Value = MoveTemp(Parsed);
+							}
+						}
+					}
+				}
+			};
+			Graph(Model.AnimGraph);
+			for (FDabModelLayer& Layer : Model.Layers)
+			{
+				Graph(Layer.Graph);
+			}
+			for (FDabModelStateMachine& Machine : Model.StateMachines)
+			{
+				for (FDabModelState& State : Machine.States)
+				{
+					Graph(State.Graph);
+				}
+			}
+		}
+
+		UClass* RegenerateAls(FAutomationTestBase& Test, const FString& ObjectPath, const FAlsPathMap& Retarget, const TCHAR* PackageSuffix)
+		{
+			FDabModel Extracted;
+			if (!ExtractNormalised(Test, ObjectPath, Extracted))
+			{
+				return nullptr;
+			}
+			FDabModel Checked;
+			if (!CheckText(Test, ObjectPath + TEXT(".dab"), DecompileToText(Extracted), Checked))
+			{
+				return nullptr;
+			}
+			RetargetModel(Checked, Retarget);
+			FDabGenerateOptions Options;
+			Options.bSave = false;
+			Options.OverridePackageName = RegeneratedPackage(ObjectPath, PackageSuffix);
+			FDabDiagnosticSink Sink(ObjectPath);
+			const FDabGenerateResult Result = GenerateDabBlueprint(Checked, Sink, Options);
+			if (!Result.Succeeded() || !Result.Blueprint)
+			{
+				Test.AddError(FString::Printf(TEXT("%s does not generate"), *ObjectPath));
+				return nullptr;
+			}
+			return Result.Blueprint->GeneratedClass;
+		}
+
+		/** The class of an ALS Blueprint by its path under /ALS/ALS/Character/AnimationInstances. */
+		FString AlsInstancePath(const TCHAR* Relative)
+		{
+			const FString Name = FPaths::GetBaseFilename(Relative);
+			return FString::Printf(TEXT("/ALS/ALS/Character/%s.%s"), Relative, *Name);
+		}
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDabAlsPoseDiffTest, "DreamAnim.Corpus.Als.PoseDiff",
+		EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+	bool FDabAlsPoseDiffTest::RunTest(const FString& Parameters)
+	{
+		// The main instance, the graphs it links by tag, and the overlay layers ALS links as the overlay changes.
+		const TCHAR* const MainPath = TEXT("AB_Als");
+		const TPair<const TCHAR*, const TCHAR*> Tagged[] = {
+			{ TEXT("Grounded"), TEXT("AnimationInstances/AB_Als_Grounded") },
+			{ TEXT("Standing"), TEXT("AnimationInstances/Stances/AB_Als_Standing") },
+			{ TEXT("Crouching"), TEXT("AnimationInstances/Stances/AB_Als_Crouching") },
+			{ TEXT("Locomotion"), TEXT("AnimationInstances/AB_Als_Locomotion") },
+			{ TEXT("Layering"), TEXT("AnimationInstances/AB_Als_Layering") },
+			{ TEXT("View"), TEXT("AnimationInstances/AB_Als_Head") },
+			{ TEXT("Ragdolling"), TEXT("AnimationInstances/AB_Als_Ragdolling") },
+		};
+		const TCHAR* const Overlays[] = {
+			TEXT("Default"), TEXT("Masculine"), TEXT("Feminine"), TEXT("Injured"), TEXT("HandsTied"), TEXT("Rifle"),
+			TEXT("PistolOneHanded"), TEXT("PistolTwoHanded"), TEXT("Bow"), TEXT("Torch"), TEXT("Binoculars"), TEXT("Box"), TEXT("Barrel"),
+		};
+
+		// The main instance's references to the others, as the checked model writes them, and the generated
+		// copies they become in a project made entirely from text.
+		FAlsPathMap Retarget;
+		const auto AddRetarget = [&Retarget](const FString& ObjectPath)
+		{
+			const FString Original = PrintDabExpr(*MakeAlsPathExpr(ObjectPath));
+			const FString Package = RegeneratedPackage(ObjectPath);
+			Retarget.Add(Original, FString::Printf(TEXT("Path(Game, \"%s\")"), *Package.RightChop(6)));
+		};
+
+		UClass* GeneratedMain = RegenerateAls(*this, AlsInstancePath(MainPath));
+		TMap<FName, UClass*> GeneratedByTag;
+		for (const TPair<const TCHAR*, const TCHAR*>& Entry : Tagged)
+		{
+			if (UClass* Class = RegenerateAls(*this, AlsInstancePath(Entry.Value)))
+			{
+				GeneratedByTag.Add(FName(Entry.Key), Class);
+				AddRetarget(AlsInstancePath(Entry.Value));
+			}
+		}
+		TMap<FString, UClass*> GeneratedOverlays;
+		for (const TCHAR* Overlay : Overlays)
+		{
+			const FString Path = AlsInstancePath(*FString::Printf(TEXT("AnimationInstances/Overlays/AB_Als_%s"), Overlay));
+			if (UClass* Class = RegenerateAls(*this, Path))
+			{
+				GeneratedOverlays.Add(FPackageName::ObjectPathToObjectName(Path) + TEXT("_C"), Class);
+				AddRetarget(Path);
+			}
+		}
+		UClass* GeneratedMainLinked = RegenerateAls(*this, AlsInstancePath(MainPath), Retarget, TEXT("_Linked"));
+		if (!GeneratedMain || !GeneratedMainLinked || GeneratedByTag.Num() != UE_ARRAY_COUNT(Tagged) || GeneratedOverlays.Num() != UE_ARRAY_COUNT(Overlays))
+		{
+			return false;
+		}
+
+		// The character links an overlay's layers from its OverlayAnimationInstanceClasses map whenever the overlay
+		// changes; pointing the map at the generated classes lets it link those exactly as it links the originals.
+		const auto UseGeneratedOverlays = [&GeneratedOverlays](ACharacter& Character)
+		{
+			const FMapProperty* Map = FindFProperty<FMapProperty>(Character.GetClass(), TEXT("OverlayAnimationInstanceClasses"));
+			const FObjectPropertyBase* ValueProperty = Map ? CastField<FObjectPropertyBase>(Map->ValueProp) : nullptr;
+			if (!ValueProperty)
+			{
+				return;
+			}
+			FScriptMapHelper Helper(Map, Map->ContainerPtrToValuePtr<void>(&Character));
+			for (FScriptMapHelper::FIterator It(Helper); It; ++It)
+			{
+				void* Value = Helper.GetValuePtr(It.GetInternalIndex());
+				const UObject* Original = ValueProperty->GetObjectPropertyValue(Value);
+				if (UClass* const* Generated = Original ? GeneratedOverlays.Find(Original->GetName()) : nullptr)
+				{
+					ValueProperty->SetObjectPropertyValue(Value, *Generated);
+				}
+			}
+		};
+
+		FAlsPoseScript Original;
+		FAlsPoseScript Regenerated;
+		Regenerated.BeforeSpawn = [GeneratedMainLinked, &UseGeneratedOverlays](ACharacter& Character)
+		{
+			Character.GetMesh()->AnimClass = GeneratedMainLinked;
+			UseGeneratedOverlays(Character);
+		};
+
+		FAlsPoseRecording Expected;
+		FAlsPoseRecording Actual;
+		FString Error;
+		if (!RecordAlsPoses(Original, Expected, Error) || !RecordAlsPoses(Regenerated, Actual, Error))
+		{
+			AddError(Error);
+			return false;
+		}
+		AddInfo(Actual.Notes);
+		const FString Difference = CompareAlsPoses(Expected, Actual);
+		if (Difference.IsEmpty())
+		{
+			return true;
+		}
+		AddError(FString::Printf(TEXT("The generated Blueprints move the character differently: %s"), *Difference));
+
+		// Which one: swap them in one at a time.
+		const auto Single = [&](const FString& Label, const FAlsPoseScript& Script)
+		{
+			FAlsPoseRecording One;
+			FString OneError;
+			if (!RecordAlsPoses(Script, One, OneError))
+			{
+				AddError(OneError);
+				return;
+			}
+			const FString OneDifference = CompareAlsPoses(Expected, One);
+			AddInfo(FString::Printf(TEXT("only %s generated: %s"), *Label, OneDifference.IsEmpty() ? TEXT("same") : *OneDifference));
+		};
+		{
+			FAlsPoseScript MainOnly;
+			MainOnly.BeforeSpawn = [GeneratedMain](ACharacter& Character)
+			{
+				Character.GetMesh()->AnimClass = GeneratedMain;
+			};
+			Single(TEXT("AB_Als"), MainOnly);
+		}
+		for (const TPair<FName, UClass*>& Entry : GeneratedByTag)
+		{
+			FAlsPoseScript TagOnly;
+			const FName Tag = Entry.Key;
+			UClass* Class = Entry.Value;
+			TagOnly.Setup = [Tag, Class](ACharacter& Character)
+			{
+				Character.GetMesh()->GetAnimInstance()->LinkAnimGraphByTag(Tag, Class);
+			};
+			Single(Tag.ToString(), TagOnly);
+		}
+		{
+			FAlsPoseScript OverlaysOnly;
+			OverlaysOnly.BeforeSpawn = UseGeneratedOverlays;
+			Single(TEXT("the overlays"), OverlaysOnly);
+		}
+		for (const TPair<FString, UClass*>& Overlay : GeneratedOverlays)
+		{
+			// One overlay at a time, through the same map.
+			const FString OverlayName = Overlay.Key;
+			UClass* OverlayClass = Overlay.Value;
+			FAlsPoseScript OneOverlay;
+			OneOverlay.BeforeSpawn = [OverlayName, OverlayClass](ACharacter& Character)
+			{
+				const FMapProperty* Map = FindFProperty<FMapProperty>(Character.GetClass(), TEXT("OverlayAnimationInstanceClasses"));
+				const FObjectPropertyBase* ValueProperty = Map ? CastField<FObjectPropertyBase>(Map->ValueProp) : nullptr;
+				if (!ValueProperty)
+				{
+					return;
+				}
+				FScriptMapHelper Helper(Map, Map->ContainerPtrToValuePtr<void>(&Character));
+				for (FScriptMapHelper::FIterator It(Helper); It; ++It)
+				{
+					void* Value = Helper.GetValuePtr(It.GetInternalIndex());
+					const UObject* Original = ValueProperty->GetObjectPropertyValue(Value);
+					if (Original && Original->GetName() == OverlayName)
+					{
+						ValueProperty->SetObjectPropertyValue(Value, OverlayClass);
+					}
+				}
+			};
+			Single(OverlayName, OneOverlay);
 		}
 		return true;
 	}

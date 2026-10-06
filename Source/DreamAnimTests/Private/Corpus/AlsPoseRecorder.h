@@ -30,6 +30,8 @@ namespace UE::DreamAnim::Tests
 	{
 		int32 Frames = 420;
 		float DeltaSeconds = 1.f / 30.f;
+		/** Called before the character finishes spawning: its mesh's AnimClass can still be replaced. */
+		TFunction<void(ACharacter& Character)> BeforeSpawn;
 		/** Called once after the character is spawned and before the first frame: swap Animation Blueprints here. */
 		TFunction<void(ACharacter& Character)> Setup;
 		/** Called after every scripted overlay change (ALS relinks its overlay layers then). */

@@ -134,14 +134,19 @@ namespace UE::DreamAnim::Tests
 		UWorld& World = *Wrapper.GetTestWorld();
 		SpawnFloor(World);
 
-		FActorSpawnParameters Params;
-		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-		ACharacter* Character = World.SpawnActor<ACharacter>(CharacterClass, FVector(0, 0, 120), FRotator::ZeroRotator, Params);
+		const FTransform SpawnTransform(FRotator::ZeroRotator, FVector(0, 0, 120));
+		ACharacter* Character = World.SpawnActorDeferred<ACharacter>(CharacterClass, SpawnTransform, nullptr, nullptr,
+			ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
 		if (!Character || !Character->GetMesh())
 		{
 			Error = TEXT("Cannot spawn the ALS character");
 			return false;
 		}
+		if (Script.BeforeSpawn)
+		{
+			Script.BeforeSpawn(*Character);
+		}
+		Character->FinishSpawning(SpawnTransform);
 		USkeletalMeshComponent& Mesh = *Character->GetMesh();
 		if (Script.Setup)
 		{
@@ -219,6 +224,9 @@ namespace UE::DreamAnim::Tests
 			return FString::Printf(TEXT("%d frames recorded, expected %d"), Actual.Frames.Num(), Expected.Frames.Num());
 		}
 		const double AngleRadians = FMath::DegreesToRadians(AngleTolerance);
+		FString First;
+		int32 LastFrame = INDEX_NONE;
+		int32 DifferingFrames = 0;
 		for (int32 Frame = 0; Frame < Expected.Frames.Num(); ++Frame)
 		{
 			const TArray<FTransform>& E = Expected.Frames[Frame];
@@ -233,17 +241,29 @@ namespace UE::DreamAnim::Tests
 				const double Angle = E[Bone].GetRotation().AngularDistance(A[Bone].GetRotation());
 				if (Distance > LocationTolerance || Angle > AngleRadians)
 				{
-					return FString::Printf(TEXT("frame %d, bone %s: off by %.4f cm and %.4f degrees"),
-						Frame, Expected.Bones.IsValidIndex(Bone) ? *Expected.Bones[Bone].ToString() : TEXT("?"),
-						Distance, FMath::RadiansToDegrees(Angle));
+					if (First.IsEmpty())
+					{
+						First = FString::Printf(TEXT("frame %d, bone %s: off by %.4f cm and %.4f degrees"),
+							Frame, Expected.Bones.IsValidIndex(Bone) ? *Expected.Bones[Bone].ToString() : TEXT("?"),
+							Distance, FMath::RadiansToDegrees(Angle));
+					}
+					LastFrame = Frame;
+					++DifferingFrames;
+					break;
 				}
 			}
-			if (FVector::Dist(Expected.Locations[Frame], Actual.Locations[Frame]) > LocationTolerance)
+			if (LastFrame != Frame && FVector::Dist(Expected.Locations[Frame], Actual.Locations[Frame]) > LocationTolerance)
 			{
-				return FString::Printf(TEXT("frame %d: the character is at %s, expected %s"), Frame,
-					*Actual.Locations[Frame].ToString(), *Expected.Locations[Frame].ToString());
+				if (First.IsEmpty())
+				{
+					First = FString::Printf(TEXT("frame %d: the character is at %s, expected %s"), Frame,
+						*Actual.Locations[Frame].ToString(), *Expected.Locations[Frame].ToString());
+				}
+				LastFrame = Frame;
+				++DifferingFrames;
 			}
 		}
-		return FString();
+		return First.IsEmpty() ? FString()
+			: FString::Printf(TEXT("%s (%d of %d frames differ, the last is frame %d)"), *First, DifferingFrames, Expected.Frames.Num(), LastFrame);
 	}
 }
