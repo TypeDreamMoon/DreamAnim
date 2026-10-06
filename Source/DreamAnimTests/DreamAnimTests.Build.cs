@@ -20,6 +20,7 @@ public class DreamAnimTests : ModuleRules
 			"DreamAnim",
 			"DreamAnimLang",
 			"DreamAnimCompiler",
+			"GameplayTags",
 			"Projects",
 		});
 	}
