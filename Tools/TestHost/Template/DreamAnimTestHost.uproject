@@ -1,0 +1,27 @@
+{
+	"FileVersion": 3,
+	"EngineAssociation": "{486FC676-41CB-DA5E-D95C-8AA1D8EB76B0}",
+	"Category": "",
+	"Description": "Minimal host project that builds DreamAnim on its own and runs its automation tests, away from any working project. Generated from Plugins/DreamAnim/Tools/TestHost/Template by New-DreamAnimTestHost.ps1.",
+	"Modules": [
+		{
+			"Name": "DreamAnimTestHost",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "DreamAnim",
+			"Enabled": true
+		},
+		{
+			"Name": "ALS",
+			"Enabled": true
+		},
+		{
+			"Name": "PythonScriptPlugin",
+			"Enabled": true
+		}
+	]
+}
