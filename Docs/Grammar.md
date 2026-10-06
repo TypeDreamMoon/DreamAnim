@@ -109,7 +109,9 @@ once, and the canonical text parses to the same tree.
   same-line comment after it, comments after the last statement of a block before its `}`.
 - Document: `Kind(Name="…", Root="…")` on one line, `{` on the next line, statements, `}`.
 - An assignment whose value is a block prints without `;`; every other assignment ends with `;`.
-- Statement-level blocks and stacks are always broken over lines: `X = {` / entries / `}`.
+- Statement-level blocks and stacks are broken over lines: `X = {` / entries / `}`. The exception is
+  a block of exactly one statement that is neither a named block nor a block or stack itself and has
+  no comments: it prints on one line when it fits (`Aliases = { Main = Self.GetParent(); }`).
   Blocks and stacks inside an argument list print on one line when they fit, otherwise broken.
 - Calls print on one line when they fit. Otherwise every argument goes on its own line, one level
   deeper, with the `=` of named arguments aligned, and the `)` on its own line at the call's indent:
@@ -128,8 +130,9 @@ once, and the canonical text parses to the same tree.
   - transitions: the `->`, the `:` and the metadata `[` line up.
 - Metadata: `[ Key = Value; Flag ]` on one line, entries separated by `; `.
 - Numbers print as written. Strings print with the escapes above re-applied.
-- Named blocks: `State Idle` then `{` on the next line at the same indent; a named block with a value
-  prints on one line `Layer Overlay = LocalRefPose();`.
+- Named blocks: `State Idle` then `{` on the next line at the same indent; a body that qualifies for
+  the one-line rule above stays on the head's line (`State Stop { Pose = StopStates; }`); a named
+  block with a value prints on one line `Layer Overlay = LocalRefPose();`.
 - Parentheses the author wrote are kept.
 
 ## Diagnostics raised by the front end
@@ -161,6 +164,7 @@ once, and the canonical text parses to the same tree.
 | DAB3103 | Error | A template call has more arguments than the template has parameters |
 | DAB3104 | Error | Template expansion nested too deep (a template that calls itself) |
 | DAB3105 | Error | Two templates with the same name (in the file and its includes) |
+| DAB3106 | Error | A template written without `= expression;` (a block body or nothing) |
 | DAB3201 | Error | An `#include`d file was not found |
 | DAB3202 | Error | `#include` cycle |
 | DAB3203 | Error | An `#include`d file is not an `AnimTemplates` library |
