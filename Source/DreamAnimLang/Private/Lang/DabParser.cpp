@@ -1874,12 +1874,7 @@ namespace UE::DreamAnim::Lang
 					return nullptr;
 				}
 
-				if (Items.Num() == 0)
-				{
-					Sink.Error(TEXT("DAB2006"), SpanFrom(Start), TEXT("Expected an expression inside the parentheses, found ')'."));
-					return nullptr;
-				}
-
+				// `()` is the empty tuple: a struct with every field at its default.
 				if (Items.Num() == 1 && !Items[0]->IsNamed() && !bTrailingComma)
 				{
 					ReleaseTrivia(Items[0]->Span.Offset, OpenOffset);

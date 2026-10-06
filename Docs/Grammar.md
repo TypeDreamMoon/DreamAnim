@@ -63,7 +63,7 @@ Unary       = ( "!" | "-" ) Unary | Postfix ;
 Postfix     = Primary { "." Ident | "(" [ Arguments ] ")" } ;
 Primary     = Number | String | "true" | "false" | Ident
             | "(" Expr ")"                                       (* grouping *)
-            | "(" Arguments ")"                                  (* tuple: two or more items, or any named item *)
+            | "(" Arguments ")"                                  (* tuple: none, two or more items, or any named item; `()` is a struct at its defaults *)
             | "[" [ Expr { "," Expr } [ "," ] ] "]"              (* list *)
             | Block                                              (* map: statements *)
             | Stack ;
