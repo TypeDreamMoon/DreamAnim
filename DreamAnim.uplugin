@@ -1,0 +1,30 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "0.1.0",
+	"FriendlyName": "Dream Anim",
+	"Description": "Animation Blueprints authored as text. State machines and anim graphs live in .dab files and all logic stays in the C++ anim instance. The text is the source of truth; the editor writes its edits back to it.",
+	"Category": "DreamPlugin",
+	"CreatedBy": "DreamMoon",
+	"CreatedByURL": "https://dmstudio.top",
+	"DocsURL": "",
+	"MarketplaceURL": "",
+	"SupportURL": "",
+	"CanContainContent": true,
+	"IsBetaVersion": true,
+	"IsExperimentalVersion": false,
+	"EnabledByDefault": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "DreamAnim",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "DreamAnimTests",
+			"Type": "UncookedOnly",
+			"LoadingPhase": "Default"
+		}
+	]
+}
