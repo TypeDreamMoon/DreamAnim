@@ -54,6 +54,20 @@ bool UDreamAnimSet::SyncSlots(FName Blueprint, const TArray<TPair<FName, FName>>
 	return bChanged;
 }
 
+bool UDreamAnimSet::SetAsset(FName Blueprint, FName Slot, UAnimationAsset* Asset)
+{
+	check(IsInGameThread());
+	FDreamAnimSetGroup* Group = Groups.FindByPredicate([Blueprint](const FDreamAnimSetGroup& Candidate) { return Candidate.Blueprint == Blueprint; });
+	FDreamAnimSetSlot* Found = Group ? Group->Slots.FindByPredicate([Slot](const FDreamAnimSetSlot& Candidate) { return Candidate.Name == Slot; }) : nullptr;
+	if (!Found)
+	{
+		return false;
+	}
+	Found->Asset = Asset;
+	RebuildLookup();
+	return true;
+}
+
 void UDreamAnimSet::PostLoad()
 {
 	Super::PostLoad();

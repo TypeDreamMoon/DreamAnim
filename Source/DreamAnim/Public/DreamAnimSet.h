@@ -78,6 +78,9 @@ public:
 	 */
 	bool SyncSlots(FName Blueprint, const TArray<TPair<FName, FName>>& DeclaredSlots);
 
+	/** Fills a slot from code (tools, tests). False when the group or slot does not exist. Game thread only. */
+	bool SetAsset(FName Blueprint, FName Slot, UAnimationAsset* Asset);
+
 	virtual void PostLoad() override;
 #if WITH_EDITOR
 	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
