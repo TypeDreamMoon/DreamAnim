@@ -1,0 +1,16 @@
+AnimBlueprint(  Name = "Tests/Messy",Root="Game" ) {
+  Settings={Parent=AlsLinkedAnimationInstance;Skeleton=Path(Game,"Characters/SK_Test");
+      bUseMultiThreadedAnimationUpdate=true;}
+
+
+
+  Aliases = { Main = Self.GetParent() ; }
+  Graph={
+     LookPose={BlendSpaceEvaluator(BlendSpace=Assets.Look,X=Main.HeadState.PitchAngle,NormalizedTime=Main.HeadState.YawAmount);Call(Self.RefreshHead);Call(Self.InitializeHead,On=BecomeRelevant);};
+     Short = TwoWayBlend(
+         A = X,
+         B = Y
+     );
+     Output=ApplyMeshSpaceAdditive(Base=Input(ViewInput),Additive=LookPose,Alpha=Main.ViewState.HeadBlendAmount)[Cached];
+  }
+}

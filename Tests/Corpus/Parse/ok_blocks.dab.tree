@@ -1,0 +1,157 @@
+Document AnimBlueprint
+  Arg Name
+    String "Tests/Blocks"
+  Arg Root
+    String "Game"
+  Block
+    Assign Properties
+      Block
+        Decl float StopBlend
+          Number 0.3
+          Meta
+            MetaEntry Group
+              String "Stop"
+        Decl int Count
+        Decl bool bFlag
+          Bool false
+          Meta
+            MetaEntry Group
+              String "Flags"
+            MetaEntry Advanced
+    Assign Graph
+      Block
+        Region "Poses"
+        Assign A
+          Call
+            Name Frame
+            Arg
+              Member Idle
+                Name Assets
+            Arg
+              Number 0
+          Meta
+            MetaEntry Cached
+        Assign B
+          Stack
+            Name A
+            Call
+              Name Slot
+              Arg
+                String "Upper"
+          Meta
+            MetaEntry Cached
+        EndRegion
+        Assign Output
+          Name A
+    NamedBlock Template Pair (X, Y)
+      Param X
+      Param Y
+        Number 0
+      Call
+        Name TwoWayBlend
+        Arg A
+          Name X
+        Arg B
+          Name X
+        Arg Alpha
+          Name Y
+    NamedBlock Template NoParams ()
+      Call
+        Name LocalRefPose
+    NamedBlock Layer Upper
+      Meta
+        MetaEntry LayerGroup
+          String "Upper"
+    NamedBlock Layer Lower
+      Call
+        Name LocalRefPose
+    NamedBlock Layer Full
+      Block
+        Assign Output
+          Call
+            Name Pair
+            Arg
+              Name B
+    NamedBlock StateMachine Machine
+      Meta
+        MetaEntry MaxTransitionsPerFrame
+          Number 1
+      Block
+        Assign Entry
+          Name Idle
+        NamedBlock State Idle
+          Meta
+            MetaEntry bAlwaysResetOnEntry
+              Bool true
+          Block
+            Assign OnEnter
+              Call
+                Member Begin
+                  Name Main
+            Assign OnExit
+              Call
+                Member End
+                  Name Main
+                Arg
+                  Member Stop
+                    Name Assets
+                Arg Rate
+                  Number 1.5
+            Assign OnBlended
+              Call
+                Member Settled
+                  Name Main
+            Assign Local
+              Call
+                Name Frame
+                Arg
+                  Member Idle
+                    Name Assets
+                Arg
+                  Number 0
+            Assign Pose
+              Name Local
+        NamedBlock State Moving
+          Block
+            Assign Pose
+              Name B
+        NamedBlock Conduit Gate
+          Binary >
+            Member Speed
+              Name Main
+            Number 0
+        NamedBlock Conduit Always
+        NamedBlock Alias AnyGround
+          List
+            Name Idle
+            Name Moving
+        NamedBlock Alias Anywhere
+          Name All
+        Assign Transitions
+          Block
+            Transition Idle -> Gate
+              Bool true
+            Transition Gate -> Moving
+              Name Auto
+              Meta
+                MetaEntry Blend
+                  Number 0.2
+                MetaEntry Curve
+                  Name HermiteCubic
+                MetaEntry Inertialize
+                  Number 0.1
+                MetaEntry Priority
+                  Number 3
+            Transition AnyGround -> Idle
+              Unary !
+                Member bMoving
+                  Name Main
+              Meta
+                MetaEntry BlendProfile
+                  Call
+                    Name Path
+                    Arg
+                      Name Game
+                    Arg
+                      String "Profiles/BP_Upper"
+                MetaEntry Bidirectional

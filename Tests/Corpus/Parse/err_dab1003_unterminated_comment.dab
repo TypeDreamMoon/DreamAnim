@@ -1,0 +1,6 @@
+AnimBlueprint(Name="Tests/E", Root="Game")
+{
+    Settings = { A = 1; }
+}
+/* never closed
+// EXPECT DAB1003 (5,1)

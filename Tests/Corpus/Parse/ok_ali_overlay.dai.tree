@@ -1,0 +1,10 @@
+Document AnimLayerInterface
+  Arg Name
+    String "ALS/Character/ALI_Overlay"
+  Arg Root
+    String "Plugin.ALS"
+  Block
+    NamedBlock Layer Overlay
+      Meta
+        MetaEntry LayerGroup
+          String "Default Shared Group"

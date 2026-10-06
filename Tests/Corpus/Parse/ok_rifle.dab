@@ -1,0 +1,57 @@
+// ALS-Refactored AB_Als_Rifle: notifies, an implemented layer, a tag-keyed blend and a small machine.
+AnimBlueprint(Name="ALS/Character/AnimationInstances/Overlays/AB_Als_Rifle", Root="Plugin.ALS")
+{
+    Settings = {
+        Parent     = AlsLinkedAnimationInstance;
+        Skeleton   = Path(Plugin.ALS, "ALS/Character/SK_Als");
+        Implements = [ ALI_Overlay ];
+    }
+
+    Aliases = { Main = Self.GetParent(); }
+
+    Assets = { AnimSequence RiflePoses; AnimSequence Idle; }
+
+    Notifies = {
+        RelaxedToReady = Main.PlayTransitionLeftAnimation(PlayRate = 1.75, StartTime = 0.3, bFromStandingIdleOnly = true);
+        ReadyToRelaxed = Main.PlayTransitionLeftAnimation(PlayRate = 1.5,  StartTime = 0.3, bFromStandingIdleOnly = true);
+    }
+
+    Graph = {
+        Output = LinkedAnimLayer(Interface = ALI_Overlay, Layer = Overlay);
+    }
+
+    Layer Overlay [ LayerGroup = "Default Shared Group" ]
+    {
+        Output = GameplayTagsBlend(
+            ActiveTag = Main.LocomotionAction,
+            BlendPose = {
+                Default                          = RifleStates;
+                "Als.LocomotionAction.Mantling"  = Frame(Assets.RiflePoses, 11);
+                "Als.LocomotionAction.GettingUp" = { Frame(Assets.RiflePoses, 7); ModifyCurve(LayerArmRight = 3); };
+                "Als.LocomotionAction.Rolling"   = { Frame(Assets.RiflePoses, 9);
+                                                     ModifyCurve(LayerArmLeft = 3, LayerArmLeftAdditive = 0,
+                                                                 LayerArmRight = 3, LayerArmRightAdditive = 0); };
+            },
+            BlendTime = { Default = 0.3; "Als.LocomotionAction.Mantling" = 0.3;
+                          "Als.LocomotionAction.GettingUp" = 0; "Als.LocomotionAction.Rolling" = 0.3; },
+            BlendType = Linear);
+    }
+
+    StateMachine RifleStates
+    {
+        Entry = Relaxed;
+
+        State Relaxed { Pose = Frame(Assets.RiflePoses, 0); }
+        State Ready   { Pose = Frame(Assets.RiflePoses, 2); }
+        State Aiming  { Pose = Frame(Assets.RiflePoses, 4); }
+
+        Transitions = {
+            Relaxed -> Ready   : Main.RotationMode == "Als.RotationMode.Aiming";
+            Ready   -> Aiming  : Main.RotationMode == "Als.RotationMode.Aiming"                    [ Blend = 0.2; Curve = Custom ];
+            Aiming  -> Ready   : Main.RotationMode != "Als.RotationMode.Aiming"                    [ Blend = 1.0; Curve = Custom ];
+            Ready   -> Relaxed : Main.TransitionsState.bTransitionsAllowed && StateTime() >= 3   [ Blend = 0.75; Curve = Cubic ];
+            Ready   -> Relaxed : Main.LocomotionState.bMoving && StateTime() >= 3               [ Blend = 0.75; Curve = Cubic ];
+            Ready   -> Relaxed : Main.LocomotionMode == "Als.LocomotionMode.InAir" || Main.Gait == "Als.Gait.Sprinting" [ Priority = 2 ];
+        }
+    }
+}

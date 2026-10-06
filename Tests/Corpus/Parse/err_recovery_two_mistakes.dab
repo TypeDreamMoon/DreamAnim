@@ -1,0 +1,7 @@
+AnimBlueprint(Name="Tests/E", Root="Game")
+{
+    Settings = { A = ; B = 2; }
+    Rules = { C = (1 + ; }
+}
+// EXPECT DAB2006 (3,22)
+// EXPECT DAB2006 (4,24)

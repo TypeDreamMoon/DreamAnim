@@ -1,0 +1,20 @@
+#include "lib/common.dat"
+
+AnimBlueprint(Name="Tests/T", Root="Game")
+{
+    Aliases = { Main = Self.GetParent(); }
+
+    Template Local(X) = TwoWayBlend(A = X, B = FirstFrame(Assets.Rest), Alpha = 0.5);
+
+    Graph = {
+        Walk = VelocityBlend(Frame(Assets.F, 4), Frame(Assets.B, 4), Looped(Assets.L), Looped(Assets.R, Rate = 2),
+                             VB = Main.GroundedState.VelocityBlend);
+        Output = Local(Walk);
+    }
+
+    StateMachine M
+    {
+        Entry = A;
+        State A { Pose = Frame(Assets.Idle, 0); }
+    }
+}

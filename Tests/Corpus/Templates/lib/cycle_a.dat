@@ -1,0 +1,4 @@
+#include "cycle_b.dat"
+AnimTemplates(Name="Tests/A", Root="Game")
+{
+}

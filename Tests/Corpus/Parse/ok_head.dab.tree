@@ -1,0 +1,70 @@
+Document AnimBlueprint
+  Arg Name
+    String "ALS/Character/AnimationInstances/AB_Als_Head"
+  Arg Root
+    String "Plugin.ALS"
+  Block
+    Assign Settings
+      Block
+        Assign Parent
+          Name AlsLinkedAnimationInstance
+        Assign Skeleton
+          Call
+            Name Path
+            Arg
+              Member ALS
+                Name Plugin
+            Arg
+              String "ALS/Character/SK_Als"
+    Assign Aliases
+      Block
+        Assign Main
+          Call
+            Member GetParent
+              Name Self
+    Assign Assets
+      Block
+        Decl BlendSpace Look
+    Assign Graph
+      Block
+        Assign LookPose
+          Stack
+            Call
+              Name BlendSpaceEvaluator
+              Arg BlendSpace
+                Member Look
+                  Name Assets
+              Arg X
+                Member PitchAngle
+                  Member HeadState
+                    Name Main
+              Arg NormalizedTime
+                Member YawAmount
+                  Member HeadState
+                    Name Main
+            Call
+              Name Call
+              Arg
+                Member RefreshHead
+                  Name Self
+            Call
+              Name Call
+              Arg
+                Member InitializeHead
+                  Name Self
+              Arg On
+                Name BecomeRelevant
+        Assign Output
+          Call
+            Name ApplyMeshSpaceAdditive
+            Arg Base
+              Call
+                Name Input
+                Arg
+                  Name ViewInput
+            Arg Additive
+              Name LookPose
+            Arg Alpha
+              Member HeadBlendAmount
+                Member ViewState
+                  Name Main

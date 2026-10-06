@@ -1,0 +1,26 @@
+AnimBlueprint(Name="Tests/Tables", Root="Game")
+{
+    Properties = {
+        float StopBlend = 0.3 [ Group = "Stop" ];
+        int Count;
+        AnimSequence DefaultPose = Path(Game, "Anims/A_Idle");
+    }
+
+    StateMachine Machine
+    {
+        Entry = Idle;
+        State Idle { Pose = X; }
+        Rules = {
+            Moving = Main.LocomotionState.bMovingSmooth;
+            RotateLeft = Main.RotateInPlaceState.bRotatingLeft;
+        }
+        Transitions = {
+            Idle -> Move : Moving;
+            Move -> Stop : !Moving && StateWeight(Move) >= 1 [ Blend = 0 ];
+            RotateLeft -> RotateRight : RotateRight [ Inertialize ];
+
+            // A comment ends the run: the next row aligns on its own.
+            Stop -> Idle : StateWeight(Stop) >= 1 [ Blend = 0.3 ];
+        }
+    }
+}

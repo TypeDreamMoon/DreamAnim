@@ -1,0 +1,5 @@
+AnimBlueprint(Name="Tests/E", Root="Game")
+{
+}
+#include "Late.dat"
+// EXPECT DAB2009 (4,1)

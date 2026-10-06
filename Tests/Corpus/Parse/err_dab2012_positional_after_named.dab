@@ -1,0 +1,5 @@
+AnimBlueprint(Name="Tests/E", Root="Game")
+{
+    Graph = { Output = F(A = 1, 2); }
+}
+// EXPECT DAB2012 (3,33)

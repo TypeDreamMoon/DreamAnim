@@ -1,0 +1,39 @@
+#include "AlsCommon.dat"
+
+AnimBlueprint(Name="Tests/LongCalls", Root="Game")
+{
+    Graph = {
+        Walk = LayeredBoneBlend(
+            BasePose                = MovementDetails,
+            BlendPoses              = [
+                VelocityBlend(
+                    Frame(Assets.WalkForward, 4),
+                    Frame(Assets.WalkBackward, 4),
+                    WalkLeft,
+                    WalkRight,
+                    VB = Main.GroundedState.VelocityBlend
+                )
+            ],
+            LayerSetup              = [ bones(thigh_l, ik_foot_l, "VB foot_l") ],
+            bMeshSpaceRotationBlend = true
+        );
+        Pick = BlendListByEnum(
+            ActiveEnumValue = Main.GroundedState.HipsDirection,
+            BlendPose       = {
+                Default      = Frame(Assets.WalkLeftForward, 6);
+                LeftBackward = Frame(Assets.WalkLeftBackward, 4);
+            },
+            BlendTime       = 0
+        );
+        Output = {
+            Walk;
+            ModifyCurve(
+                FootLeftLock     = 1,
+                FootRightLock    = 1,
+                AllowTransitions = 1,
+                RotationYawSpeed = Main.TurnInPlaceState.PlayRate,
+                ApplyMode        = Scale
+            );
+        };
+    }
+}

@@ -1,0 +1,8 @@
+AnimBlueprint(Name="Tests/E", Root="Game")
+{
+    Graph = {
+        #Region "Open"
+        Output = X;
+    }
+}
+// EXPECT DAB2008 (4,9)

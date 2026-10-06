@@ -1,0 +1,8 @@
+#include "lib/common.dat"
+
+AnimBlueprint(Name="Tests/T", Root="Game")
+{
+    Template Loop(X) = Loop(X);
+    Graph = { Output = Loop(Assets.Idle); }
+}
+// EXPECT DAB3104 (6,24)

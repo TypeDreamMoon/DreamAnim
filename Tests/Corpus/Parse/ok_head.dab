@@ -1,0 +1,30 @@
+// ALS-Refactored AB_Als_Head, the whole Blueprint.
+AnimBlueprint(Name="ALS/Character/AnimationInstances/AB_Als_Head", Root="Plugin.ALS")
+{
+    Settings = {
+        Parent   = AlsLinkedAnimationInstance;
+        Skeleton = Path(Plugin.ALS, "ALS/Character/SK_Als");
+    }
+
+    Aliases = {
+        Main = Self.GetParent();
+    }
+
+    Assets = {
+        BlendSpace Look;
+    }
+
+    Graph = {
+        LookPose = {
+            BlendSpaceEvaluator(BlendSpace     = Assets.Look,
+                                X              = Main.HeadState.PitchAngle,
+                                NormalizedTime = Main.HeadState.YawAmount);
+            Call(Self.RefreshHead);
+            Call(Self.InitializeHead, On = BecomeRelevant);
+        };
+
+        Output = ApplyMeshSpaceAdditive(Base     = Input(ViewInput),
+                                        Additive = LookPose,
+                                        Alpha    = Main.ViewState.HeadBlendAmount);
+    }
+}

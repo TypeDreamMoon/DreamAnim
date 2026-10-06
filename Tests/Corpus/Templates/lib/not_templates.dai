@@ -1,0 +1,4 @@
+AnimLayerInterface(Name="Tests/I", Root="Game")
+{
+    Layer Overlay;
+}

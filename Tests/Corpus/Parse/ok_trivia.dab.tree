@@ -1,0 +1,44 @@
+Document AnimBlueprint
+  Arg Name
+    String "Tests/Trivia"
+  Arg Root
+    String "Game"
+  Block
+    Assign Settings
+      Block
+        Assign Parent
+          Name UAnimInstance
+        Assign Skeleton
+          Call
+            Name Path
+            Arg
+              Name Game
+            Arg
+              String "Characters/SK_Test"
+        Assign bUseMultiThreadedAnimationUpdate
+          Bool true
+    Assign Graph
+      Block
+        Assign Output
+          Stack
+            Call
+              Name SequencePlayer
+              Arg Sequence
+                Member Idle
+                  Name Assets
+            Call
+              Name Slot
+              Arg
+                String "Default"
+    NamedBlock StateMachine Machine
+      Block
+        Assign Entry
+          Name A
+        NamedBlock State A
+          Block
+            Assign Pose
+              Name X
+        Assign Transitions
+          Block
+            Transition A -> B
+              Bool true

@@ -1,0 +1,113 @@
+Include "lib/common.dat"
+Document AnimBlueprint
+  Arg Name
+    String "Tests/T"
+  Arg Root
+    String "Game"
+  Block
+    Assign Aliases
+      Block
+        Assign Main
+          Call
+            Member GetParent
+              Name Self
+    NamedBlock Template Local (X)
+      Param X
+      Call
+        Name TwoWayBlend
+        Arg A
+          Name X
+        Arg B
+          Call
+            Name FirstFrame
+            Arg
+              Member Rest
+                Name Assets
+        Arg Alpha
+          Number 0.5
+    Assign Graph
+      Block
+        Assign Walk
+          Call
+            Name MultiWayBlend
+            Arg Poses
+              List
+                Call
+                  Name SequenceEvaluator
+                  Arg Sequence
+                    Member F
+                      Name Assets
+                  Arg ExplicitFrame
+                    Number 4
+                Call
+                  Name SequenceEvaluator
+                  Arg Sequence
+                    Member B
+                      Name Assets
+                  Arg ExplicitFrame
+                    Number 4
+                Call
+                  Name SequencePlayer
+                  Arg Sequence
+                    Member L
+                      Name Assets
+                  Arg PlayRate
+                    Number 1.0
+                  Arg bLoopAnimation
+                    Bool true
+                Call
+                  Name SequencePlayer
+                  Arg Sequence
+                    Member R
+                      Name Assets
+                  Arg PlayRate
+                    Number 2
+                  Arg bLoopAnimation
+                    Bool true
+            Arg DesiredAlphas
+              List
+                Member ForwardAmount
+                  Member VelocityBlend
+                    Member GroundedState
+                      Name Main
+                Member BackwardAmount
+                  Member VelocityBlend
+                    Member GroundedState
+                      Name Main
+                Member LeftAmount
+                  Member VelocityBlend
+                    Member GroundedState
+                      Name Main
+                Member RightAmount
+                  Member VelocityBlend
+                    Member GroundedState
+                      Name Main
+        Assign Output
+          Call
+            Name TwoWayBlend
+            Arg A
+              Name Walk
+            Arg B
+              Call
+                Name SequenceEvaluator
+                Arg Sequence
+                  Member Rest
+                    Name Assets
+                Arg ExplicitFrame
+                  Number 0
+            Arg Alpha
+              Number 0.5
+    NamedBlock StateMachine M
+      Block
+        Assign Entry
+          Name A
+        NamedBlock State A
+          Block
+            Assign Pose
+              Call
+                Name SequenceEvaluator
+                Arg Sequence
+                  Member Idle
+                    Name Assets
+                Arg ExplicitFrame
+                  Number 0

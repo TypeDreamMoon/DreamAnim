@@ -1,0 +1,7 @@
+AnimBlueprint(Name="Tests/E", Root="Game")
+{
+}
+AnimTemplates(Name="Tests/F", Root="Game")
+{
+}
+// EXPECT DAB2003 (4,1)

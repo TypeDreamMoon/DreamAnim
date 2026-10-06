@@ -1,0 +1,5 @@
+// ALS-Refactored ALI_Overlay, the whole interface.
+AnimLayerInterface(Name="ALS/Character/ALI_Overlay", Root="Plugin.ALS")
+{
+    Layer Overlay [ LayerGroup = "Default Shared Group" ];
+}

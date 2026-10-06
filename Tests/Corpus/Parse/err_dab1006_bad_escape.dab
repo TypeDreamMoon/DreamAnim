@@ -1,0 +1,5 @@
+AnimBlueprint(Name="Tests/E", Root="Game")
+{
+    Settings = { A = "a\qb"; }
+}
+// EXPECT DAB1006

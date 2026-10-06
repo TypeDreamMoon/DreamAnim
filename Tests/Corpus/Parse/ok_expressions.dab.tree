@@ -1,0 +1,133 @@
+Document AnimBlueprint
+  Arg Name
+    String "Tests/Expressions"
+  Arg Root
+    String "Game"
+  Block
+    Assign Rules
+      Block
+        Assign A
+          Binary ||
+            Binary &&
+              Unary !
+                Name Moving
+              Binary >=
+                Call
+                  Name StateWeight
+                  Arg
+                    Name Move
+                Number 1
+            Binary >
+              Member Speed
+                Name Main
+              Number 650
+        Assign B
+          Binary <
+            Binary -
+              Binary /
+                Binary *
+                  Paren
+                    Binary +
+                      Member Speed
+                        Name Main
+                      Number 1
+                  Number 2
+                Number 3
+              Unary -
+                Member Offset
+                  Name Main
+            Number 10
+        Assign C
+          Binary !=
+            Binary ==
+              Member Gait
+                Name Main
+              String "Als.Gait.Walking"
+            Bool false
+        Assign D
+          Conditional
+            Member bAiming
+              Name Main
+            Number 1
+            Number 0.5
+        Assign E
+          Member bMoving
+            Member LocomotionState
+              Call
+                Member GetParent
+                  Name Self
+        Assign F
+          Binary &&
+            Call
+              Name Matches
+              Arg
+                Member Gait
+                  Name Main
+              Arg
+                String "Als.Gait"
+            Call
+              Name IsValid
+              Arg
+                Member Stance
+                  Name Main
+    Assign Graph
+      Block
+        Assign Output
+          Call
+            Name TwoWayBlend
+            Arg A
+              Stack
+                Call
+                  Name Frame
+                  Arg
+                    Member Idle
+                      Name Assets
+                  Arg
+                    Number 0
+                Call
+                  Name ModifyCurve
+                  Arg Lock
+                    Number 1
+            Arg B
+              Call
+                Name BlendListByEnum
+                Arg ActiveEnumValue
+                  Member Dir
+                    Name Main
+                Arg BlendPose
+                  Block
+                    Assign Default
+                      Name X
+                    Assign "Odd Key"
+                      Name Y
+            Arg Alpha
+              Conditional
+                Member bAiming
+                  Name Main
+                Number 1.0
+                Paren
+                  Binary *
+                    Member Blend
+                      Name Main
+                    Number 0.5
+            Arg Pair
+              Tuple
+                Arg
+                  Number 1
+                Arg
+                  Number 2
+            Arg Named
+              Tuple
+                Arg Min
+                  Number 0
+                Arg Max
+                  Number 1.5e2
+            Arg Empty
+              Block
+            Arg Items
+              List
+                Number 1
+                Number 2
+                Number 3
+            Arg Trail
+              List

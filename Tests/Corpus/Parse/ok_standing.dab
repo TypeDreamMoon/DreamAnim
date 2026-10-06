@@ -1,0 +1,195 @@
+#include "AlsCommon.dat"
+
+// ALS-Refactored AB_Als_Standing, shortened: the stop states and the standing machine are complete,
+// the movement machines keep one state each.
+AnimBlueprint(Name="ALS/Character/AnimationInstances/Stances/AB_Als_Standing", Root="Plugin.ALS")
+{
+    Settings = {
+        Parent   = AlsLinkedAnimationInstance;
+        Skeleton = Path(Plugin.ALS, "ALS/Character/SK_Als");
+    }
+
+    Aliases = { Main = Self.GetParent(); }
+
+    Assets = {
+        AnimSequence StandPose;
+        AnimSequence RotateLeft90;
+        AnimSequence RotateRight90;
+        AnimSequence StopLeft;
+        AnimSequence WalkForward;
+        AnimSequence WalkBackward;
+        AnimSequence WalkLeftForward;
+        AnimSequence WalkLeftBackward;
+        AnimSequence WalkRightForward;
+        AnimSequence WalkRightBackward;
+        BlendSpace   WalkRunForward;
+        BlendSpace   Lean;
+    }
+
+    Notifies = {
+        ActivatePivot = Main.ActivatePivot();
+        StopQuick     = Main.PlayQuickStopAnimation();
+    }
+
+    Template WalkRun(Space) = BlendSpacePlayer(
+        BlendSpace = Space, GroupName = Movement, Method = SyncGroup, StartPosition = 0.2,
+        X          = Main.StandingState.StrideBlendAmount,
+        Y          = Main.StandingState.WalkRunBlendAmount,
+        PlayRate   = Main.StandingState.PlayRate);
+
+    Graph = {
+        #Region "Movement"
+        MoveForwardBase = WalkRun(Assets.WalkRunForward) [ Cached ];
+
+        Movement = {
+            ApplyAdditive(Base     = MovementStates,
+                          Additive = BlendSpaceEvaluator(BlendSpace = Assets.Lean,
+                                                         X = Main.LeanState.RightAmount,
+                                                         Y = Main.LeanState.ForwardAmount),
+                          Alpha    = Main.PoseState.UnweightedGaitRunningAmount,
+                          AlphaScaleBiasClamp = (bClampResult = true, bInterpResult = true, ClampMin = 0.5,
+                                                 InterpSpeedIncreasing = 20, InterpSpeedDecreasing = 1));
+            ModifyCurve(PoseMoving = 1);
+        } [ Cached ];
+
+        MovementDetails = {
+            MovementDetailsStates;
+            Inertialization(bResetOnBecomingRelevant = true);
+            Call(Self.RefreshStandingMovement);
+            Call(Self.InitializeStandingMovement, On = BecomeRelevant);
+            Call(Self.RefreshGroundedMovement);
+        } [ Cached ];
+        #EndRegion
+
+        Output = {
+            StandingStates;
+            Inertialization(FilteredCurves = [ RotationYawSpeed ], bResetOnBecomingRelevant = true);
+            ModifyCurve(PoseStanding = 1);
+            Call(Self.RefreshRotateInPlace);
+        };
+    }
+
+    StateMachine StandingStates
+    {
+        Entry = Idle;
+
+        State Idle
+        {
+            OnExit = Main.StopTransitionAndTurnInPlaceAnimations();
+            Pose = {
+                SequenceEvaluator(Sequence = Assets.StandPose, ExplicitFrame = 0);
+                ModifyCurve(FootLeftLock = 1, FootRightLock = 1, AllowTransitions = 1);
+                Slot("TurnInPlaceStanding");
+                ModifyCurve(RotationYawSpeed = Main.TurnInPlaceState.PlayRate, ApplyMode = Scale);
+                Call(Self.RefreshTurnInPlace);
+                Call(Self.InitializeTurnInPlace, On = BecomeRelevant);
+                Call(Self.RefreshDynamicTransitions);
+            };
+        }
+
+        State Move
+        {
+            OnEnter = Main.StopTransitionAndTurnInPlaceAnimations();
+            Pose    = MovementDetails;
+        }
+
+        State Stop { Pose = StopStates; }
+
+        State RotateLeft
+        {
+            Pose = {
+                SequencePlayer(Sequence = Assets.RotateLeft90,
+                               PlayRate = Main.RotateInPlaceState.PlayRate,
+                               bLoopAnimation = Main.RotateInPlaceState.bRotatingLeft);
+                ModifyCurve(RotationYawSpeed = Main.RotateInPlaceState.PlayRate, ApplyMode = Scale);
+            };
+        }
+
+        State RotateRight
+        {
+            Pose = {
+                SequencePlayer(Sequence = Assets.RotateRight90,
+                               PlayRate = Main.RotateInPlaceState.PlayRate,
+                               bLoopAnimation = Main.RotateInPlaceState.bRotatingRight);
+                ModifyCurve(RotationYawSpeed = Main.RotateInPlaceState.PlayRate, ApplyMode = Scale);
+            };
+        }
+
+        Rules = {
+            Moving      = Main.LocomotionState.bMovingSmooth;
+            RotateLeft  = Main.RotateInPlaceState.bRotatingLeft;
+            RotateRight = Main.RotateInPlaceState.bRotatingRight;
+        }
+
+        Transitions = {
+            Idle        -> Move        : Moving;
+            Idle        -> RotateLeft  : RotateLeft;
+            Idle        -> RotateRight : RotateRight;
+            Move        -> Stop        : !Moving && StateWeight(Move) >= 1   [ Blend = 0 ];
+            Move        -> Idle        : !Moving                             [ Priority = 2 ];
+            Stop        -> Idle        : StateWeight(Stop) >= 1              [ Blend = 0.3 ];
+            RotateLeft  -> Idle        : Auto                                [ Blend = 0 ];
+            RotateRight -> Idle        : Auto                                [ Blend = 0 ];
+            RotateLeft  -> Idle        : Moving;
+            RotateRight -> Idle        : Moving;
+            RotateLeft  -> RotateRight : RotateRight                         [ Inertialize ];
+            RotateRight -> RotateLeft  : RotateLeft                          [ Inertialize ];
+        }
+    }
+
+    StateMachine MovementStates
+    {
+        Entry = MoveForward;
+        State MoveForward { Pose = MoveForwardBase; }
+    }
+
+    StateMachine MovementDetailsStates [ MaxTransitionsPerFrame = 1; bSkipFirstUpdateTransition = false ]
+    {
+        Entry = Walk;
+        State Walk { Pose = Movement; }
+    }
+
+    StateMachine StopStates [ bSkipFirstUpdateTransition = false ]
+    {
+        Entry = Entry;
+        State Entry { Pose = MovementDetails; }
+
+        State LockLeftFoot
+        {
+            OnEnter = Main.PlayTransitionAnimation(Assets.StopLeft, PlayRate = 1.5, StartTime = 0.4);
+            Pose = { MovementDetails; ModifyCurve(FootLeftLock = 1); };
+        }
+
+        State PlantLeftFoot
+        {
+            OnEnter = Main.PlayTransitionAnimation(Assets.StopLeft, PlayRate = 1.5, StartTime = 0.4);
+
+            WalkLeft = BlendListByEnum(
+                ActiveEnumValue = Main.GroundedState.HipsDirection,
+                BlendPose = { Default      = Frame(Assets.WalkLeftForward,  6);
+                              LeftBackward = Frame(Assets.WalkLeftBackward, 4); },
+                BlendTime = 0);
+
+            WalkRight = BlendListByEnum(
+                ActiveEnumValue = Main.GroundedState.HipsDirection,
+                BlendPose = { Default       = Frame(Assets.WalkRightForward,  7);
+                              RightBackward = Frame(Assets.WalkRightBackward, 7); },
+                BlendTime = { Default = 0; RightBackward = 0.1; });
+
+            Pose = {
+                LayeredBoneBlend(
+                    BasePose   = MovementDetails,
+                    BlendPoses = [ VelocityBlend(Frame(Assets.WalkForward, 4), Frame(Assets.WalkBackward, 4),
+                                                 WalkLeft, WalkRight, VB = Main.GroundedState.VelocityBlend) ],
+                    LayerSetup = [ bones(thigh_l, ik_foot_l, "VB foot_l") ],
+                    bMeshSpaceRotationBlend = true);
+                ModifyCurve(FootLeftLock = 1);
+            };
+        }
+
+        Transitions = {
+            Entry -> LockLeftFoot  : Main.FeetState.FootPlantedAmount <= -0.5   [ Blend = 0 ];
+            Entry -> PlantLeftFoot : Main.FeetState.FootPlantedAmount <= 0      [ Blend = 0.1; Priority = 2 ];
+        }
+    }
+}

@@ -1,0 +1,54 @@
+Document AnimBlueprint
+  Arg Name
+    String "Tests/中文"
+  Arg Root
+    String "Game"
+  Block
+    Assign Aliases
+      Block
+        Assign 主
+          Call
+            Member GetParent
+              Name Self
+    Assign Rules
+      Block
+        Assign 在动
+          Member 平滑移动
+            Member 移动状态
+              Name 主
+    Assign Graph
+      Block
+        Assign 站立姿势
+          Call
+            Name Frame
+            Arg
+              Member 站立
+                Name Assets
+            Arg
+              Number 0
+          Meta
+            MetaEntry Cached
+        Assign Output
+          Name 站立姿势
+    NamedBlock StateMachine 站立状态
+      Block
+        Assign Entry
+          Name 待机
+        NamedBlock State 待机
+          Block
+            Assign Pose
+              Name 站立姿势
+        NamedBlock State 移动
+          Block
+            Assign Pose
+              Name 站立姿势
+        Assign Transitions
+          Block
+            Transition 待机 -> 移动
+              Name 在动
+            Transition 移动 -> 待机
+              Unary !
+                Name 在动
+              Meta
+                MetaEntry Blend
+                  Number 0.3

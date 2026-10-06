@@ -1,0 +1,8 @@
+AnimBlueprint(Name="Tests/E", Root="Game")
+{
+    Template T(A, A) = X;
+    Template U(A = 1, B) = X;
+}
+// A parameter twice; one without a default after one with.
+// EXPECT DAB2014 (3,19)
+// EXPECT DAB2014 (4,23)

@@ -1,0 +1,5 @@
+#include "lib/cycle_a.dat"
+AnimBlueprint(Name="Tests/T", Root="Game")
+{
+}
+// EXPECT DAB3202

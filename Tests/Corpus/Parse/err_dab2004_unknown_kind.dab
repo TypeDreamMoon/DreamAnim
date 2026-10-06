@@ -1,0 +1,4 @@
+AnimThing(Name="Tests/E", Root="Game")
+{
+}
+// EXPECT DAB2004 (1,1)

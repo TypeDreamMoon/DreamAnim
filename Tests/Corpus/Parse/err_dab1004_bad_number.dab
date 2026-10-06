@@ -1,0 +1,6 @@
+AnimBlueprint(Name="Tests/E", Root="Game")
+{
+    Settings = { A = 1e; }
+}
+// An exponent with no digits.
+// EXPECT DAB1004 (3,22)

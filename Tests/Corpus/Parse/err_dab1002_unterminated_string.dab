@@ -1,0 +1,7 @@
+AnimBlueprint(Name="Tests/E", Root="Game")
+{
+    Settings = { A = "abc; }
+}
+// A string not closed on its line: it swallows the `}` of Settings, so the document's `{` is left open.
+// EXPECT DAB1002 (3,22)
+// EXPECT DAB2007 (2,1)

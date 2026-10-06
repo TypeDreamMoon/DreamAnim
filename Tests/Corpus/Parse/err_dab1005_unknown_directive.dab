@@ -1,0 +1,7 @@
+AnimBlueprint(Name="Tests/E", Root="Game")
+{
+#pragma once
+    Settings = { A = 1; }
+}
+// Only #include, #Region and #EndRegion exist.
+// EXPECT DAB1005 (3,1)

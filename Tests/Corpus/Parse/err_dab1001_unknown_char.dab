@@ -1,0 +1,6 @@
+AnimBlueprint(Name="Tests/E", Root="Game")
+{
+    Settings = { A = 1 @; }
+}
+// A character no token starts with. The lexer drops it, so the parser has nothing more to say.
+// EXPECT DAB1001 (3,24)

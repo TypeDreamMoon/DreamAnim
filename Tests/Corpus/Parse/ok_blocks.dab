@@ -1,0 +1,54 @@
+// Every statement and named-block form, regions, metadata spellings, optional semicolons.
+AnimBlueprint(Name="Tests/Blocks", Root="Game")
+{
+    Properties = {
+        float StopBlend = 0.3 [ Group = "Stop" ];
+        int   Count;
+        bool  bFlag = false [ Group = "Flags", Advanced ];
+    }
+
+    Graph = {
+        #Region "Poses"
+        A = Frame(Assets.Idle, 0) [ Cached; ];
+        B = { A; Slot("Upper"); } [ Cached ];
+        #EndRegion
+        Output = A;
+    };
+
+    Template Pair(X, Y = 0) = TwoWayBlend(A = X, B = X, Alpha = Y);
+    Template NoParams() = LocalRefPose();
+
+    Layer Upper [ LayerGroup = "Upper" ];
+    Layer Lower = LocalRefPose();
+    Layer Full
+    {
+        Output = Pair(B);
+    };
+
+    StateMachine Machine [ MaxTransitionsPerFrame = 1 ]
+    {
+        Entry = Idle;
+
+        State Idle [ bAlwaysResetOnEntry = true ]
+        {
+            OnEnter   = Main.Begin();
+            OnExit    = Main.End(Assets.Stop, Rate = 1.5);
+            OnBlended = Main.Settled();
+            Local = Frame(Assets.Idle, 0);
+            Pose = Local;
+        }
+
+        State Moving { Pose = B; }
+
+        Conduit Gate = Main.Speed > 0;
+        Conduit Always;
+        Alias AnyGround = [ Idle, Moving ];
+        Alias Anywhere = All;
+
+        Transitions = {
+            Idle      -> Gate   : true;
+            Gate      -> Moving : Auto [ Blend = 0.2; Curve = HermiteCubic; Inertialize = 0.1; Priority = 3 ];
+            AnyGround -> Idle   : !Main.bMoving [ BlendProfile = Path(Game, "Profiles/BP_Upper"), Bidirectional ];
+        }
+    }
+}

@@ -1,0 +1,14 @@
+// Templates the template corpus includes.
+AnimTemplates(Name="Tests/Common", Root="Game")
+{
+    Template Frame(Seq, N) = SequenceEvaluator(Sequence = Seq, ExplicitFrame = N);
+
+    Template VelocityBlend(Forward, Backward, Left, Right, VB) = MultiWayBlend(
+        Poses         = [ Forward, Backward, Left, Right ],
+        DesiredAlphas = [ VB.ForwardAmount, VB.BackwardAmount, VB.LeftAmount, VB.RightAmount ]);
+
+    Template Looped(Seq, Rate = 1.0) = SequencePlayer(Sequence = Seq, PlayRate = Rate, bLoopAnimation = true);
+
+    // A template whose body is another template call.
+    Template FirstFrame(Seq) = Frame(Seq, 0);
+}

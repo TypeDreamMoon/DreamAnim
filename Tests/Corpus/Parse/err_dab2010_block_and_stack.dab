@@ -1,0 +1,6 @@
+AnimBlueprint(Name="Tests/E", Root="Game")
+{
+    Graph = { A = B; C; }
+}
+// A block (it starts with an assignment) holding a bare expression.
+// EXPECT DAB2010 (3,22)

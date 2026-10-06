@@ -1,0 +1,37 @@
+// Leading comment above the document.
+AnimBlueprint(Name="Tests/Trivia", Root="Game")
+{
+    // Above Settings.
+    Settings = {
+        Parent = UAnimInstance; // trailing after an entry
+
+
+        // Above Skeleton, after two blank lines.
+        Skeleton = Path(Game, "Characters/SK_Test");
+        /* A block comment
+           over two lines. */
+        bUseMultiThreadedAnimationUpdate = true;
+        // Inner comment after the last entry.
+    }
+
+    Graph = {
+        Output = {
+            // Above the first step.
+            SequencePlayer(Sequence = Assets.Idle); // after the first step
+            Slot("Default");
+            // After the last step.
+        };
+    }
+
+    StateMachine Machine
+    {
+        Entry = A; /* a block comment after a statement */
+
+        State A { Pose = X; }
+
+        Transitions = {
+            // Above a transition.
+            A -> B : true; // after a transition
+        }
+    }
+}

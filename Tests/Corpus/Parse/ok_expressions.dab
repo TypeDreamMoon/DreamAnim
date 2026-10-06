@@ -1,0 +1,25 @@
+// Every expression form: precedence, unary, ternary, parentheses, tuples, lists, inline blocks and
+// stacks inside arguments, string keys, member chains on calls.
+AnimBlueprint(Name="Tests/Expressions", Root="Game")
+{
+    Rules = {
+        A = !Moving && StateWeight(Move) >= 1 || Main.Speed > 650;
+        B = (Main.Speed + 1) * 2 / 3 - -Main.Offset < 10;
+        C = Main.Gait == "Als.Gait.Walking" != false;
+        D = Main.bAiming ? 1 : 0.5;
+        E = Self.GetParent().LocomotionState.bMoving;
+        F = Matches(Main.Gait, "Als.Gait") && IsValid(Main.Stance);
+    }
+
+    Graph = {
+        Output = TwoWayBlend(
+            A     = { Frame(Assets.Idle, 0); ModifyCurve(Lock = 1); },
+            B     = BlendListByEnum(ActiveEnumValue = Main.Dir, BlendPose = { Default = X; "Odd Key" = Y; }),
+            Alpha = Main.bAiming ? 1.0 : (Main.Blend * 0.5),
+            Pair  = (1, 2),
+            Named = (Min = 0, Max = 1.5e2),
+            Empty = {},
+            Items = [ 1, 2, 3, ],
+            Trail = [ ]);
+    }
+}

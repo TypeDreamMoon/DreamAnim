@@ -1,0 +1,6 @@
+AnimBlueprint(Root="Game", Kind="x")
+{
+}
+// No Name, and an argument that is neither Name nor Root.
+// EXPECT DAB2005
+// EXPECT DAB2005

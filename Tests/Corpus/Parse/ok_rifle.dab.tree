@@ -1,0 +1,231 @@
+Document AnimBlueprint
+  Arg Name
+    String "ALS/Character/AnimationInstances/Overlays/AB_Als_Rifle"
+  Arg Root
+    String "Plugin.ALS"
+  Block
+    Assign Settings
+      Block
+        Assign Parent
+          Name AlsLinkedAnimationInstance
+        Assign Skeleton
+          Call
+            Name Path
+            Arg
+              Member ALS
+                Name Plugin
+            Arg
+              String "ALS/Character/SK_Als"
+        Assign Implements
+          List
+            Name ALI_Overlay
+    Assign Aliases
+      Block
+        Assign Main
+          Call
+            Member GetParent
+              Name Self
+    Assign Assets
+      Block
+        Decl AnimSequence RiflePoses
+        Decl AnimSequence Idle
+    Assign Notifies
+      Block
+        Assign RelaxedToReady
+          Call
+            Member PlayTransitionLeftAnimation
+              Name Main
+            Arg PlayRate
+              Number 1.75
+            Arg StartTime
+              Number 0.3
+            Arg bFromStandingIdleOnly
+              Bool true
+        Assign ReadyToRelaxed
+          Call
+            Member PlayTransitionLeftAnimation
+              Name Main
+            Arg PlayRate
+              Number 1.5
+            Arg StartTime
+              Number 0.3
+            Arg bFromStandingIdleOnly
+              Bool true
+    Assign Graph
+      Block
+        Assign Output
+          Call
+            Name LinkedAnimLayer
+            Arg Interface
+              Name ALI_Overlay
+            Arg Layer
+              Name Overlay
+    NamedBlock Layer Overlay
+      Meta
+        MetaEntry LayerGroup
+          String "Default Shared Group"
+      Block
+        Assign Output
+          Call
+            Name GameplayTagsBlend
+            Arg ActiveTag
+              Member LocomotionAction
+                Name Main
+            Arg BlendPose
+              Block
+                Assign Default
+                  Name RifleStates
+                Assign "Als.LocomotionAction.Mantling"
+                  Call
+                    Name Frame
+                    Arg
+                      Member RiflePoses
+                        Name Assets
+                    Arg
+                      Number 11
+                Assign "Als.LocomotionAction.GettingUp"
+                  Stack
+                    Call
+                      Name Frame
+                      Arg
+                        Member RiflePoses
+                          Name Assets
+                      Arg
+                        Number 7
+                    Call
+                      Name ModifyCurve
+                      Arg LayerArmRight
+                        Number 3
+                Assign "Als.LocomotionAction.Rolling"
+                  Stack
+                    Call
+                      Name Frame
+                      Arg
+                        Member RiflePoses
+                          Name Assets
+                      Arg
+                        Number 9
+                    Call
+                      Name ModifyCurve
+                      Arg LayerArmLeft
+                        Number 3
+                      Arg LayerArmLeftAdditive
+                        Number 0
+                      Arg LayerArmRight
+                        Number 3
+                      Arg LayerArmRightAdditive
+                        Number 0
+            Arg BlendTime
+              Block
+                Assign Default
+                  Number 0.3
+                Assign "Als.LocomotionAction.Mantling"
+                  Number 0.3
+                Assign "Als.LocomotionAction.GettingUp"
+                  Number 0
+                Assign "Als.LocomotionAction.Rolling"
+                  Number 0.3
+            Arg BlendType
+              Name Linear
+    NamedBlock StateMachine RifleStates
+      Block
+        Assign Entry
+          Name Relaxed
+        NamedBlock State Relaxed
+          Block
+            Assign Pose
+              Call
+                Name Frame
+                Arg
+                  Member RiflePoses
+                    Name Assets
+                Arg
+                  Number 0
+        NamedBlock State Ready
+          Block
+            Assign Pose
+              Call
+                Name Frame
+                Arg
+                  Member RiflePoses
+                    Name Assets
+                Arg
+                  Number 2
+        NamedBlock State Aiming
+          Block
+            Assign Pose
+              Call
+                Name Frame
+                Arg
+                  Member RiflePoses
+                    Name Assets
+                Arg
+                  Number 4
+        Assign Transitions
+          Block
+            Transition Relaxed -> Ready
+              Binary ==
+                Member RotationMode
+                  Name Main
+                String "Als.RotationMode.Aiming"
+            Transition Ready -> Aiming
+              Binary ==
+                Member RotationMode
+                  Name Main
+                String "Als.RotationMode.Aiming"
+              Meta
+                MetaEntry Blend
+                  Number 0.2
+                MetaEntry Curve
+                  Name Custom
+            Transition Aiming -> Ready
+              Binary !=
+                Member RotationMode
+                  Name Main
+                String "Als.RotationMode.Aiming"
+              Meta
+                MetaEntry Blend
+                  Number 1.0
+                MetaEntry Curve
+                  Name Custom
+            Transition Ready -> Relaxed
+              Binary &&
+                Member bTransitionsAllowed
+                  Member TransitionsState
+                    Name Main
+                Binary >=
+                  Call
+                    Name StateTime
+                  Number 3
+              Meta
+                MetaEntry Blend
+                  Number 0.75
+                MetaEntry Curve
+                  Name Cubic
+            Transition Ready -> Relaxed
+              Binary &&
+                Member bMoving
+                  Member LocomotionState
+                    Name Main
+                Binary >=
+                  Call
+                    Name StateTime
+                  Number 3
+              Meta
+                MetaEntry Blend
+                  Number 0.75
+                MetaEntry Curve
+                  Name Cubic
+            Transition Ready -> Relaxed
+              Binary ||
+                Binary ==
+                  Member LocomotionMode
+                    Name Main
+                  String "Als.LocomotionMode.InAir"
+                Binary ==
+                  Member Gait
+                    Name Main
+                  String "Als.Gait.Sprinting"
+              Meta
+                MetaEntry Priority
+                  Number 2

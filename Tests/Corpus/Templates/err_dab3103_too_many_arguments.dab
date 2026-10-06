@@ -1,0 +1,7 @@
+#include "lib/common.dat"
+
+AnimBlueprint(Name="Tests/T", Root="Game")
+{
+    Graph = { Output = Frame(Assets.Idle, 0, 1); }
+}
+// EXPECT DAB3103 (5,46)

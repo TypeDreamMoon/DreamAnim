@@ -1,0 +1,136 @@
+Document AnimBlueprint
+  Arg Name
+    String "ALS/Character/AB_Als"
+  Arg Root
+    String "Plugin.ALS"
+  Block
+    Assign Settings
+      Block
+        Assign Parent
+          Name AlsAnimationInstance
+        Assign Skeleton
+          Call
+            Name Path
+            Arg
+              Member ALS
+                Name Plugin
+            Arg
+              String "ALS/Character/SK_Als"
+        Assign Implements
+          List
+            Name ALI_Overlay
+    Assign Graph
+      Block
+        Assign Grounded
+          Stack
+            Call
+              Name LinkedAnimGraph
+              Arg InstanceClass
+                Name AB_Als_Grounded
+              Arg Tag
+                String "Grounded"
+              Arg Inputs
+                Block
+                  Assign StandingInput
+                    Call
+                      Name LinkedAnimGraph
+                      Arg InstanceClass
+                        Name AB_Als_Standing
+                      Arg Tag
+                        String "Standing"
+                  Assign CrouchingInput
+                    Call
+                      Name LinkedAnimGraph
+                      Arg InstanceClass
+                        Name AB_Als_Crouching
+                      Arg Tag
+                        String "Crouching"
+            Call
+              Name Slot
+              Arg
+                String "Transition"
+        Assign Locomotion
+          Stack
+            Call
+              Name LinkedAnimGraph
+              Arg InstanceClass
+                Name AB_Als_Locomotion
+              Arg Tag
+                String "Locomotion"
+              Arg Inputs
+                Block
+                  Assign GroundedInput
+                    Name Grounded
+            Call
+              Name Slot
+              Arg
+                String "PostLocomotion"
+        Assign OverlayPose
+          Stack
+            Call
+              Name LinkedAnimLayer
+              Arg Interface
+                Name ALI_Overlay
+              Arg Layer
+                Name Overlay
+              Arg InstanceClass
+                Name AB_Als_Default
+              Arg Tag
+                String "Overlay"
+            Call
+              Name Inertialization
+              Arg bResetOnBecomingRelevant
+                Bool true
+        Assign Output
+          Stack
+            Call
+              Name LinkedAnimGraph
+              Arg InstanceClass
+                Name AB_Als_Layering
+              Arg Tag
+                String "Layering"
+              Arg Inputs
+                Block
+                  Assign LocomotionInput
+                    Name Locomotion
+                  Assign OverlayInput
+                    Name OverlayPose
+            Call
+              Name LinkedAnimGraph
+              Arg InstanceClass
+                Name AB_Als_Head
+              Arg Tag
+                String "View"
+            Call
+              Name ControlRig
+              Arg ControlRigAssetReference
+                Tuple
+                  Arg BlueprintRigClass
+                    Call
+                      Name Path
+                      Arg
+                        Member ALS
+                          Name Plugin
+                      Arg
+                        String "ALS/Character/CR_Als"
+              Arg AlphaInputType
+                Name Bool
+              Arg bAlphaBoolEnabled
+                Bool true
+              Arg bResetInputPoseToInitial
+                Bool false
+              Arg RigInput
+                Call
+                  Member GetControlRigInput
+                    Name Self
+              Arg Tag
+                String "ControlRig"
+            Call
+              Name LinkedAnimGraph
+              Arg InstanceClass
+                Name AB_Als_Ragdolling
+              Arg Tag
+                String "Ragdolling"
+    NamedBlock Layer Overlay
+      Call
+        Name LocalRefPose

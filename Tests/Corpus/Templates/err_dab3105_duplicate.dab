@@ -1,0 +1,9 @@
+#include "lib/common.dat"
+
+AnimBlueprint(Name="Tests/T", Root="Game")
+{
+    Template Frame(Seq, N) = LocalRefPose();
+    Graph = { Output = LocalRefPose(); }
+}
+// The library's Frame clashes with this file's (reported in the library).
+// EXPECT DAB3105

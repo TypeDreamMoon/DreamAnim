@@ -1,0 +1,51 @@
+Document AnimTemplates
+  Arg Name
+    String "ALS/AlsCommon"
+  Arg Root
+    String "Plugin.ALS"
+  Block
+    NamedBlock Template Frame (Seq, N)
+      Param Seq
+      Param N
+      Call
+        Name SequenceEvaluator
+        Arg Sequence
+          Name Seq
+        Arg ExplicitFrame
+          Name N
+    NamedBlock Template VelocityBlend (Forward, Backward, Left, Right, VB)
+      Param Forward
+      Param Backward
+      Param Left
+      Param Right
+      Param VB
+      Call
+        Name MultiWayBlend
+        Arg Poses
+          List
+            Name Forward
+            Name Backward
+            Name Left
+            Name Right
+        Arg DesiredAlphas
+          List
+            Member ForwardAmount
+              Name VB
+            Member BackwardAmount
+              Name VB
+            Member LeftAmount
+              Name VB
+            Member RightAmount
+              Name VB
+    NamedBlock Template Looped (Seq, Rate)
+      Param Seq
+      Param Rate
+        Number 1.0
+      Call
+        Name SequencePlayer
+        Arg Sequence
+          Name Seq
+        Arg PlayRate
+          Name Rate
+        Arg bLoopAnimation
+          Bool true

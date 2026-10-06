@@ -1,0 +1,45 @@
+// ALS-Refactored AB_Als, the main instance: linked graphs chained through stacks.
+AnimBlueprint(Name="ALS/Character/AB_Als", Root="Plugin.ALS")
+{
+    Settings = {
+        Parent     = AlsAnimationInstance;
+        Skeleton   = Path(Plugin.ALS, "ALS/Character/SK_Als");
+        Implements = [ ALI_Overlay ];
+    }
+
+    Graph = {
+        Grounded = {
+            LinkedAnimGraph(InstanceClass = AB_Als_Grounded, Tag = "Grounded",
+                            Inputs = { StandingInput  = LinkedAnimGraph(InstanceClass = AB_Als_Standing,  Tag = "Standing");
+                                       CrouchingInput = LinkedAnimGraph(InstanceClass = AB_Als_Crouching, Tag = "Crouching"); });
+            Slot("Transition");
+        };
+
+        Locomotion = {
+            LinkedAnimGraph(InstanceClass = AB_Als_Locomotion, Tag = "Locomotion",
+                            Inputs = { GroundedInput = Grounded; });
+            Slot("PostLocomotion");
+        };
+
+        OverlayPose = {
+            LinkedAnimLayer(Interface = ALI_Overlay, Layer = Overlay,
+                            InstanceClass = AB_Als_Default, Tag = "Overlay");
+            Inertialization(bResetOnBecomingRelevant = true);
+        };
+
+        Output = {
+            LinkedAnimGraph(InstanceClass = AB_Als_Layering, Tag = "Layering",
+                            Inputs = { LocomotionInput = Locomotion; OverlayInput = OverlayPose; });
+            LinkedAnimGraph(InstanceClass = AB_Als_Head, Tag = "View");
+            ControlRig(ControlRigAssetReference = (BlueprintRigClass = Path(Plugin.ALS, "ALS/Character/CR_Als")),
+                       AlphaInputType           = Bool,
+                       bAlphaBoolEnabled        = true,
+                       bResetInputPoseToInitial = false,
+                       RigInput                 = Self.GetControlRigInput(),
+                       Tag                      = "ControlRig");
+            LinkedAnimGraph(InstanceClass = AB_Als_Ragdolling, Tag = "Ragdolling");
+        };
+    }
+
+    Layer Overlay = LocalRefPose();
+}

@@ -1,0 +1,8 @@
+#include "lib/common.dat"
+
+AnimBlueprint(Name="Tests/T", Root="Game")
+{
+    Template Empty(X) { }
+    Graph = { Output = LocalRefPose(); }
+}
+// EXPECT DAB3106 (5,14)

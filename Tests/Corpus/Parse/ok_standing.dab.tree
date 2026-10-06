@@ -1,0 +1,559 @@
+Include "AlsCommon.dat"
+Document AnimBlueprint
+  Arg Name
+    String "ALS/Character/AnimationInstances/Stances/AB_Als_Standing"
+  Arg Root
+    String "Plugin.ALS"
+  Block
+    Assign Settings
+      Block
+        Assign Parent
+          Name AlsLinkedAnimationInstance
+        Assign Skeleton
+          Call
+            Name Path
+            Arg
+              Member ALS
+                Name Plugin
+            Arg
+              String "ALS/Character/SK_Als"
+    Assign Aliases
+      Block
+        Assign Main
+          Call
+            Member GetParent
+              Name Self
+    Assign Assets
+      Block
+        Decl AnimSequence StandPose
+        Decl AnimSequence RotateLeft90
+        Decl AnimSequence RotateRight90
+        Decl AnimSequence StopLeft
+        Decl AnimSequence WalkForward
+        Decl AnimSequence WalkBackward
+        Decl AnimSequence WalkLeftForward
+        Decl AnimSequence WalkLeftBackward
+        Decl AnimSequence WalkRightForward
+        Decl AnimSequence WalkRightBackward
+        Decl BlendSpace WalkRunForward
+        Decl BlendSpace Lean
+    Assign Notifies
+      Block
+        Assign ActivatePivot
+          Call
+            Member ActivatePivot
+              Name Main
+        Assign StopQuick
+          Call
+            Member PlayQuickStopAnimation
+              Name Main
+    NamedBlock Template WalkRun (Space)
+      Param Space
+      Call
+        Name BlendSpacePlayer
+        Arg BlendSpace
+          Name Space
+        Arg GroupName
+          Name Movement
+        Arg Method
+          Name SyncGroup
+        Arg StartPosition
+          Number 0.2
+        Arg X
+          Member StrideBlendAmount
+            Member StandingState
+              Name Main
+        Arg Y
+          Member WalkRunBlendAmount
+            Member StandingState
+              Name Main
+        Arg PlayRate
+          Member PlayRate
+            Member StandingState
+              Name Main
+    Assign Graph
+      Block
+        Region "Movement"
+        Assign MoveForwardBase
+          Call
+            Name WalkRun
+            Arg
+              Member WalkRunForward
+                Name Assets
+          Meta
+            MetaEntry Cached
+        Assign Movement
+          Stack
+            Call
+              Name ApplyAdditive
+              Arg Base
+                Name MovementStates
+              Arg Additive
+                Call
+                  Name BlendSpaceEvaluator
+                  Arg BlendSpace
+                    Member Lean
+                      Name Assets
+                  Arg X
+                    Member RightAmount
+                      Member LeanState
+                        Name Main
+                  Arg Y
+                    Member ForwardAmount
+                      Member LeanState
+                        Name Main
+              Arg Alpha
+                Member UnweightedGaitRunningAmount
+                  Member PoseState
+                    Name Main
+              Arg AlphaScaleBiasClamp
+                Tuple
+                  Arg bClampResult
+                    Bool true
+                  Arg bInterpResult
+                    Bool true
+                  Arg ClampMin
+                    Number 0.5
+                  Arg InterpSpeedIncreasing
+                    Number 20
+                  Arg InterpSpeedDecreasing
+                    Number 1
+            Call
+              Name ModifyCurve
+              Arg PoseMoving
+                Number 1
+          Meta
+            MetaEntry Cached
+        Assign MovementDetails
+          Stack
+            Name MovementDetailsStates
+            Call
+              Name Inertialization
+              Arg bResetOnBecomingRelevant
+                Bool true
+            Call
+              Name Call
+              Arg
+                Member RefreshStandingMovement
+                  Name Self
+            Call
+              Name Call
+              Arg
+                Member InitializeStandingMovement
+                  Name Self
+              Arg On
+                Name BecomeRelevant
+            Call
+              Name Call
+              Arg
+                Member RefreshGroundedMovement
+                  Name Self
+          Meta
+            MetaEntry Cached
+        EndRegion
+        Assign Output
+          Stack
+            Name StandingStates
+            Call
+              Name Inertialization
+              Arg FilteredCurves
+                List
+                  Name RotationYawSpeed
+              Arg bResetOnBecomingRelevant
+                Bool true
+            Call
+              Name ModifyCurve
+              Arg PoseStanding
+                Number 1
+            Call
+              Name Call
+              Arg
+                Member RefreshRotateInPlace
+                  Name Self
+    NamedBlock StateMachine StandingStates
+      Block
+        Assign Entry
+          Name Idle
+        NamedBlock State Idle
+          Block
+            Assign OnExit
+              Call
+                Member StopTransitionAndTurnInPlaceAnimations
+                  Name Main
+            Assign Pose
+              Stack
+                Call
+                  Name SequenceEvaluator
+                  Arg Sequence
+                    Member StandPose
+                      Name Assets
+                  Arg ExplicitFrame
+                    Number 0
+                Call
+                  Name ModifyCurve
+                  Arg FootLeftLock
+                    Number 1
+                  Arg FootRightLock
+                    Number 1
+                  Arg AllowTransitions
+                    Number 1
+                Call
+                  Name Slot
+                  Arg
+                    String "TurnInPlaceStanding"
+                Call
+                  Name ModifyCurve
+                  Arg RotationYawSpeed
+                    Member PlayRate
+                      Member TurnInPlaceState
+                        Name Main
+                  Arg ApplyMode
+                    Name Scale
+                Call
+                  Name Call
+                  Arg
+                    Member RefreshTurnInPlace
+                      Name Self
+                Call
+                  Name Call
+                  Arg
+                    Member InitializeTurnInPlace
+                      Name Self
+                  Arg On
+                    Name BecomeRelevant
+                Call
+                  Name Call
+                  Arg
+                    Member RefreshDynamicTransitions
+                      Name Self
+        NamedBlock State Move
+          Block
+            Assign OnEnter
+              Call
+                Member StopTransitionAndTurnInPlaceAnimations
+                  Name Main
+            Assign Pose
+              Name MovementDetails
+        NamedBlock State Stop
+          Block
+            Assign Pose
+              Name StopStates
+        NamedBlock State RotateLeft
+          Block
+            Assign Pose
+              Stack
+                Call
+                  Name SequencePlayer
+                  Arg Sequence
+                    Member RotateLeft90
+                      Name Assets
+                  Arg PlayRate
+                    Member PlayRate
+                      Member RotateInPlaceState
+                        Name Main
+                  Arg bLoopAnimation
+                    Member bRotatingLeft
+                      Member RotateInPlaceState
+                        Name Main
+                Call
+                  Name ModifyCurve
+                  Arg RotationYawSpeed
+                    Member PlayRate
+                      Member RotateInPlaceState
+                        Name Main
+                  Arg ApplyMode
+                    Name Scale
+        NamedBlock State RotateRight
+          Block
+            Assign Pose
+              Stack
+                Call
+                  Name SequencePlayer
+                  Arg Sequence
+                    Member RotateRight90
+                      Name Assets
+                  Arg PlayRate
+                    Member PlayRate
+                      Member RotateInPlaceState
+                        Name Main
+                  Arg bLoopAnimation
+                    Member bRotatingRight
+                      Member RotateInPlaceState
+                        Name Main
+                Call
+                  Name ModifyCurve
+                  Arg RotationYawSpeed
+                    Member PlayRate
+                      Member RotateInPlaceState
+                        Name Main
+                  Arg ApplyMode
+                    Name Scale
+        Assign Rules
+          Block
+            Assign Moving
+              Member bMovingSmooth
+                Member LocomotionState
+                  Name Main
+            Assign RotateLeft
+              Member bRotatingLeft
+                Member RotateInPlaceState
+                  Name Main
+            Assign RotateRight
+              Member bRotatingRight
+                Member RotateInPlaceState
+                  Name Main
+        Assign Transitions
+          Block
+            Transition Idle -> Move
+              Name Moving
+            Transition Idle -> RotateLeft
+              Name RotateLeft
+            Transition Idle -> RotateRight
+              Name RotateRight
+            Transition Move -> Stop
+              Binary &&
+                Unary !
+                  Name Moving
+                Binary >=
+                  Call
+                    Name StateWeight
+                    Arg
+                      Name Move
+                  Number 1
+              Meta
+                MetaEntry Blend
+                  Number 0
+            Transition Move -> Idle
+              Unary !
+                Name Moving
+              Meta
+                MetaEntry Priority
+                  Number 2
+            Transition Stop -> Idle
+              Binary >=
+                Call
+                  Name StateWeight
+                  Arg
+                    Name Stop
+                Number 1
+              Meta
+                MetaEntry Blend
+                  Number 0.3
+            Transition RotateLeft -> Idle
+              Name Auto
+              Meta
+                MetaEntry Blend
+                  Number 0
+            Transition RotateRight -> Idle
+              Name Auto
+              Meta
+                MetaEntry Blend
+                  Number 0
+            Transition RotateLeft -> Idle
+              Name Moving
+            Transition RotateRight -> Idle
+              Name Moving
+            Transition RotateLeft -> RotateRight
+              Name RotateRight
+              Meta
+                MetaEntry Inertialize
+            Transition RotateRight -> RotateLeft
+              Name RotateLeft
+              Meta
+                MetaEntry Inertialize
+    NamedBlock StateMachine MovementStates
+      Block
+        Assign Entry
+          Name MoveForward
+        NamedBlock State MoveForward
+          Block
+            Assign Pose
+              Name MoveForwardBase
+    NamedBlock StateMachine MovementDetailsStates
+      Meta
+        MetaEntry MaxTransitionsPerFrame
+          Number 1
+        MetaEntry bSkipFirstUpdateTransition
+          Bool false
+      Block
+        Assign Entry
+          Name Walk
+        NamedBlock State Walk
+          Block
+            Assign Pose
+              Name Movement
+    NamedBlock StateMachine StopStates
+      Meta
+        MetaEntry bSkipFirstUpdateTransition
+          Bool false
+      Block
+        Assign Entry
+          Name Entry
+        NamedBlock State Entry
+          Block
+            Assign Pose
+              Name MovementDetails
+        NamedBlock State LockLeftFoot
+          Block
+            Assign OnEnter
+              Call
+                Member PlayTransitionAnimation
+                  Name Main
+                Arg
+                  Member StopLeft
+                    Name Assets
+                Arg PlayRate
+                  Number 1.5
+                Arg StartTime
+                  Number 0.4
+            Assign Pose
+              Stack
+                Name MovementDetails
+                Call
+                  Name ModifyCurve
+                  Arg FootLeftLock
+                    Number 1
+        NamedBlock State PlantLeftFoot
+          Block
+            Assign OnEnter
+              Call
+                Member PlayTransitionAnimation
+                  Name Main
+                Arg
+                  Member StopLeft
+                    Name Assets
+                Arg PlayRate
+                  Number 1.5
+                Arg StartTime
+                  Number 0.4
+            Assign WalkLeft
+              Call
+                Name BlendListByEnum
+                Arg ActiveEnumValue
+                  Member HipsDirection
+                    Member GroundedState
+                      Name Main
+                Arg BlendPose
+                  Block
+                    Assign Default
+                      Call
+                        Name Frame
+                        Arg
+                          Member WalkLeftForward
+                            Name Assets
+                        Arg
+                          Number 6
+                    Assign LeftBackward
+                      Call
+                        Name Frame
+                        Arg
+                          Member WalkLeftBackward
+                            Name Assets
+                        Arg
+                          Number 4
+                Arg BlendTime
+                  Number 0
+            Assign WalkRight
+              Call
+                Name BlendListByEnum
+                Arg ActiveEnumValue
+                  Member HipsDirection
+                    Member GroundedState
+                      Name Main
+                Arg BlendPose
+                  Block
+                    Assign Default
+                      Call
+                        Name Frame
+                        Arg
+                          Member WalkRightForward
+                            Name Assets
+                        Arg
+                          Number 7
+                    Assign RightBackward
+                      Call
+                        Name Frame
+                        Arg
+                          Member WalkRightBackward
+                            Name Assets
+                        Arg
+                          Number 7
+                Arg BlendTime
+                  Block
+                    Assign Default
+                      Number 0
+                    Assign RightBackward
+                      Number 0.1
+            Assign Pose
+              Stack
+                Call
+                  Name LayeredBoneBlend
+                  Arg BasePose
+                    Name MovementDetails
+                  Arg BlendPoses
+                    List
+                      Call
+                        Name VelocityBlend
+                        Arg
+                          Call
+                            Name Frame
+                            Arg
+                              Member WalkForward
+                                Name Assets
+                            Arg
+                              Number 4
+                        Arg
+                          Call
+                            Name Frame
+                            Arg
+                              Member WalkBackward
+                                Name Assets
+                            Arg
+                              Number 4
+                        Arg
+                          Name WalkLeft
+                        Arg
+                          Name WalkRight
+                        Arg VB
+                          Member VelocityBlend
+                            Member GroundedState
+                              Name Main
+                  Arg LayerSetup
+                    List
+                      Call
+                        Name bones
+                        Arg
+                          Name thigh_l
+                        Arg
+                          Name ik_foot_l
+                        Arg
+                          String "VB foot_l"
+                  Arg bMeshSpaceRotationBlend
+                    Bool true
+                Call
+                  Name ModifyCurve
+                  Arg FootLeftLock
+                    Number 1
+        Assign Transitions
+          Block
+            Transition Entry -> LockLeftFoot
+              Binary <=
+                Member FootPlantedAmount
+                  Member FeetState
+                    Name Main
+                Unary -
+                  Number 0.5
+              Meta
+                MetaEntry Blend
+                  Number 0
+            Transition Entry -> PlantLeftFoot
+              Binary <=
+                Member FootPlantedAmount
+                  Member FeetState
+                    Name Main
+                Number 0
+              Meta
+                MetaEntry Blend
+                  Number 0.1
+                MetaEntry Priority
+                  Number 2

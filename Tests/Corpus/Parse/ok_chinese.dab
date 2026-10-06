@@ -1,0 +1,26 @@
+// Identifiers may be Chinese; strings and comments too.
+AnimBlueprint(Name="Tests/中文", Root="Game")
+{
+    Aliases = { 主 = Self.GetParent(); }
+
+    Rules = {
+        在动 = 主.移动状态.平滑移动;
+    }
+
+    Graph = {
+        站立姿势 = Frame(Assets.站立, 0) [ Cached ];
+        Output = 站立姿势;
+    }
+
+    StateMachine 站立状态
+    {
+        Entry = 待机;
+        State 待机 { Pose = 站立姿势; }
+        State 移动 { Pose = 站立姿势; }
+
+        Transitions = {
+            待机 -> 移动 : 在动;
+            移动 -> 待机 : !在动 [ Blend = 0.3 ];
+        }
+    }
+}

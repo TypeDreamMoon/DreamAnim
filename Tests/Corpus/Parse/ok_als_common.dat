@@ -1,0 +1,12 @@
+// Templates shared by the ALS Blueprints.
+AnimTemplates(Name="ALS/AlsCommon", Root="Plugin.ALS")
+{
+    Template Frame(Seq, N) = SequenceEvaluator(Sequence = Seq, ExplicitFrame = N);
+
+    // A four-way velocity blend; VB is the path to an FAlsVelocityBlendState.
+    Template VelocityBlend(Forward, Backward, Left, Right, VB) = MultiWayBlend(
+        Poses         = [ Forward, Backward, Left, Right ],
+        DesiredAlphas = [ VB.ForwardAmount, VB.BackwardAmount, VB.LeftAmount, VB.RightAmount ]);
+
+    Template Looped(Seq, Rate = 1.0) = SequencePlayer(Sequence = Seq, PlayRate = Rate, bLoopAnimation = true);
+}
