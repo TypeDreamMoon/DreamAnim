@@ -142,7 +142,7 @@ Sources live in the project's `DAnim/` folder, or in `DAnim/` of an enabled plug
 | Command | What it does |
 |---|---|
 | `make` | Builds the test host's editor target: the plugin's C++. |
-| `test [-Preset Quick\|All] [-Filter F] [-NoBuild]` | Runs `make`, then the automation tests headless in the test host. |
+| `test [-Preset P] [-Filter F] [-NoBuild]` | Runs `make`, then the automation tests headless in the test host. Presets: `Quick` (the default: language, checker corpus, driver, write-back, editor), `RoundTrip` (every ALS Blueprint decompiled, checked, generated and compared, also with an animation set), `Behavior` (the ALS character and generated Blueprints run, poses compared), `All`. `-Filter` replaces the preset's tests. |
 | `build [-File F] [-Root R] [-NoSave] [-Json J]` | Compiles the `.dab` and `.dai` sources into Animation Blueprint assets and saves them. `-NoSave` keeps them in memory only. |
 | `check [-File F] [-Root R] [-Json J]` | Parses and checks: includes, templates, names. Nothing is generated. |
 | `fmt [-File F] [-Root R] [-Write \| -Verify] [-Json J]` | Prints the canonical text. `-Write` rewrites the files that differ, keeping their line ends. `-Verify` writes nothing and fails on any file that is not canonical. |

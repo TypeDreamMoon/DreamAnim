@@ -4,7 +4,12 @@
 #
 #   dab.ps1 make                  build the test host's editor target (the C++)
 #   dab.ps1 test [-Preset P] [-Filter F] [-NoBuild]
-#                                 make, then run the automation tests headless in the test host
+#                                 make, then run the automation tests headless in the test host. Presets:
+#                                 Quick (the language, the checker's corpus, the driver, write-back, the
+#                                 editor; the default), RoundTrip (every ALS Blueprint decompiled, checked,
+#                                 generated and compared, plain and with an animation set), Behavior (the
+#                                 ALS character and generated Blueprints run and their poses compared), All.
+#                                 -Filter replaces the preset's tests.
 #
 #   dab.ps1 build [-File F] [-Root R] [-NoSave] [-Json J]
 #                                 compile the .dab/.dai sources into Animation Blueprint assets and save them
@@ -42,7 +47,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)][ValidateSet('make', 'test', 'build', 'check', 'fmt', 'decompile')][string]$Command = 'test',
-    [ValidateSet('Quick', 'All')][string]$Preset = 'Quick',
+    [ValidateSet('Quick', 'RoundTrip', 'Behavior', 'All')][string]$Preset = 'Quick',
     [string]$Filter,
     [switch]$NoBuild,
     [string]$Project,
@@ -69,9 +74,12 @@ $ErrorActionPreference = 'Stop'
 # interactive console keeps its own setting.
 if ([Console]::IsOutputRedirected) { [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false) }
 
+# MinTests is the least a preset runs: fewer means the filter or the module is broken, not a green run.
 $Presets = @{
-    Quick = @{ Filter = 'DreamAnim.'; MinTests = 1; Timeout = 30 }
-    All   = @{ Filter = 'DreamAnim.'; MinTests = 1; Timeout = 90 }
+    Quick     = @{ Filter = 'DreamAnim.Lang+DreamAnim.Driver+DreamAnim.Runtime+DreamAnim.WriteBack+DreamAnim.Editor'; MinTests = 100; Timeout = 30 }
+    RoundTrip = @{ Filter = 'DreamAnim.Corpus.Als.Compiles+DreamAnim.Corpus.Als.Decompile+DreamAnim.Corpus.Als.Semantic+DreamAnim.Corpus.Als.Generate+DreamAnim.Corpus.Als.AnimSet.'; MinTests = 100; Timeout = 60 }
+    Behavior  = @{ Filter = 'DreamAnim.Corpus.Als.PoseHarness+DreamAnim.Corpus.Als.PoseDiff+DreamAnim.Corpus.Als.AnimSetPoseDiff+DreamAnim.Corpus.Als.AnimSetSwap+DreamAnim.Generate'; MinTests = 5; Timeout = 60 }
+    All       = @{ Filter = 'DreamAnim.'; MinTests = 200; Timeout = 90 }
 }
 
 function Write-Step([string]$Text) { Write-Host "==> $Text" -ForegroundColor Cyan }
@@ -233,7 +241,8 @@ function Invoke-Tests {
     }
     $watch.Stop()
     $exitCode = if ($timedOut) { $null } else { $proc.ExitCode }
-    return (Get-Digest -RunDir $runDir -Floor $spec.MinTests -TimedOut $timedOut -ExitCode $exitCode -Seconds $watch.Elapsed.TotalSeconds)
+    $floor = if ($Filter) { 1 } else { $spec.MinTests }
+    return (Get-Digest -RunDir $runDir -Floor $floor -TimedOut $timedOut -ExitCode $exitCode -Seconds $watch.Elapsed.TotalSeconds)
 }
 
 # ---------------------------------------------------------------- build / check / fmt / decompile
