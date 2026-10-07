@@ -1,0 +1,24 @@
+// A transition option that is neither a shorthand nor a setting of the transition node.
+AnimBlueprint(Name="Validate/UnknownTransitionOption", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Properties = { bool bMoving = false; }
+
+    Graph = { Output = Locomotion; }
+
+    StateMachine Locomotion
+    {
+        Entry = Idle;
+
+        State Idle { Pose = SequencePlayer(Sequence = A_Als_Idle); }
+        State Walk { Pose = SequencePlayer(Sequence = A_Als_Walk_Forward); }
+
+        Transitions = {
+            Idle -> Walk : Props.bMoving  [ Blend = 0.3; Fade = 0.1 ];
+            Walk -> Idle : !Props.bMoving [ Blend = 0.3 ];
+        }
+    }
+}
+
+// EXPECT DAB4005 (18,58)

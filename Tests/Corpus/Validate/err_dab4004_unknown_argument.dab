@@ -1,0 +1,9 @@
+// A node argument that is neither a field of the runtime node nor a setting of the editor node.
+AnimBlueprint(Name="Validate/UnknownArgument", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Graph = { Output = SequencePlayer(Sequence = A_Als_Idle, Speed = 2); }
+}
+
+// EXPECT DAB4004 (6,62)

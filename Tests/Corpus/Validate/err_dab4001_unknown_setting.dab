@@ -1,0 +1,13 @@
+// A setting that is not a class setting of UAnimBlueprint.
+AnimBlueprint(Name="Validate/UnknownSetting", Root="Game")
+{
+    Settings = {
+        Parent            = AnimInstance;
+        Skeleton          = SK_Als;
+        bUseMultiThreaded = true;
+    }
+
+    Graph = { Output = SequencePlayer(Sequence = A_Als_Idle); }
+}
+
+// EXPECT DAB4001 (7,9)

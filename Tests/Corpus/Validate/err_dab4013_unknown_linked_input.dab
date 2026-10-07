@@ -1,0 +1,15 @@
+// Inputs names an input pose the linked graph's target does not have: a warning. AB_Als_Head's
+// only input pose is "View Input".
+AnimBlueprint(Name="Validate/UnknownLinkedInput", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Graph = {
+        Output = LinkedAnimGraph(
+            InstanceClass = AB_Als_Head,
+            Inputs        = { "Head Input" = SequencePlayer(Sequence = A_Als_Idle); }
+        );
+    }
+}
+
+// EXPECT DAB4013 (10,13)

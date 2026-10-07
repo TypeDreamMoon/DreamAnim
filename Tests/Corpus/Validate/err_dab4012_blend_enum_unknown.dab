@@ -1,0 +1,15 @@
+// BlendListByEnum without BoundEnum, bound to a path whose type the checker cannot read.
+AnimBlueprint(Name="Validate/BlendEnumUnknown", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Graph = {
+        Output = BlendListByEnum(
+            ActiveEnumValue = Self.Direction,
+            BlendPose       = [ SequencePlayer(Sequence = A_Als_Idle), SequencePlayer(Sequence = A_Als_Walk_Forward) ],
+            BlendTime       = 0.2
+        );
+    }
+}
+
+// EXPECT DAB4012 (7,18)

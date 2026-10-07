@@ -1,0 +1,19 @@
+// A key of a keyed BlendListByEnum that is not an entry of its enum.
+AnimBlueprint(Name="Validate/UnknownBlendKey", Root="Game")
+{
+    Settings = { Parent = AlsLiteAnimInstance; Skeleton = SK_Als; }
+
+    Graph = {
+        Output = BlendListByEnum(
+            BoundEnum       = EAlsLiteHipsDirection,
+            ActiveEnumValue = Self.HipsDirection,
+            BlendPose       = {
+                Default       = SequencePlayer(Sequence = A_Als_Walk_Forward);
+                LeftBackwards = SequencePlayer(Sequence = A_Als_Walk_Left_Backward);
+            },
+            BlendTime       = 0.2
+        );
+    }
+}
+
+// EXPECT DAB4002 (12,17)

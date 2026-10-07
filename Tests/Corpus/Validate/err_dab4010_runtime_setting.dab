@@ -1,0 +1,13 @@
+// A value read at run time where only a constant fits: a class setting.
+AnimBlueprint(Name="Validate/RuntimeSetting", Root="Game")
+{
+    Settings = {
+        Parent                           = AnimInstance;
+        Skeleton                         = SK_Als;
+        bUseMultiThreadedAnimationUpdate = Self.bThreaded;
+    }
+
+    Graph = { Output = SequencePlayer(Sequence = A_Als_Idle); }
+}
+
+// EXPECT DAB4010 (7,44)

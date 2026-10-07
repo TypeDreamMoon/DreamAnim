@@ -1,0 +1,9 @@
+// Input(...) without the name of the input pose.
+AnimBlueprint(Name="Validate/InputWithoutName", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Graph = { Output = Input(); }
+}
+
+// EXPECT DAB4009 (6,24)

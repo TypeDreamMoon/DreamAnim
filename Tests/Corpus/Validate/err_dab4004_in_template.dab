@@ -1,0 +1,11 @@
+// A mistake in the body of an included template is reported where the template is used.
+#include "lib/broken.dat"
+
+AnimBlueprint(Name="Validate/InTemplate", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Graph = { Output = Looping(A_Als_Idle); }
+}
+
+// EXPECT DAB4004 (8,24)

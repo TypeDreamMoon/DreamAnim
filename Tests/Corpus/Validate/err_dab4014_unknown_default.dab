@@ -1,0 +1,11 @@
+// A class default that is not an editable property of the parent class.
+AnimBlueprint(Name="Validate/UnknownDefault", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Defaults = { RootMotionMod = RootMotionFromMontagesOnly; }
+
+    Graph = { Output = SequencePlayer(Sequence = A_Als_Idle); }
+}
+
+// EXPECT DAB4014 (6,18)

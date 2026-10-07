@@ -1,0 +1,9 @@
+// A value that does not fit the property's type.
+AnimBlueprint(Name="Validate/TypeMismatch", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Graph = { Output = SequencePlayer(Sequence = A_Als_Idle, PlayRate = "fast"); }
+}
+
+// EXPECT DAB4006 (6,73)

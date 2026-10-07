@@ -1,0 +1,9 @@
+// A positional argument to a node, whose arguments are named.
+AnimBlueprint(Name="Validate/PositionalArgument", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Graph = { Output = SequencePlayer(A_Als_Idle); }
+}
+
+// EXPECT DAB4008 (6,39)

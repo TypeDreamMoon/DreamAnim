@@ -1,0 +1,18 @@
+// A key of a keyed GameplayTagsBlend that is not a registered tag: a warning.
+AnimBlueprint(Name="Validate/UnregisteredBlendKey", Root="Game")
+{
+    Settings = { Parent = AlsAnimationInstance; Skeleton = SK_Als; }
+
+    Graph = {
+        Output = GameplayTagsBlend(
+            ActiveTag = Self.Stance,
+            BlendPose = {
+                Default               = SequencePlayer(Sequence = A_Als_Idle);
+                "Als.Stance.Kneeling" = SequenceEvaluator(Sequence = A_Als_Stand_Pose, ExplicitFrame = 0);
+            },
+            BlendTime = 0.2
+        );
+    }
+}
+
+// EXPECT DAB4003 (11,17)

@@ -1,0 +1,11 @@
+// A value the property's enum does not have.
+AnimBlueprint(Name="Validate/UnknownEnumValue", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Graph = {
+        Output = SequencePlayer(Sequence = A_Als_Idle, GroupName = "Idle", Method = SyncGroups);
+    }
+}
+
+// EXPECT DAB4002 (7,85)

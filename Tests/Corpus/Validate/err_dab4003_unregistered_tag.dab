@@ -1,0 +1,11 @@
+// A gameplay tag that is not registered: a warning.
+AnimBlueprint(Name="Validate/UnregisteredTag", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Properties = { GameplayTag Stance = "Als.Stance.Kneeling"; }
+
+    Graph = { Output = SequencePlayer(Sequence = A_Als_Idle); }
+}
+
+// EXPECT DAB4003 (6,41)

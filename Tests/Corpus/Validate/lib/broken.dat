@@ -1,0 +1,6 @@
+// A template whose body has a mistake the checker finds only where the template is used.
+AnimTemplates(Name="Validate/Broken", Root="Game")
+{
+    // SequencePlayer has no argument Looping; it is bLoopAnimation.
+    Template Looping(Seq) = SequencePlayer(Sequence = Seq, Looping = true);
+}
