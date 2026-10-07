@@ -162,7 +162,7 @@ DAB3001-DAB6099 come from this pass; [Mapping.md](Mapping.md) lists them with th
 | DAB6001 | error | A stack step without exactly one free pose input; a name as a later step; or a linked graph or layer step whose target cannot be loaded to tell. | Give the other inputs as arguments, put the name first, or write the node outside the stack. For a linked node, build its target first, or give its inputs in `Inputs = { ... }` outside a stack. |
 | DAB6002 | error | A state machine used more than once, or never. | Name it as a pose in exactly one place. To use its pose elsewhere, cache it where it runs. |
 | DAB6003 | error | A name in a pose that is no named pose, cache or state machine visible there. | Fix the name. A named pose of another graph is not visible; mark it `[ Cached ]` there to use it here. |
-| DAB6004 | warning | A named pose that is never used. Its nodes are still made, unlinked. | Use it, or delete it. |
+| DAB6004 | warning | A named pose that is never used, in a graph or state that has its result. Its nodes are still made, unlinked. | Use it, or delete it. |
 | DAB6005 | error | A named pose without `[ Cached ]` used more than once. | Mark it `Name = ... [ Cached ];`. |
 | DAB6006 | error | An `Entry`, transition end or alias member that is not a state or conduit of the machine; an alias as a transition target. | Name a state or conduit of this machine. An alias may only be a transition's source. |
 | DAB6007 | error | A state machine without `Entry`. | Add `Entry = State;`. |

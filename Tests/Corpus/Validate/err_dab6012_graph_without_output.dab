@@ -1,0 +1,11 @@
+// A graph without Output. Its named pose is not also reported as unused.
+AnimBlueprint(Name="Validate/GraphWithoutOutput", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Graph = {
+        Idle = SequencePlayer(Sequence = A_Als_Idle);
+    }
+}
+
+// EXPECT DAB6012 (6,5)

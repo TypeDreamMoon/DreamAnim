@@ -803,14 +803,18 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 			}
 		}
 
-		// A named pose nothing uses still makes its nodes, so nothing written is lost.
+		// A named pose nothing uses still makes its nodes, so nothing written is lost. Without a result every
+		// pose goes unused, and DAB6012 has said why.
 		for (const FString& Name : Scope.PoseOrder)
 		{
 			FPoseDef& Def = Scope.Poses.FindChecked(Name);
 			if (!Def.bCached && !Def.bBuilt && !Def.bBuilding)
 			{
-				Sink.Warning(TEXT("DAB6004"), Def.Stmt->NameSpan, FString::Printf(TEXT("The pose `%s` is never used."), *Name),
-					FString::Printf(TEXT("Use it in %s or delete it; its nodes are made anyway, unlinked."), *Location));
+				if (Result)
+				{
+					Sink.Warning(TEXT("DAB6004"), Def.Stmt->NameSpan, FString::Printf(TEXT("The pose `%s` is never used."), *Name),
+						FString::Printf(TEXT("Use it in %s or delete it; its nodes are made anyway, unlinked."), *Location));
+				}
 				BuildNamedPose(Name, Def, Scope, Def.Stmt->NameSpan);
 			}
 		}
