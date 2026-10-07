@@ -17,6 +17,12 @@ namespace UE::DreamAnim::Lang
 		int32 MaxWidth = 110;
 		/** Written between lines. The file ends with exactly one. */
 		FString LineEnd = TEXT("\n");
+		/**
+		 * The text the printed nodes were parsed from, when a reprint should keep its author's layout: a
+		 * block, stack, call, list or tuple that spans lines there stays broken even where it would fit on
+		 * one. Nodes made afresh have no span in it and print canonically. Canonical printing leaves it null.
+		 */
+		const FString* KeepBrokenIn = nullptr;
 	};
 
 	/**
@@ -30,6 +36,14 @@ namespace UE::DreamAnim::Lang
 	 * given indent level for any lines it breaks onto. Trivia, when File is given, is taken from it.
 	 */
 	DREAMANIMLANG_API FString PrintDabExpr(const FDabExpr& Expr, int32 IndentLevel = 0, int32 StartColumn = 0,
+		const FDabFile* File = nullptr, const FDabPrintOptions& Options = FDabPrintOptions());
+
+	/**
+	 * One statement in canonical form at an indent level, without its own leading and trailing comments
+	 * (they stay where they are) and without the alignment it would share with its neighbours: exact for
+	 * named blocks, which never align; an assignment, declaration or transition in a run prints unpadded.
+	 */
+	DREAMANIMLANG_API FString PrintDabStmt(const FDabStmt& Stmt, int32 IndentLevel = 0,
 		const FDabFile* File = nullptr, const FDabPrintOptions& Options = FDabPrintOptions());
 
 	/**

@@ -245,6 +245,9 @@ namespace UE::DreamAnim::Lang
 			/** Expr starting at Column, breaking onto lines indented from Level, with SuffixWidth characters to follow it on its last line. */
 			FString FormatExpr(const FDabExpr& Expr, int32 Level, int32 Column, int32 SuffixWidth);
 
+			/** A statement on its own: no run to align with. */
+			FString FormatStatementAlone(const FDabStmt& Stmt, int32 Level) { return FormatStatement(Stmt, Level, FDabAlign()); }
+
 			FString ToOutputLineEnds(FString Text) const
 			{
 				if (!Options.LineEnd.Equals(TEXT("\n"), ESearchCase::CaseSensitive))
@@ -332,8 +335,10 @@ namespace UE::DreamAnim::Lang
 				}
 			}
 
-			/** True when Node cannot print on one line: it holds a comment or a region somewhere inside. */
+			/** True when Node cannot print on one line: it holds a comment or a region somewhere inside, or was broken where layout is kept. */
 			bool ForcesBreak(const FDabNode& Node);
+			/** A bracketed node that spans lines in Options.KeepBrokenIn. */
+			bool WasBroken(const FDabNode& Node) const;
 
 			// -- one-line forms
 
@@ -380,6 +385,25 @@ namespace UE::DreamAnim::Lang
 			TMap<const FDabExpr*, FString> FlatCache;
 		};
 
+		bool FDabLayoutPrinter::WasBroken(const FDabNode& Node) const
+		{
+			if (!Options.KeepBrokenIn || Node.Span.IsEmpty()
+				|| !(Node.Is<FDabBlockExpr>() || Node.Is<FDabStackExpr>() || Node.Is<FDabCallExpr>() || Node.Is<FDabListExpr>() || Node.Is<FDabTupleExpr>()))
+			{
+				return false;
+			}
+			const FString& Source = *Options.KeepBrokenIn;
+			const int32 End = FMath::Min(Node.Span.End(), Source.Len());
+			for (int32 Index = FMath::Max(Node.Span.Offset, 0); Index < End; ++Index)
+			{
+				if (Source[Index] == TEXT('\n'))
+				{
+					return true;
+				}
+			}
+			return false;
+		}
+
 		bool FDabLayoutPrinter::ForcesBreak(const FDabNode& Node)
 		{
 			if (const bool* Cached = BreakCache.Find(&Node))
@@ -387,7 +411,7 @@ namespace UE::DreamAnim::Lang
 				return *Cached;
 			}
 
-			bool bBreak = Node.Is<FDabRegionStmt>() || HasInnerComments(&Node);
+			bool bBreak = Node.Is<FDabRegionStmt>() || HasInnerComments(&Node) || WasBroken(Node);
 			if (!bBreak)
 			{
 				ForEachChild(Node, [this, &bBreak](const FDabNode& Child)
@@ -1412,6 +1436,12 @@ namespace UE::DreamAnim::Lang
 	{
 		DabPrinterPrivate::FDabLayoutPrinter Printer(Options, File);
 		return Printer.ToOutputLineEnds(Printer.FormatExpr(Expr, FMath::Max(IndentLevel, 0), FMath::Max(StartColumn, 0), 0));
+	}
+
+	FString PrintDabStmt(const FDabStmt& Stmt, int32 IndentLevel, const FDabFile* File, const FDabPrintOptions& Options)
+	{
+		DabPrinterPrivate::FDabLayoutPrinter Printer(Options, File);
+		return Printer.ToOutputLineEnds(Printer.FormatStatementAlone(Stmt, FMath::Max(IndentLevel, 0)));
 	}
 
 	FString DumpDabTree(const FDabFile& File)
