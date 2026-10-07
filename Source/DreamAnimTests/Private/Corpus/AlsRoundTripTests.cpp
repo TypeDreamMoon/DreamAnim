@@ -10,6 +10,9 @@
 //   PoseDiff   one test for the character: the ALS character driven through a fixed script once with the
 //              original Blueprints and once with the ones generated from their text, every bone of every
 //              frame compared.
+//   AnimSet    the same loop with the animations moved into an animation set first: every animation a
+//              Blueprint reads becomes a slot, the set holds them, the text reads them from it.
+//   AnimSetPoseDiff  the pose comparison with those Blueprints: the character moves exactly as before.
 //
 // The stages are separate tests so a failure says which half of the pipeline broke.
 
@@ -17,6 +20,8 @@
 #include "Animation/AnimInstance.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Corpus/AlsPoseRecorder.h"
+#include "Driver/DabDriver.h"
+#include "DreamAnimSet.h"
 #include "GameFramework/Character.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Extract/DabExtract.h"
@@ -26,6 +31,7 @@
 #include "Lang/DabParser.h"
 #include "Lang/DabPrinter.h"
 #include "Lang/DabTemplates.h"
+#include "Lower/DabAssetSlots.h"
 #include "Lower/DabLower.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/FileHelper.h"
@@ -141,11 +147,53 @@ namespace UE::DreamAnim::Tests
 			FFileHelper::SaveStringToFile(Actual, *FPaths::Combine(Dir, FString::Printf(TEXT("%s.%s.actual.txt"), *Name, Stage)), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
 		}
 
-		/** The Blueprint at ObjectPath, decompiled, checked and generated again under /Game/DreamAnimTests/Als: its class. */
 		/** Maps the printed value of a property (`Path(Plugin.ALS, "...")`) to the value to use instead. */
 		using FAlsPathMap = TMap<FString, FString>;
 
-		UClass* RegenerateAls(FAutomationTestBase& Test, const FString& ObjectPath, const FAlsPathMap& Retarget = FAlsPathMap(), const TCHAR* PackageSuffix = TEXT(""));
+		/** Where regenerated copies go, and the animation set their animations move into (none: they stay in the Blueprints). */
+		struct FAlsCopies
+		{
+			/** Below /Game/DreamAnimTests. */
+			const TCHAR* Folder = TEXT("Als");
+			UDreamAnimSet* AnimSet = nullptr;
+		};
+
+		/** The Blueprint at ObjectPath, decompiled, checked and generated again as a copy: its class. */
+		UClass* RegenerateAls(FAutomationTestBase& Test, const FString& ObjectPath, const FAlsPathMap& Retarget = FAlsPathMap(), const TCHAR* PackageSuffix = TEXT(""),
+			const FAlsCopies& Copies = FAlsCopies());
+
+		/** The package a regenerated ALS Blueprint goes to. */
+		FString RegeneratedPackage(const FString& ObjectPath, const TCHAR* Suffix = TEXT(""), const TCHAR* Folder = TEXT("Als"))
+		{
+			return FString::Printf(TEXT("/Game/DreamAnimTests/%s/%s%s"), Folder,
+				*FPackageName::ObjectPathToPackageName(ObjectPath).Replace(TEXT("/ALS/ALS/"), TEXT("")).Replace(TEXT("/"), TEXT("_")), Suffix);
+		}
+
+		/**
+		 * The animations of a model moved into Set, for the copy that goes to Package: the copy reads them
+		 * under its own asset name. Returns how many slots it got.
+		 */
+		int32 MoveAlsAnimationsToSet(FDabModel& Model, UDreamAnimSet& Set, const FString& Package)
+		{
+			const TArray<FDabLiftedAsset> Lifted = LiftDabAnimationAssets(Model, Set.GetPathName());
+			if (!Model.AssetSlots.IsEmpty())
+			{
+				FillDabAnimSet(Set, FName(*FPackageName::GetShortName(Package)), Model, Lifted);
+			}
+			return Lifted.Num();
+		}
+
+		/** The set the AnimSet tests fill, in memory only. */
+		UDreamAnimSet* GetAlsTestAnimSet(FAutomationTestBase& Test)
+		{
+			FDabDiagnosticSink Sink;
+			UDreamAnimSet* Set = LoadOrCreateDabAnimSet(TEXT("/Game/DreamAnimTests/AlsSet/DAS_Als"), Sink);
+			if (!Set)
+			{
+				Test.AddError(Sink.FirstError() ? FDabDiagnosticSink::ToWireString(*Sink.FirstError()) : FString(TEXT("the test animation set cannot be made")));
+			}
+			return Set;
+		}
 
 		FString DecompileToText(const FDabModel& Model, const TMap<FString, FString>& Renames = TMap<FString, FString>())
 		{
@@ -302,6 +350,76 @@ namespace UE::DreamAnim::Tests
 		return true;
 	}
 
+	IMPLEMENT_COMPLEX_AUTOMATION_TEST(FDabAlsAnimSetTest, "DreamAnim.Corpus.Als.AnimSet",
+		EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+	void FDabAlsAnimSetTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+	{
+		FindAlsBlueprints(OutBeautifiedNames, OutTestCommands);
+	}
+
+	bool FDabAlsAnimSetTest::RunTest(const FString& ObjectPath)
+	{
+		UDreamAnimSet* Set = GetAlsTestAnimSet(*this);
+		FDabModel Moved;
+		if (!Set || !ExtractNormalised(*this, ObjectPath, Moved))
+		{
+			return false;
+		}
+		const FString Package = RegeneratedPackage(ObjectPath, TEXT(""), TEXT("AlsSet"));
+		const int32 NumSlots = MoveAlsAnimationsToSet(Moved, *Set, Package);
+		AddInfo(FString::Printf(TEXT("%d animation(s) moved into slots"), NumSlots));
+		const FString Text = DecompileToText(Moved);
+		Moved.Unsupported.Reset();
+
+		// The text says what the moved model says.
+		FDabModel Checked;
+		if (!CheckText(*this, ObjectPath + TEXT(".dab"), Text, Checked))
+		{
+			return false;
+		}
+		const FString MovedDump = DumpDabModel(Moved);
+		FString Difference = FirstAlsDifference(MovedDump, DumpDabModel(Checked));
+		if (!Difference.IsEmpty())
+		{
+			SaveModelDumps(ObjectPath, TEXT("animset-semantic"), MovedDump, DumpDabModel(Checked));
+			AddError(FString::Printf(TEXT("The text checks to a different model (%s)."), *Difference));
+			return true;
+		}
+
+		// And the Blueprint it makes reads the slots back.
+		FDabGenerateOptions Options;
+		Options.bSave = false;
+		Options.OverridePackageName = Package;
+		FDabDiagnosticSink Sink(ObjectPath);
+		const FDabGenerateResult Result = GenerateDabBlueprint(Checked, Sink, Options);
+		for (const FDabDiagnostic& Diagnostic : Sink.GetDiagnostics())
+		{
+			AddError(FDabDiagnosticSink::ToWireString(Diagnostic));
+		}
+		for (const FString& Error : Result.CompilerErrors)
+		{
+			AddError(FString::Printf(TEXT("Compiler: %s"), *Error));
+		}
+		if (!Result.Blueprint)
+		{
+			return false;
+		}
+		FDabModel Regenerated;
+		FDabDiagnosticSink ExtractSink(Package);
+		ExtractDabModel(*Result.Blueprint, Regenerated, ExtractSink);
+		NormalizeDabModelNames(Regenerated);
+		Regenerated.AssetPath = Moved.AssetPath;
+		const FString RegeneratedDump = DumpDabModel(Regenerated);
+		Difference = FirstAlsDifference(MovedDump, RegeneratedDump);
+		if (!Difference.IsEmpty())
+		{
+			SaveModelDumps(ObjectPath, TEXT("animset-generate"), MovedDump, RegeneratedDump);
+			AddError(FString::Printf(TEXT("The generated Blueprint extracts to a different model (%s)."), *Difference));
+		}
+		return true;
+	}
+
 	namespace
 	{
 		/** `/ALS/ALS/X/Y.Y` as the checked model writes it: `Path(Plugin.ALS, "ALS/X/Y")`. */
@@ -311,13 +429,6 @@ namespace UE::DreamAnim::Tests
 			FDabDiagnosticSink Sink;
 			FDabSourceText Source(TEXT("Path"), FString::Printf(TEXT("Path(Plugin.ALS, \"%s\")"), *Package.RightChop(5)));
 			return ParseDabExpression(Source, Sink);
-		}
-
-		/** The package a regenerated ALS Blueprint goes to. */
-		FString RegeneratedPackage(const FString& ObjectPath, const TCHAR* Suffix = TEXT(""))
-		{
-			return FString::Printf(TEXT("/Game/DreamAnimTests/Als/%s%s"),
-				*FPackageName::ObjectPathToPackageName(ObjectPath).Replace(TEXT("/ALS/ALS/"), TEXT("")).Replace(TEXT("/"), TEXT("_")), Suffix);
 		}
 
 		/** Node properties whose printed value is a key of Retarget take the mapped value instead. */
@@ -356,12 +467,17 @@ namespace UE::DreamAnim::Tests
 			}
 		}
 
-		UClass* RegenerateAls(FAutomationTestBase& Test, const FString& ObjectPath, const FAlsPathMap& Retarget, const TCHAR* PackageSuffix)
+		UClass* RegenerateAls(FAutomationTestBase& Test, const FString& ObjectPath, const FAlsPathMap& Retarget, const TCHAR* PackageSuffix, const FAlsCopies& Copies)
 		{
 			FDabModel Extracted;
 			if (!ExtractNormalised(Test, ObjectPath, Extracted))
 			{
 				return nullptr;
+			}
+			const FString Package = RegeneratedPackage(ObjectPath, PackageSuffix, Copies.Folder);
+			if (Copies.AnimSet)
+			{
+				MoveAlsAnimationsToSet(Extracted, *Copies.AnimSet, Package);
 			}
 			FDabModel Checked;
 			if (!CheckText(Test, ObjectPath + TEXT(".dab"), DecompileToText(Extracted), Checked))
@@ -371,7 +487,7 @@ namespace UE::DreamAnim::Tests
 			RetargetModel(Checked, Retarget);
 			FDabGenerateOptions Options;
 			Options.bSave = false;
-			Options.OverridePackageName = RegeneratedPackage(ObjectPath, PackageSuffix);
+			Options.OverridePackageName = Package;
 			FDabDiagnosticSink Sink(ObjectPath);
 			const FDabGenerateResult Result = GenerateDabBlueprint(Checked, Sink, Options);
 			if (!Result.Succeeded() || !Result.Blueprint)
@@ -390,10 +506,11 @@ namespace UE::DreamAnim::Tests
 		}
 	}
 
-	IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDabAlsPoseDiffTest, "DreamAnim.Corpus.Als.PoseDiff",
-		EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
-
-	bool FDabAlsPoseDiffTest::RunTest(const FString& Parameters)
+	/**
+	 * The ALS character with every Blueprint it uses regenerated as Copies, against the original, frame by
+	 * frame; when they differ, which copy makes the difference.
+	 */
+	static bool RunAlsPoseDiff(FAutomationTestBase& Test, const FAlsCopies& Copies)
 	{
 		// The main instance, the graphs it links by tag, and the overlay layers ALS links as the overlay changes.
 		const TCHAR* const MainPath = TEXT("AB_Als");
@@ -414,18 +531,18 @@ namespace UE::DreamAnim::Tests
 		// The main instance's references to the others, as the checked model writes them, and the generated
 		// copies they become in a project made entirely from text.
 		FAlsPathMap Retarget;
-		const auto AddRetarget = [&Retarget](const FString& ObjectPath)
+		const auto AddRetarget = [&Retarget, &Copies](const FString& ObjectPath)
 		{
 			const FString Original = PrintDabExpr(*MakeAlsPathExpr(ObjectPath));
-			const FString Package = RegeneratedPackage(ObjectPath);
+			const FString Package = RegeneratedPackage(ObjectPath, TEXT(""), Copies.Folder);
 			Retarget.Add(Original, FString::Printf(TEXT("Path(Game, \"%s\")"), *Package.RightChop(6)));
 		};
 
-		UClass* GeneratedMain = RegenerateAls(*this, AlsInstancePath(MainPath));
+		UClass* GeneratedMain = RegenerateAls(Test, AlsInstancePath(MainPath), FAlsPathMap(), TEXT(""), Copies);
 		TMap<FName, UClass*> GeneratedByTag;
 		for (const TPair<const TCHAR*, const TCHAR*>& Entry : Tagged)
 		{
-			if (UClass* Class = RegenerateAls(*this, AlsInstancePath(Entry.Value)))
+			if (UClass* Class = RegenerateAls(Test, AlsInstancePath(Entry.Value), FAlsPathMap(), TEXT(""), Copies))
 			{
 				GeneratedByTag.Add(FName(Entry.Key), Class);
 				AddRetarget(AlsInstancePath(Entry.Value));
@@ -435,13 +552,13 @@ namespace UE::DreamAnim::Tests
 		for (const TCHAR* Overlay : Overlays)
 		{
 			const FString Path = AlsInstancePath(*FString::Printf(TEXT("AnimationInstances/Overlays/AB_Als_%s"), Overlay));
-			if (UClass* Class = RegenerateAls(*this, Path))
+			if (UClass* Class = RegenerateAls(Test, Path, FAlsPathMap(), TEXT(""), Copies))
 			{
 				GeneratedOverlays.Add(FPackageName::ObjectPathToObjectName(Path) + TEXT("_C"), Class);
 				AddRetarget(Path);
 			}
 		}
-		UClass* GeneratedMainLinked = RegenerateAls(*this, AlsInstancePath(MainPath), Retarget, TEXT("_Linked"));
+		UClass* GeneratedMainLinked = RegenerateAls(Test, AlsInstancePath(MainPath), Retarget, TEXT("_Linked"), Copies);
 		if (!GeneratedMain || !GeneratedMainLinked || GeneratedByTag.Num() != UE_ARRAY_COUNT(Tagged) || GeneratedOverlays.Num() != UE_ARRAY_COUNT(Overlays))
 		{
 			return false;
@@ -482,16 +599,16 @@ namespace UE::DreamAnim::Tests
 		FString Error;
 		if (!RecordAlsPoses(Original, Expected, Error) || !RecordAlsPoses(Regenerated, Actual, Error))
 		{
-			AddError(Error);
+			Test.AddError(Error);
 			return false;
 		}
-		AddInfo(Actual.Notes);
+		Test.AddInfo(Actual.Notes);
 		const FString Difference = CompareAlsPoses(Expected, Actual);
 		if (Difference.IsEmpty())
 		{
 			return true;
 		}
-		AddError(FString::Printf(TEXT("The generated Blueprints move the character differently: %s"), *Difference));
+		Test.AddError(FString::Printf(TEXT("The generated Blueprints move the character differently: %s"), *Difference));
 
 		// Which one: swap them in one at a time.
 		const auto Single = [&](const FString& Label, const FAlsPoseScript& Script)
@@ -500,11 +617,11 @@ namespace UE::DreamAnim::Tests
 			FString OneError;
 			if (!RecordAlsPoses(Script, One, OneError))
 			{
-				AddError(OneError);
+				Test.AddError(OneError);
 				return;
 			}
 			const FString OneDifference = CompareAlsPoses(Expected, One);
-			AddInfo(FString::Printf(TEXT("only %s generated: %s"), *Label, OneDifference.IsEmpty() ? TEXT("same") : *OneDifference));
+			Test.AddInfo(FString::Printf(TEXT("only %s generated: %s"), *Label, OneDifference.IsEmpty() ? TEXT("same") : *OneDifference));
 		};
 		{
 			FAlsPoseScript MainOnly;
@@ -558,5 +675,37 @@ namespace UE::DreamAnim::Tests
 			Single(OverlayName, OneOverlay);
 		}
 		return true;
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDabAlsPoseDiffTest, "DreamAnim.Corpus.Als.PoseDiff",
+		EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+	bool FDabAlsPoseDiffTest::RunTest(const FString& Parameters)
+	{
+		return RunAlsPoseDiff(*this, FAlsCopies());
+	}
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDabAlsAnimSetPoseDiffTest, "DreamAnim.Corpus.Als.AnimSetPoseDiff",
+		EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+	/** The copies read every animation from an animation set, and still move the character as the originals do. */
+	bool FDabAlsAnimSetPoseDiffTest::RunTest(const FString& Parameters)
+	{
+		FAlsCopies Copies;
+		Copies.Folder = TEXT("AlsSet");
+		Copies.AnimSet = GetAlsTestAnimSet(*this);
+		if (!Copies.AnimSet)
+		{
+			return false;
+		}
+		const bool bRan = RunAlsPoseDiff(*this, Copies);
+		int32 NumFilled = 0;
+		for (const FDreamAnimSetGroup& Group : Copies.AnimSet->Groups)
+		{
+			NumFilled += Group.Slots.FilterByPredicate([](const FDreamAnimSetSlot& Slot) { return Slot.Asset != nullptr; }).Num();
+		}
+		AddInfo(FString::Printf(TEXT("%d Blueprint(s), %d animation(s) read from the set"), Copies.AnimSet->Groups.Num(), NumFilled));
+		TestTrue(TEXT("the copies read their animations from the set"), NumFilled > 100);
+		return bRan;
 	}
 }
