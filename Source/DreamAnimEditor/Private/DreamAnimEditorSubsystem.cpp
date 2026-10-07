@@ -22,6 +22,7 @@
 #include "Misc/TransactionObjectEvent.h"
 #include "Modules/ModuleManager.h"
 #include "Subsystems/AssetEditorSubsystem.h"
+#include "UObject/ObjectSaveContext.h"
 #include "Widgets/Notifications/SNotificationList.h"
 #include "WriteBack/DabTextMerge.h"
 #include "WriteBack/DabWriteBack.h"
@@ -86,6 +87,7 @@ void UDreamAnimEditorSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	Index.Scan(GetDabSourceRoots());
 	WatchRoots();
 	TransactedHandle = FCoreUObjectDelegates::OnObjectTransacted.AddUObject(this, &UDreamAnimEditorSubsystem::OnObjectTransacted);
+	PreSaveHandle = FCoreUObjectDelegates::OnObjectPreSave.AddUObject(this, &UDreamAnimEditorSubsystem::OnObjectPreSave);
 	if (AssetEditors)
 	{
 		AssetOpenedHandle = AssetEditors->OnAssetOpenedInEditor().AddUObject(this, &UDreamAnimEditorSubsystem::OnAssetOpened);
@@ -95,6 +97,7 @@ void UDreamAnimEditorSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 void UDreamAnimEditorSubsystem::Deinitialize()
 {
 	FCoreUObjectDelegates::OnObjectTransacted.Remove(TransactedHandle);
+	FCoreUObjectDelegates::OnObjectPreSave.Remove(PreSaveHandle);
 	if (UAssetEditorSubsystem* AssetEditors = GEditor ? GEditor->GetEditorSubsystem<UAssetEditorSubsystem>() : nullptr)
 	{
 		AssetEditors->OnAssetOpenedInEditor().Remove(AssetOpenedHandle);
@@ -425,6 +428,19 @@ void UDreamAnimEditorSubsystem::OnObjectTransacted(UObject* Object, const FTrans
 	{
 		EditedBlueprints.Add(Blueprint, FPlatformTime::Seconds());
 	}
+}
+
+void UDreamAnimEditorSubsystem::OnObjectPreSave(UObject* Object, FObjectPreSaveContext Context)
+{
+	// Not the generator's own save, not a cook, not a command line build.
+	UAnimBlueprint* Blueprint = Cast<UAnimBlueprint>(Object);
+	if (!Blueprint || RebuildDepth > 0 || Context.IsProceduralSave() || IsRunningCommandlet()
+		|| !GetDefault<UDreamAnimEditorSettings>()->bWriteBackEditorChanges || IsInConflict(*Blueprint) || FindSource(*Blueprint).IsEmpty())
+	{
+		return;
+	}
+	// Whatever changed since the last write, transacted or not, goes into the text with the asset.
+	WriteBack(*Blueprint);
 }
 
 bool UDreamAnimEditorSubsystem::HasEditorChanges(UAnimBlueprint& Blueprint, TArray<FString>* OutChanges) const

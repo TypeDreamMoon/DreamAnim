@@ -17,6 +17,8 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Misc/ScopeExit.h"
+#include "UObject/Package.h"
+#include "UObject/SavePackage.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -167,6 +169,18 @@ bool FDreamAnimEditorSyncTest::RunTest(const FString& Parameters)
 	Subsystem->HandleChangedSources({ Path });
 	TestFalse(TEXT("no conflict without a change of its own"), Subsystem->IsInConflict(*Blueprint));
 	TestEqualSensitive(TEXT("rebuilt from the new text"), GetDabGeneratedText(*Blueprint), Plain);
+
+	// A change made without a transaction (a script, a tool) is written when the Blueprint is saved.
+	SetIdlePlayRate(*this, *Blueprint, TEXT("0.75"));
+	const FString SavedFile = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("DreamAnimTests") / TEXT("Sync") / TEXT("AB_Sync.uasset"));
+	FSavePackageArgs SaveArgs;
+	SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+	SaveArgs.SaveFlags = SAVE_NoError;
+	TestTrue(TEXT("the Blueprint saves"), UPackage::SavePackage(Blueprint->GetPackage(), Blueprint, *SavedFile, SaveArgs));
+	IFileManager::Get().Delete(*SavedFile, false, true, true);
+	const FString SavedText = Plain.Replace(TEXT("PlayRate = 2.5"), TEXT("PlayRate = 0.75"));
+	TestEqualSensitive(TEXT("saving writes the untransacted change"), Load(Path), SavedText);
+	TestEqualSensitive(TEXT("and the Blueprint is in step with it"), GetDabGeneratedText(*Blueprint), SavedText);
 	return true;
 }
 

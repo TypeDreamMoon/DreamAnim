@@ -20,6 +20,7 @@ class IAssetEditorInstance;
 class SNotificationItem;
 class UAnimBlueprint;
 struct FFileChangeData;
+class FObjectPreSaveContext;
 
 UCLASS()
 class DREAMANIMEDITOR_API UDreamAnimEditorSubsystem : public UEditorSubsystem, public FTickableEditorObject
@@ -85,6 +86,8 @@ private:
 	void UnwatchRoots();
 	void OnDirectoryChanged(const TArray<FFileChangeData>& Changes);
 	void OnObjectTransacted(UObject* Object, const class FTransactionObjectEvent& Event);
+	/** Saving a Blueprint catches what changed outside a transaction (scripts, tools) before it reaches disk. */
+	void OnObjectPreSave(UObject* Object, FObjectPreSaveContext Context);
 	void OnAssetOpened(UObject* Asset, IAssetEditorInstance* Editor);
 
 	/** The Blueprint the object belongs to (itself, its graphs and nodes, its class default object). */
@@ -116,5 +119,6 @@ private:
 	/** Rebuilding: the generator's own edits are not the user's. */
 	int32 RebuildDepth = 0;
 	FDelegateHandle TransactedHandle;
+	FDelegateHandle PreSaveHandle;
 	FDelegateHandle AssetOpenedHandle;
 };

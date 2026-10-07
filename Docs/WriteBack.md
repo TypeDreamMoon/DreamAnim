@@ -37,7 +37,8 @@ Rebuild All from DreamAnim Sources** rebuild on demand.
 A change you make to a Blueprint made from text is written into its source once your edits pause. That
 means **Write-Back Delay** seconds with no further change, no transaction open and no mouse button held.
 **Write Changes to DreamAnim Source** on the Blueprint writes them at once. An undo is a change like any
-other and is written back too.
+other and is written back too. Saving the Blueprint also writes them first, so a change made outside a
+transaction (by a script or another tool) reaches the text no later than the asset reaches disk.
 
 The editor reads the Blueprint again and compares it, value by value, with what its source says. A node
 is matched to the text it came from by its GUID, which the generator derived from the node's place in
