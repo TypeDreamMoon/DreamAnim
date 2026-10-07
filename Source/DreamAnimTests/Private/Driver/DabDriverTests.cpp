@@ -6,10 +6,12 @@
 
 #include "Animation/AnimBlueprint.h"
 #include "Animation/Skeleton.h"
+#include "AnimGraphNode_SequencePlayer.h"
 #include "AnimStateNode.h"
 #include "Commandlets/Commandlet.h"
 #include "Driver/DabDriver.h"
 #include "DreamAnimSet.h"
+#include "EdGraphNode_Comment.h"
 #include "Generate/DabGenerate.h"
 #include "HAL/FileManager.h"
 #include "Interfaces/IPluginManager.h"
@@ -421,6 +423,102 @@ namespace UE::DreamAnim::Tests::DriverTests
 		}
 		Places.Sort();
 		TestEqual(TEXT("the compiler's errors land on both players' calls"), FString::Join(Places, TEXT(" ")), FString(TEXT("19,20 9,21")));
+		return true;
+	}
+
+	// ---------------------------------------------------------------------------------------------
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDabDriverRegionsTest, "DreamAnim.Driver.Regions",
+		EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+	/** `#Region` becomes a comment box around what its statements made: named poses in a graph, states in a machine. */
+	bool FDabDriverRegionsTest::RunTest(const FString& Parameters)
+	{
+		const FString Path = MakeDriverScratchDir(TEXT("Regions")) / TEXT("AB_Regions.dab");
+		const FString Text = TEXT(
+			"AnimBlueprint(Name=\"DreamAnimTests/Regions/AB_Regions\", Root=\"Game\")\n"
+			"{\n"
+			"    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }\n"
+			"\n"
+			"    Graph = {\n"
+			"        #Region \"Stops\"\n"
+			"        Left  = SequencePlayer(Sequence = A_Als_Stop_Left);\n"
+			"        Right = SequencePlayer(Sequence = A_Als_Stop_Right);\n"
+			"        #EndRegion\n"
+			"\n"
+			"        Output = TwoWayBlend(Alpha = 0.5, A = TwoWayBlend(Alpha = 0.5, A = Left, B = Right), B = Locomotion);\n"
+			"    }\n"
+			"\n"
+			"    StateMachine Locomotion\n"
+			"    {\n"
+			"        Entry = Idle;\n"
+			"\n"
+			"        #Region \"Standing\"\n"
+			"        State Idle { Pose = SequencePlayer(Sequence = A_Als_Stand_Pose); }\n"
+			"        #EndRegion\n"
+			"\n"
+			"        State Walk { Pose = SequencePlayer(Sequence = A_Als_Walk_Forward); }\n"
+			"\n"
+			"        Transitions = { Idle -> Walk : false; }\n"
+			"    }\n"
+			"}\n");
+		FDabCompileOptions Options;
+		Options.bSave = false;
+		const FDabCompileResult Result = CompileDabText(Path, Text, Options);
+		ReportCompileErrors(*this, Result);
+		if (!Result.Blueprint)
+		{
+			return false;
+		}
+
+		// Whether a comment box holds a node's position.
+		const auto Holds = [](const UEdGraphNode_Comment& Comment, const UEdGraphNode& Node)
+		{
+			return Node.NodePosX >= Comment.NodePosX && Node.NodePosX < Comment.NodePosX + Comment.NodeWidth
+				&& Node.NodePosY >= Comment.NodePosY && Node.NodePosY < Comment.NodePosY + Comment.NodeHeight;
+		};
+
+		TArray<UEdGraphNode_Comment*> Comments;
+		FBlueprintEditorUtils::GetAllNodesOfClass(Result.Blueprint, Comments);
+		UEdGraphNode_Comment* const* Stops = Comments.FindByPredicate([](const UEdGraphNode_Comment* Comment) { return Comment->NodeComment == TEXT("Stops"); });
+		UEdGraphNode_Comment* const* Standing = Comments.FindByPredicate([](const UEdGraphNode_Comment* Comment) { return Comment->NodeComment == TEXT("Standing"); });
+		for (const UEdGraphNode_Comment* Comment : Comments)
+		{
+			AddInfo(FString::Printf(TEXT("comment `%s` in %s at %d,%d size %dx%d"), *Comment->NodeComment, *Comment->GetGraph()->GetName(),
+				Comment->NodePosX, Comment->NodePosY, Comment->NodeWidth, Comment->NodeHeight));
+		}
+		TestEqual(TEXT("one comment box per region"), Comments.Num(), 2);
+		if (!TestTrue(TEXT("the graph's region is a comment box"), Stops != nullptr) || !TestTrue(TEXT("the machine's region is a comment box"), Standing != nullptr))
+		{
+			return false;
+		}
+
+		TArray<UAnimGraphNode_SequencePlayer*> Players;
+		FBlueprintEditorUtils::GetAllNodesOfClass(Result.Blueprint, Players);
+		int32 NumInStops = 0;
+		for (const UAnimGraphNode_SequencePlayer* Player : Players)
+		{
+			if (Player->GetGraph() == (*Stops)->GetGraph())
+			{
+				const UAnimationAsset* Asset = Player->GetAnimationAsset();
+				const bool bStop = Asset && Asset->GetName().Contains(TEXT("Stop"));
+				TestEqual(FString::Printf(TEXT("the box holds %s only if it is a stop"), *Player->GetName()), Holds(**Stops, *Player), bStop);
+				NumInStops += Holds(**Stops, *Player) ? 1 : 0;
+			}
+		}
+		TestEqual(TEXT("both stops are in the box"), NumInStops, 2);
+
+		TArray<UAnimStateNode*> States;
+		FBlueprintEditorUtils::GetAllNodesOfClass(Result.Blueprint, States);
+		for (const UAnimStateNode* State : States)
+		{
+			TestEqual(FString::Printf(TEXT("the machine's box holds %s only if it is Idle"), *State->GetStateName()),
+				Holds(**Standing, *State), State->GetStateName() == TEXT("Idle"));
+		}
+
+		// The boxes are not part of what the text says: the Blueprint decompiles with no trace of them.
+		const FDabDecompileResult Decompiled = DecompileDabBlueprint(*Result.Blueprint);
+		TestEqual(TEXT("nothing unsupported"), Decompiled.NumUnsupported, 0);
 		return true;
 	}
 

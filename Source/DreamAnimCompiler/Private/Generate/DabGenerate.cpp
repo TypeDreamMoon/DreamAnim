@@ -15,6 +15,9 @@
 
 #include "AnimGraphNode_Base.h"
 #include "AnimGraphNode_Root.h"
+#include "AnimGraphNode_StateMachine.h"
+#include "AnimStateNodeBase.h"
+#include "AnimationStateMachineGraph.h"
 #include "Animation/AnimBlueprint.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimLayerInterface.h"
@@ -29,6 +32,7 @@
 #include "DreamAnimSet.h"
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphNode.h"
+#include "EdGraphNode_Comment.h"
 #include "EdGraphSchema_K2.h"
 #include "Factories/AnimBlueprintFactory.h"
 #include "Generate/DabGenerateInternal.h"
@@ -539,6 +543,86 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 		Ctx.Graphs.Add(MoveTemp(Record));
 	}
 
+	/** How far a node reaches from its position, for a comment box around it: a node has no size until it is drawn. */
+	static FIntPoint DabGenNodeExtent(const UEdGraphNode& Node)
+	{
+		return Node.IsA<UAnimStateNodeBase>() ? FIntPoint(200, 80) : FIntPoint(320, 160);
+	}
+
+	/** A comment box titled Label around Nodes, where they finally are: what `#Region "Label"` writes. */
+	static void DabGenAddRegionComment(FDabGenContext& Ctx, UEdGraph& Graph, const FString& GraphPath, const FString& Label, const TArray<UEdGraphNode*>& Nodes)
+	{
+		if (Nodes.IsEmpty())
+		{
+			return;
+		}
+		FIntPoint Min(TNumericLimits<int32>::Max(), TNumericLimits<int32>::Max());
+		FIntPoint Max(TNumericLimits<int32>::Lowest(), TNumericLimits<int32>::Lowest());
+		for (const UEdGraphNode* Node : Nodes)
+		{
+			const FIntPoint Position(Node->NodePosX, Node->NodePosY);
+			Min = Min.ComponentMin(Position);
+			Max = Max.ComponentMax(Position + DabGenNodeExtent(*Node));
+		}
+		FGraphNodeCreator<UEdGraphNode_Comment> Creator(Graph);
+		UEdGraphNode_Comment* Comment = Creator.CreateNode(false);
+		// After Finalize: placing a new comment gives it the default text.
+		Creator.Finalize();
+		Comment->NodeComment = Label;
+		Comment->NodePosX = Min.X - 40;
+		Comment->NodePosY = Min.Y - 80;
+		Comment->NodeWidth = Max.X - Min.X + 80;
+		Comment->NodeHeight = Max.Y - Min.Y + 120;
+		Ctx.AssignGuid(Comment, GraphPath, TEXT("Region/") + Label);
+	}
+
+	/** Every region's comment box: around the nodes a graph's named poses made, around a machine's states. */
+	static void DabGenAddRegionComments(FDabGenContext& Ctx)
+	{
+		for (const TUniquePtr<FDabGenGraph>& Record : Ctx.Graphs)
+		{
+			if (!Record->Model || !Record->Graph)
+			{
+				continue;
+			}
+			for (const FDabModelRegion& Region : Record->Model->Regions)
+			{
+				// A pose's nodes are the one named after it and those under it (`Pose/A/Base`).
+				TArray<UEdGraphNode*> Nodes;
+				for (const TPair<FString, UAnimGraphNode_Base*>& Entry : Record->Nodes)
+				{
+					const FString& Id = Entry.Key;
+					if (Entry.Value && Region.Members.ContainsByPredicate([&Id](const FString& Member) { return Id == Member || Id.StartsWith(Member + TEXT("/")); }))
+					{
+						Nodes.Add(Entry.Value);
+					}
+				}
+				DabGenAddRegionComment(Ctx, *Record->Graph, Record->Path, Region.Label, Nodes);
+			}
+		}
+		for (const TPair<FString, TUniquePtr<FDabGenMachine>>& Entry : Ctx.Machines)
+		{
+			const FDabGenMachine& Machine = *Entry.Value;
+			UEdGraph* Graph = Machine.Node ? Machine.Node->EditorStateMachineGraph : nullptr;
+			if (!Machine.Model || !Graph)
+			{
+				continue;
+			}
+			for (const FDabModelRegion& Region : Machine.Model->Regions)
+			{
+				TArray<UEdGraphNode*> Nodes;
+				for (const FString& Member : Region.Members)
+				{
+					if (UAnimStateNodeBase* const* State = Machine.StateNodes.Find(Member); State && *State)
+					{
+						Nodes.Add(*State);
+					}
+				}
+				DabGenAddRegionComment(Ctx, *Graph, Machine.Path, Region.Label, Nodes);
+			}
+		}
+	}
+
 	/** The default animation set, when its slots had to change to match the model's. */
 	static UDreamAnimSet* DabGenSyncAnimSet(FDabGenContext& Ctx)
 	{
@@ -752,6 +836,7 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 				}
 			}
 		}
+		DabGenAddRegionComments(Ctx);
 		Blueprint->RequestRefreshExtensions();
 
 		Result.Blueprint = Blueprint;

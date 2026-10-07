@@ -681,6 +681,25 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		LayerInputs.Add(Stmt.Name, MoveTemp(Names));
 	}
 
+	/**
+	 * `#Region "Label"` opens a region every following statement of the block belongs to, nested ones too;
+	 * `#EndRegion` closes the last one open. An unpaired one was DAB2008 in the parser: an extra end is
+	 * ignored, and a region left open runs to the end of the block.
+	 */
+	static void OpenSemanticRegion(const FDabRegionStmt& Region, TArray<FDabModelRegion>& Regions, TArray<int32>& OpenRegions)
+	{
+		if (!Region.bEnd)
+		{
+			FDabModelRegion& Added = Regions.AddDefaulted_GetRef();
+			Added.Label = Region.Label;
+			OpenRegions.Add(Regions.Num() - 1);
+		}
+		else if (!OpenRegions.IsEmpty())
+		{
+			OpenRegions.Pop();
+		}
+	}
+
 	void FSemantic::BuildGraph(const TArray<FDabStmtPtr>& Statements, FDabModelGraph& Graph, const FString& Location, const TCHAR* ResultName,
 		const TSet<FString>& Reserved, const FDabSpan& OwnerSpan)
 	{
@@ -690,11 +709,25 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		Scope.GraphPath = CurrentGraphPath;
 
 		const FDabAssignStmt* Result = nullptr;
+		// The regions open at each statement, as indices into Graph.Regions.
+		TArray<int32> OpenRegions;
 		for (const FDabStmtPtr& Statement : Statements)
 		{
-			if (!Statement || Statement->Is<FDabRegionStmt>())
+			if (!Statement)
 			{
 				continue;
+			}
+			if (const FDabRegionStmt* Region = Statement->As<FDabRegionStmt>())
+			{
+				OpenSemanticRegion(*Region, Graph.Regions, OpenRegions);
+				continue;
+			}
+			if (const FDabAssignStmt* Member = Statement->As<FDabAssignStmt>())
+			{
+				for (const int32 Index : OpenRegions)
+				{
+					Graph.Regions[Index].Members.AddUnique(Member->Name);
+				}
 			}
 			if (const FDabNamedBlockStmt* Named = Statement->As<FDabNamedBlockStmt>())
 			{
@@ -2003,15 +2036,25 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		const FDabAssignStmt* EntryStmt = nullptr;
 		const FDabAssignStmt* RulesStmt = nullptr;
 		const FDabAssignStmt* TransitionsStmt = nullptr;
+		TArray<int32> OpenRegions;
 
 		for (const FDabStmtPtr& Statement : Stmt.Body->Statements)
 		{
-			if (!Statement || Statement->Is<FDabRegionStmt>())
+			if (!Statement)
 			{
+				continue;
+			}
+			if (const FDabRegionStmt* Region = Statement->As<FDabRegionStmt>())
+			{
+				OpenSemanticRegion(*Region, Machine.Regions, OpenRegions);
 				continue;
 			}
 			if (const FDabNamedBlockStmt* Named = Statement->As<FDabNamedBlockStmt>())
 			{
+				for (const int32 Index : OpenRegions)
+				{
+					Machine.Regions[Index].Members.AddUnique(Named->Name);
+				}
 				int32 MemberKind = INDEX_NONE;
 				if (Named->Word == TEXT("State"))
 				{

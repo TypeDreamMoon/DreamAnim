@@ -1075,8 +1075,12 @@ AnimBlueprint(Name="Characters/AB_Hero", Root="Game")
   closed).
 - `fmt` keeps comments where they were relative to their statement.
 - `#Region "Label"` and `#EndRegion` start at the beginning of a line and pair up inside one block. An
-  unpaired one is warning DAB2008. Regions group statements for editors and have no effect on the
-  Blueprint.
+  unpaired one is warning DAB2008: an extra `#EndRegion` is ignored, and a region left open runs to the
+  end of its block. Regions may nest.
+- In a graph block (`Graph`, a layer, a state), a region becomes a comment box titled with its label
+  around the nodes its named poses (and its `Output` or `Pose`) make. In a state machine, it becomes a
+  box around its states, conduits and aliases. Elsewhere it only groups the text. The boxes change
+  nothing the Blueprint does, and decompiling does not read them back.
 
 ```dab
 Graph = {

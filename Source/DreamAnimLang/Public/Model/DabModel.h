@@ -113,6 +113,18 @@ namespace UE::DreamAnim::Model
 		TOptional<FDabModelCall> Call;
 	};
 
+	/**
+	 * A `#Region "Label"` of a graph or a state machine: the generator draws a comment box titled Label
+	 * around what its statements made. From text only: the extractor does not read comment boxes back, and
+	 * comparisons ignore regions.
+	 */
+	struct FDabModelRegion
+	{
+		FString Label;
+		/** A graph's named poses (the result by its statement's name, `Output` or `Pose`); a machine's states, conduits and aliases. */
+		TArray<FString> Members;
+	};
+
 	struct FDabModelGraph
 	{
 		/** `AnimGraph`, a layer's name, or a state's name. */
@@ -127,6 +139,7 @@ namespace UE::DreamAnim::Model
 		 * graph node feeds its pose pins to them by position, so the order is behaviour.
 		 */
 		TArray<FString> InputPoses;
+		TArray<FDabModelRegion> Regions;
 
 		DREAMANIMLANG_API const FDabModelNode* FindNode(const FString& Id) const;
 	};
@@ -195,6 +208,7 @@ namespace UE::DreamAnim::Model
 		TArray<FDabModelConduit> Conduits;
 		TArray<FDabModelAlias> Aliases;
 		TArray<FDabModelTransition> Transitions;
+		TArray<FDabModelRegion> Regions;
 	};
 
 	/** A tuning value (`Properties = { float StopBlend = 0.3; }`): a Blueprint variable the graph only reads. */
