@@ -1,0 +1,15 @@
+// A stack where a value is expected.
+AnimBlueprint(Name="Validate/StackAsValue", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Graph = {
+        Output = TwoWayBlend(
+            Alpha = { Self.Speed; },
+            A     = SequencePlayer(Sequence = A_Als_Idle),
+            B     = SequencePlayer(Sequence = A_Als_Walk_Forward)
+        );
+    }
+}
+
+// EXPECT DAB5005 (8,21)

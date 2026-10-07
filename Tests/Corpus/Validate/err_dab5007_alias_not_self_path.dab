@@ -1,0 +1,11 @@
+// An alias that is not a path from Self.
+AnimBlueprint(Name="Validate/AliasNotSelfPath", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Aliases = { Main = GetParent(); }
+
+    Graph = { Output = SequencePlayer(Sequence = A_Als_Idle, PlayRate = Main.PlayRate); }
+}
+
+// EXPECT DAB5007 (6,24)

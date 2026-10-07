@@ -1,0 +1,13 @@
+// A call argument computed from a tuning value; arguments are constants, Props.X or Assets.X.
+AnimBlueprint(Name="Validate/ComputedArgument", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Properties = { float BlendOut = 0.2; }
+
+    Notifies = { StopMontages = Self.Montage_Stop(Props.BlendOut * 2); }
+
+    Graph = { Output = SequencePlayer(Sequence = A_Als_Idle); }
+}
+
+// EXPECT DAB5002 (8,51)

@@ -1,0 +1,9 @@
+// Props.X for a tuning value that is not declared.
+AnimBlueprint(Name="Validate/UndeclaredProps", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Graph = { Output = SequencePlayer(Sequence = A_Als_Idle, PlayRate = Props.Rate); }
+}
+
+// EXPECT DAB5003 (6,79)

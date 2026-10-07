@@ -1,0 +1,24 @@
+// Props.X where only a constant fits, for a tuning value without a default.
+AnimBlueprint(Name="Validate/PropsWithoutDefault", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Properties = { bool bMoving = false; float WalkBlend; }
+
+    Graph = { Output = Locomotion; }
+
+    StateMachine Locomotion
+    {
+        Entry = Idle;
+
+        State Idle { Pose = SequencePlayer(Sequence = A_Als_Idle); }
+        State Walk { Pose = SequencePlayer(Sequence = A_Als_Walk_Forward); }
+
+        Transitions = {
+            Idle -> Walk : Props.bMoving  [ Blend = Props.WalkBlend ];
+            Walk -> Idle : !Props.bMoving [ Blend = 0.3 ];
+        }
+    }
+}
+
+// EXPECT DAB5006 (18,53)

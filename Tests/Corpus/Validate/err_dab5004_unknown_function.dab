@@ -1,0 +1,11 @@
+// A call to a function the target's class does not have: a warning.
+AnimBlueprint(Name="Validate/UnknownFunction", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Notifies = { StopMontages = Self.Montage_StopAll(); }
+
+    Graph = { Output = SequencePlayer(Sequence = A_Als_Idle); }
+}
+
+// EXPECT DAB5004 (6,38)

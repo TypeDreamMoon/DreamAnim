@@ -1,0 +1,11 @@
+// An alias named like a word of the language.
+AnimBlueprint(Name="Validate/AliasReservedName", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Aliases = { Props = Self.GetOwningComponent(); }
+
+    Graph = { Output = SequencePlayer(Sequence = A_Als_Idle); }
+}
+
+// EXPECT DAB5007 (6,17)

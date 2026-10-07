@@ -1,0 +1,11 @@
+// A call whose target is neither Self nor a path from it.
+AnimBlueprint(Name="Validate/CallTarget", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Notifies = { Footstep = Owner.PlayFootstep(); }
+
+    Graph = { Output = SequencePlayer(Sequence = A_Als_Idle); }
+}
+
+// EXPECT DAB5001 (6,29)
