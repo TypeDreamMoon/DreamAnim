@@ -531,26 +531,29 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 		Ctx.Graphs.Add(MoveTemp(Record));
 	}
 
-	static void DabGenSyncAnimSet(FDabGenContext& Ctx)
+	/** The default animation set, when its slots had to change to match the model's. */
+	static UDreamAnimSet* DabGenSyncAnimSet(FDabGenContext& Ctx)
 	{
 		if (Ctx.Model.DefaultAnimSet.IsEmpty() || Ctx.Model.AssetSlots.IsEmpty())
 		{
-			return;
+			return nullptr;
 		}
 		UDreamAnimSet* Set = Cast<UDreamAnimSet>(DabGenLoadObject(Ctx.Model.DefaultAnimSet));
 		if (!Set)
 		{
-			return;
+			return nullptr;
 		}
 		TArray<TPair<FName, FName>> Slots;
 		for (const FDabModelAssetSlot& Slot : Ctx.Model.AssetSlots)
 		{
 			Slots.Emplace(FName(*Slot.Name), FName(*Slot.Type));
 		}
-		if (Set->SyncSlots(Ctx.GetBlueprintAssetName(), Slots))
+		if (!Set->SyncSlots(Ctx.GetBlueprintAssetName(), Slots))
 		{
-			Set->MarkPackageDirty();
+			return nullptr;
 		}
+		Set->MarkPackageDirty();
+		return Set;
 	}
 
 	static void DabGenCompile(UAnimBlueprint* Blueprint, FDabGenerateResult& Result)
@@ -578,16 +581,16 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 		}
 	}
 
-	static bool DabGenSave(UAnimBlueprint* Blueprint, FDabDiagnosticSink& Sink)
+	static bool DabGenSave(UObject* Asset, FDabDiagnosticSink& Sink)
 	{
-		UPackage* Package = Blueprint->GetPackage();
+		UPackage* Package = Asset->GetPackage();
 		const FString Filename = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
 		FSavePackageArgs Args;
 		Args.TopLevelFlags = RF_Public | RF_Standalone;
 		Args.SaveFlags = SAVE_NoError;
 		Args.Error = GWarn;
 		Args.bSlowTask = false;
-		if (!UPackage::SavePackage(Package, Blueprint, *Filename, Args))
+		if (!UPackage::SavePackage(Package, Asset, *Filename, Args))
 		{
 			Sink.Error(TEXT("DAB7006"), FDabSpan(), FString::Printf(TEXT("%s cannot be saved to %s"), *Package->GetName(), *Filename));
 			return false;
@@ -673,7 +676,7 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 		{
 			DabGenLayoutGraph(*Graph);
 		}
-		DabGenSyncAnimSet(Ctx);
+		UDreamAnimSet* SyncedSet = DabGenSyncAnimSet(Ctx);
 
 		// Bindings resolve their types against the final skeleton class.
 		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
@@ -705,6 +708,11 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 		if (Options.bSave && bModelClean && Result.CompilerErrors.IsEmpty())
 		{
 			DabGenSave(Blueprint, Sink);
+			// The set's new slots are part of the build: a command line run that only marked it would lose them.
+			if (SyncedSet)
+			{
+				DabGenSave(SyncedSet, Sink);
+			}
 		}
 		else
 		{
