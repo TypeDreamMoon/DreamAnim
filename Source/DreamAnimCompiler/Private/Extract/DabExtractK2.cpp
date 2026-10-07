@@ -6,6 +6,7 @@
 #include "AnimGraphNode_StateMachineBase.h"
 #include "AnimStateNodeBase.h"
 #include "AnimationStateMachineGraph.h"
+#include "DreamAnimLibrary.h"
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphPin.h"
 #include "EdGraphNode_Comment.h"
@@ -706,6 +707,36 @@ namespace UE::DreamAnim::Compiler::ExtractPrivate
 		return TOptional<FDabModelCall>();
 	}
 
+	/**
+	 * The update event the generator adds for an animation set: BlueprintUpdateAnimation calling only
+	 * UDreamAnimLibrary::ApplyPendingAnimSet(Self). It is part of what `Assets` makes, not logic of the
+	 * Blueprint's own; its nodes are marked visited.
+	 */
+	static bool IsAnimSetUpdate(FDabLowering& Lowering, const UK2Node_Event& Event)
+	{
+		if (Event.EventReference.GetMemberName() != TEXT("BlueprintUpdateAnimation"))
+		{
+			return false;
+		}
+		const UK2Node_CallFunction* Call = Cast<UK2Node_CallFunction>(FollowExec(Lowering, GetK2Schema().FindExecutionPin(Event, EGPD_Output)));
+		const UFunction* Function = Call ? Call->GetTargetFunction() : nullptr;
+		if (!Function || Function->GetFName() != TEXT("ApplyPendingAnimSet") || Function->GetOwnerClass() != UDreamAnimLibrary::StaticClass()
+			|| FollowExec(Lowering, GetK2Schema().FindExecutionPin(*Call, EGPD_Output)))
+		{
+			return false;
+		}
+		const UEdGraphPin* Instance = GetLinkedSource(Call->FindPin(TEXT("AnimInstance"), EGPD_Input));
+		const UEdGraphNode* Self = Instance ? Instance->GetOwningNode() : nullptr;
+		if (!Self || !Self->IsA<UK2Node_Self>())
+		{
+			return false;
+		}
+		Lowering.Visited.Add(&Event);
+		Lowering.Visited.Add(Call);
+		Lowering.Visited.Add(Self);
+		return true;
+	}
+
 	void ExtractEventGraph(FDabExtractContext& Ctx, const UEdGraph& Graph)
 	{
 		const FString GraphName = Graph.GetName();
@@ -723,6 +754,10 @@ namespace UE::DreamAnim::Compiler::ExtractPrivate
 				? Event->EventReference.GetMemberName().ToString()
 				: Event->CustomFunctionName.ToString();
 			static const FString NotifyPrefix(TEXT("AnimNotify_"));
+			if (IsAnimSetUpdate(Lowering, *Event))
+			{
+				continue;
+			}
 			if (!EventName.StartsWith(NotifyPrefix, ESearchCase::CaseSensitive))
 			{
 				// Left unvisited: the event and what hangs off it are reported below, node by node.

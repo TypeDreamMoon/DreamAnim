@@ -796,6 +796,15 @@ namespace UE::DreamAnim::Compiler::ExtractPrivate
 			return MakePlaceholder(TEXT("empty path"));
 		}
 
+		// The generator reads a slot through its getter, in a forwarder's argument as in a pin's binding.
+		FString Slot;
+		if (Segments.Num() == 1 && Ctx.FunctionGraphs.Contains(FName(*Segments[0]))
+			&& Segments[0].Split(TEXT("DreamAnimAsset_"), nullptr, &Slot, ESearchCase::CaseSensitive) && !Slot.IsEmpty())
+		{
+			Ctx.UsedFunctions.Add(FName(*Segments[0]));
+			return MakeMember(MakeName(TEXT("Assets")), Slot);
+		}
+
 		const UStruct* Scope = Ctx.InstanceClass;
 		FDabExprPtr Expr;
 		for (int32 Index = 0; Index < Segments.Num(); ++Index)
