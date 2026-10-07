@@ -35,8 +35,9 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		const FDabDocument* Document = File ? File->Document.Get() : nullptr;
 		if (!Document || !Document->Body)
 		{
-			// The parser has said why (DAB2002); without a document there is nothing to build.
-			if (!Sink.HasErrors())
+			// The parser has said why (DAB2002, or DAB2001 for a missing body); without a document there is
+			// nothing to build. Each stage reports into a sink of its own, so ask whether anything was parsed.
+			if (!File)
 			{
 				Sink.Error(TEXT("DAB6014"), FDabSpan(), TEXT("There is no document to build."));
 			}

@@ -172,7 +172,7 @@ DAB3001-DAB6099 come from this pass; [Mapping.md](Mapping.md) lists them with th
 | DAB6011 | error | A statement or section that does not belong where it is written. The message says what belongs there. | Move or rewrite it. State machines are written at the document level and named where they run. |
 | DAB6012 | error | A graph or state without its result. | Add `Output = ...;` to a graph or layer, `Pose = ...;` to a state. Write `Output = None;` for a graph that outputs nothing. |
 | DAB6013 | error | A shared rule that uses itself. | Break the loop between the rules. |
-| DAB6014 | error | Nothing to build: the source file cannot be read, the file has no document, or a template library is checked or built on its own. | Check that the file exists and is not locked by another program. Build the files that include a library; given a `.dat` as `-File`, the command line does that. |
+| DAB6014 | error | Nothing to build: the source file cannot be read. | Check that the file exists and is not locked by another program. |
 | DAB6015 | error | Something an AnimLayerInterface cannot hold: a graph, a layer body, a state machine, notifies, asset slots. | An interface only declares layers: `Layer Name [ meta ];`. Write the layers' poses in the Blueprints that implement it. |
 | DAB6016 | error | Unknown metadata on a pose statement, `Cached` with a value, `Cached` on the result, a node function without a call, or a node function with no node to go on. | A named pose takes `Cached`, `OnInitialUpdate`, `OnBecomeRelevant` and `OnUpdate`. Cache a named pose and output its name. |
 

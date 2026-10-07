@@ -1,0 +1,2 @@
+// A file without a document. The parser says so; the checker has nothing to add.
+// EXPECT DAB2002 (1,1)
