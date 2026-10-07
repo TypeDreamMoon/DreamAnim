@@ -1,0 +1,9 @@
+// A parent class that is not an anim instance.
+AnimBlueprint(Name="Validate/ParentNotAnimInstance", Root="Game")
+{
+    Settings = { Parent = Actor; Skeleton = SK_Als; }
+
+    Graph = { Output = SequencePlayer(Sequence = A_Als_Idle); }
+}
+
+// EXPECT DAB3003 (4,27)

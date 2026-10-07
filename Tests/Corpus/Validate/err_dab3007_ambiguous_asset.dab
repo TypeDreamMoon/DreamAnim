@@ -1,0 +1,10 @@
+// A class named by an asset name more than one Blueprint has: ALS has two AB_Als_Bow, the bow
+// overlay and the bow's own Animation Blueprint.
+AnimBlueprint(Name="Validate/AmbiguousAsset", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Graph = { Output = LinkedAnimGraph(InstanceClass = AB_Als_Bow); }
+}
+
+// EXPECT DAB3007 (7,56)

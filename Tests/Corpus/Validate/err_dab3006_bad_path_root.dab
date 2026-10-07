@@ -1,0 +1,9 @@
+// Path(...) whose root is not Game, Engine or Plugin.<Name>.
+AnimBlueprint(Name="Validate/BadPathRoot", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = Path(ALS, "ALS/Character/SK_Als"); }
+
+    Graph = { Output = SequencePlayer(Sequence = A_Als_Idle); }
+}
+
+// EXPECT DAB3006 (4,52)

@@ -1,0 +1,11 @@
+// A tuning value of a type the checker does not know: a warning, and the default is kept as written.
+AnimBlueprint(Name="Validate/UnknownType", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Properties = { float32 IdleRate = 1; }
+
+    Graph = { Output = SequencePlayer(Sequence = A_Als_Idle, PlayRate = Props.IdleRate); }
+}
+
+// EXPECT DAB3008 (6,20)

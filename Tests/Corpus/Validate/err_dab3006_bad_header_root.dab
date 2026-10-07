@@ -1,0 +1,9 @@
+AnimBlueprint(Name="Validate/BadHeaderRoot", Root="Content")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Graph = { Output = SequencePlayer(Sequence = A_Als_Idle); }
+}
+
+// A header Root that is not Game, Engine or Plugin.<Name>.
+// EXPECT DAB3006 (1,51)

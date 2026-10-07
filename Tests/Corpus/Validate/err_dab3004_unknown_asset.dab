@@ -1,0 +1,9 @@
+// An animation name that no asset has.
+AnimBlueprint(Name="Validate/UnknownAsset", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Graph = { Output = SequencePlayer(Sequence = A_Als_Idel); }
+}
+
+// EXPECT DAB3004 (6,50)

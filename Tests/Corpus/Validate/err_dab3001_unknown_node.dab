@@ -1,0 +1,9 @@
+// A node type that names no anim node class.
+AnimBlueprint(Name="Validate/UnknownNode", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Graph = { Output = SequencePlayr(Sequence = A_Als_Idle); }
+}
+
+// EXPECT DAB3001 (6,24)

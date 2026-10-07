@@ -1,0 +1,11 @@
+// An asset slot whose type is not an animation asset class.
+AnimBlueprint(Name="Validate/SlotType", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Assets = { Skeleton Idle; }
+
+    Graph = { Output = SequencePlayer(Sequence = Assets.Idle); }
+}
+
+// EXPECT DAB3005 (6,16)
