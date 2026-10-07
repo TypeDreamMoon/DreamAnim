@@ -1,0 +1,12 @@
+// A named pose without [ Cached ] used in two places.
+AnimBlueprint(Name="Validate/PoseUsedTwice", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Graph = {
+        Idle   = SequencePlayer(Sequence = A_Als_Idle);
+        Output = TwoWayBlend(Alpha = 0.5, A = Idle, B = Idle);
+    }
+}
+
+// EXPECT DAB6005 (8,57)

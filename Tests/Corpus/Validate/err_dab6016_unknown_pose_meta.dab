@@ -1,0 +1,12 @@
+// Metadata on a named pose that is not Cached or a node function.
+AnimBlueprint(Name="Validate/UnknownPoseMeta", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Graph = {
+        Idle   = SequencePlayer(Sequence = A_Als_Idle) [ Cache ];
+        Output = Idle;
+    }
+}
+
+// EXPECT DAB6016 (7,58)

@@ -1,0 +1,11 @@
+// A section name a document does not have.
+AnimBlueprint(Name="Validate/UnknownSection", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Property = { float IdleRate = 1; }
+
+    Graph = { Output = SequencePlayer(Sequence = A_Als_Idle); }
+}
+
+// EXPECT DAB6011 (6,5)

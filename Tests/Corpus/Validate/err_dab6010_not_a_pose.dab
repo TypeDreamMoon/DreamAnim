@@ -1,0 +1,9 @@
+// A number where a pose is expected.
+AnimBlueprint(Name="Validate/NotAPose", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Graph = { Output = 0.5; }
+}
+
+// EXPECT DAB6010 (6,24)

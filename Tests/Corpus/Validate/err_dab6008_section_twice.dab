@@ -1,0 +1,13 @@
+// A section written twice.
+AnimBlueprint(Name="Validate/SectionTwice", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Properties = { float IdleRate = 1; }
+
+    Graph = { Output = SequencePlayer(Sequence = A_Als_Idle, PlayRate = Props.IdleRate); }
+
+    Properties = { bool bMoving = false; }
+}
+
+// EXPECT DAB6008 (10,5)

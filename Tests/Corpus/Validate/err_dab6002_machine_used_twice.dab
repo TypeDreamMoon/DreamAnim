@@ -1,0 +1,18 @@
+// A state machine named as a pose in two places.
+AnimBlueprint(Name="Validate/MachineUsedTwice", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Graph = {
+        Output = TwoWayBlend(Alpha = 0.5, A = Locomotion, B = Locomotion);
+    }
+
+    StateMachine Locomotion
+    {
+        Entry = Idle;
+
+        State Idle { Pose = SequencePlayer(Sequence = A_Als_Idle); }
+    }
+}
+
+// EXPECT DAB6002 (7,63)

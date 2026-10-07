@@ -1,0 +1,16 @@
+// A machine's Entry that is not one of its states or conduits.
+AnimBlueprint(Name="Validate/EntryNotState", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Graph = { Output = Locomotion; }
+
+    StateMachine Locomotion
+    {
+        Entry = Idel;
+
+        State Idle { Pose = SequencePlayer(Sequence = A_Als_Idle); }
+    }
+}
+
+// EXPECT DAB6006 (10,17)

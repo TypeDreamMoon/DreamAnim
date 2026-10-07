@@ -1,0 +1,14 @@
+// A state machine without Entry.
+AnimBlueprint(Name="Validate/NoEntry", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Graph = { Output = Locomotion; }
+
+    StateMachine Locomotion
+    {
+        State Idle { Pose = SequencePlayer(Sequence = A_Als_Idle); }
+    }
+}
+
+// EXPECT DAB6007 (8,18)

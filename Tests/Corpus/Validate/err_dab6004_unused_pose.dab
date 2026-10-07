@@ -1,0 +1,12 @@
+// A named pose that nothing uses: a warning, and its nodes are still made.
+AnimBlueprint(Name="Validate/UnusedPose", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Graph = {
+        Walk   = SequencePlayer(Sequence = A_Als_Walk_Forward);
+        Output = SequencePlayer(Sequence = A_Als_Idle);
+    }
+}
+
+// EXPECT DAB6004 (7,9)

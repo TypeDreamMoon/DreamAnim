@@ -1,0 +1,12 @@
+// A named pose that uses itself.
+AnimBlueprint(Name="Validate/PoseUsesItself", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Graph = {
+        Looped = ApplyAdditive(Alpha = 1, Base = Looped, Additive = SequencePlayer(Sequence = A_Als_Idle));
+        Output = Looped;
+    }
+}
+
+// EXPECT DAB6009 (7,50)

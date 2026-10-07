@@ -1,0 +1,9 @@
+// A layer with a graph in an AnimLayerInterface, which only declares layers.
+AnimLayerInterface(Name="Validate/InterfaceLayerBody", Root="Game")
+{
+    Settings = { Parent = AnimLayerInterface; }
+
+    Layer Overlay = SequencePlayer(Sequence = A_Als_Idle);
+}
+
+// EXPECT DAB6015 (6,11)

@@ -1,0 +1,9 @@
+// A name used as a pose that is no named pose, cache or state machine.
+AnimBlueprint(Name="Validate/UnknownPose", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Graph = { Output = Locomotion; }
+}
+
+// EXPECT DAB6003 (6,24)

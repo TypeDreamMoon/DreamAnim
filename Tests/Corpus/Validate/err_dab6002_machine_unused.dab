@@ -1,0 +1,16 @@
+// A state machine that no pose names.
+AnimBlueprint(Name="Validate/MachineUnused", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Graph = { Output = SequencePlayer(Sequence = A_Als_Idle); }
+
+    StateMachine Locomotion
+    {
+        Entry = Idle;
+
+        State Idle { Pose = SequencePlayer(Sequence = A_Als_Idle); }
+    }
+}
+
+// EXPECT DAB6002 (8,18)

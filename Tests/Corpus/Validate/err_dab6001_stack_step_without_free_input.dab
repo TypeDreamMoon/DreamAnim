@@ -1,0 +1,14 @@
+// A stack step with no free pose input to take the step above it.
+AnimBlueprint(Name="Validate/StackStepWithoutFreeInput", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Graph = {
+        Output = {
+            SequencePlayer(Sequence = A_Als_Idle);
+            SequencePlayer(Sequence = A_Als_Walk_Forward);
+        };
+    }
+}
+
+// EXPECT DAB6001 (9,13)

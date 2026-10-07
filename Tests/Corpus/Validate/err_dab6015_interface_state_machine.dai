@@ -1,0 +1,16 @@
+// A state machine in an AnimLayerInterface, which only declares layers.
+AnimLayerInterface(Name="Validate/InterfaceStateMachine", Root="Game")
+{
+    Settings = { Parent = AnimLayerInterface; }
+
+    Layer Overlay;
+
+    StateMachine Locomotion
+    {
+        Entry = Idle;
+
+        State Idle { Pose = None; }
+    }
+}
+
+// EXPECT DAB6015 (8,5)
