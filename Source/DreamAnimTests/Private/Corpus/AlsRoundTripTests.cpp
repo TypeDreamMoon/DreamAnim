@@ -726,7 +726,8 @@ namespace UE::DreamAnim::Tests
 			NumFilled += Group.Slots.FilterByPredicate([](const FDreamAnimSetSlot& Slot) { return Slot.Asset != nullptr; }).Num();
 		}
 		AddInfo(FString::Printf(TEXT("%d Blueprint(s), %d animation(s) read from the set"), Copies.AnimSet->Groups.Num(), NumFilled));
-		TestTrue(TEXT("the copies read their animations from the set"), NumFilled > 100);
+		// The character's own Blueprints alone fill 20 groups with 96 animations; other tests may add more to the set.
+		TestTrue(TEXT("the copies read their animations from the set"), NumFilled >= 96);
 		return bRan;
 	}
 }
