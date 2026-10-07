@@ -22,6 +22,8 @@ public class DreamAnimTests : ModuleRules
 			"DreamAnimCompiler",
 			"GameplayTags",
 			"Projects",
+			"AnimGraph",
+			"BlueprintGraph",
 		});
 	}
 }
