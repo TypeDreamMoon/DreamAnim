@@ -170,4 +170,121 @@ bool FDreamAnimEditorSyncTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// ---------------------------------------------------------------------------------------------
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDreamAnimEditorLiveTest, "DreamAnim.Editor.Live",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+/**
+ * The same over frames, as it happens while someone works: the folder watcher reports a saved file and
+ * the Blueprint is rebuilt; an edit made in a transaction is written back once edits pause.
+ */
+bool FDreamAnimEditorLiveTest::RunTest(const FString& Parameters)
+{
+	using namespace DreamAnimEditorSyncTests;
+	using namespace UE::DreamAnim::Compiler;
+
+	UDreamAnimEditorSubsystem* Subsystem = GEditor ? GEditor->GetEditorSubsystem<UDreamAnimEditorSubsystem>() : nullptr;
+	if (!TestNotNull(TEXT("the subsystem"), Subsystem))
+	{
+		return false;
+	}
+	const FString Root = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("DAnim"));
+	const bool bRootExisted = FPaths::DirectoryExists(Root);
+	const FString Dir = Root / TEXT("DreamAnimTestsLive");
+	const FString Path = Dir / TEXT("AB_Live.dab");
+	const FString Text = FString(SourceText).Replace(TEXT("Sync/AB_Sync"), TEXT("Live/AB_Live"));
+
+	UDreamAnimEditorSettings* Settings = GetMutableDefault<UDreamAnimEditorSettings>();
+	const bool bSaved = Settings->bSaveRebuiltBlueprints;
+	const float Delay = Settings->WriteBackDelay;
+	Settings->bSaveRebuiltBlueprints = false;
+	Settings->WriteBackDelay = 0.2f;
+	const auto Restore = [Settings, bSaved, Delay, bRootExisted, Root, Dir, Subsystem]()
+	{
+		Settings->bSaveRebuiltBlueprints = bSaved;
+		Settings->WriteBackDelay = Delay;
+		IFileManager::Get().DeleteDirectory(*(bRootExisted ? Dir : Root), false, true);
+		Subsystem->RefreshSources();
+	};
+
+	IFileManager::Get().MakeDirectory(*Dir, true);
+	Save(Path, Text);
+	Subsystem->RefreshSources();
+	UAnimBlueprint* Blueprint = Subsystem->Rebuild(Path);
+	if (!TestNotNull(TEXT("the Blueprint is built from the source"), Blueprint))
+	{
+		Restore();
+		return false;
+	}
+	const TWeakObjectPtr<UAnimBlueprint> WeakBlueprint(Blueprint);
+
+	// Saved by someone else: the watcher reports it and the Blueprint is rebuilt.
+	const FString Saved = Text.Replace(TEXT("float Speed = 0;"), TEXT("float Speed = 7;"));
+	Save(Path, Saved);
+	const double Start = FPlatformTime::Seconds();
+	ADD_LATENT_AUTOMATION_COMMAND(FFunctionLatentCommand([this, WeakBlueprint, Saved, Start]()
+	{
+		if (WeakBlueprint.IsValid() && GetDabGeneratedText(*WeakBlueprint).Equals(Saved, ESearchCase::CaseSensitive))
+		{
+			return true;
+		}
+		if (FPlatformTime::Seconds() - Start > 15.0)
+		{
+			AddError(TEXT("a saved source rebuilds its Blueprint"));
+			return true;
+		}
+		return false;
+	}));
+
+	// Edited in the editor: written back once edits pause.
+	const FString Edited = Saved.Replace(TEXT("PlayRate = 1.2"), TEXT("PlayRate = 0.5"));
+	ADD_LATENT_AUTOMATION_COMMAND(FFunctionLatentCommand([this, WeakBlueprint]()
+	{
+		if (WeakBlueprint.IsValid())
+		{
+			GEditor->BeginTransaction(NSLOCTEXT("DreamAnimTests", "EditPlayRate", "Edit Play Rate"));
+			TArray<UAnimGraphNode_SequencePlayer*> Players;
+			FBlueprintEditorUtils::GetAllNodesOfClass(WeakBlueprint.Get(), Players);
+			for (UAnimGraphNode_SequencePlayer* Player : Players)
+			{
+				Player->Modify();
+			}
+			SetIdlePlayRate(*this, *WeakBlueprint, TEXT("0.5"));
+			GEditor->EndTransaction();
+		}
+		return true;
+	}));
+	const TSharedRef<double> EditStart = MakeShared<double>(0.0);
+	ADD_LATENT_AUTOMATION_COMMAND(FFunctionLatentCommand([this, Path, Edited, EditStart]()
+	{
+		if (*EditStart == 0.0)
+		{
+			*EditStart = FPlatformTime::Seconds();
+		}
+		if (Load(Path).Equals(Edited, ESearchCase::CaseSensitive))
+		{
+			return true;
+		}
+		if (FPlatformTime::Seconds() - *EditStart > 30.0)
+		{
+			AddError(FString::Printf(TEXT("an edit in a transaction is written back; the file holds:\n%s"), *Load(Path)));
+			return true;
+		}
+		return false;
+	}));
+	ADD_LATENT_AUTOMATION_COMMAND(FFunctionLatentCommand([this, WeakBlueprint, Path, Edited, Subsystem]()
+	{
+		TestFalse(TEXT("its own write is not taken for a change"), WeakBlueprint.IsValid() && Subsystem->IsInConflict(*WeakBlueprint));
+		TestTrue(TEXT("and the node positions are next to it"), FPaths::FileExists(GetDabLayoutPath(Path)));
+		return true;
+	}));
+	ADD_LATENT_AUTOMATION_COMMAND(FFunctionLatentCommand([Restore]()
+	{
+		Restore();
+		return true;
+	}));
+	return true;
+}
+
 #endif
