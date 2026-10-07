@@ -1,0 +1,18 @@
+// A keyed BlendPose on BlendListByEnum whose enum the checker cannot tell.
+AnimBlueprint(Name="Validate/KeyedWithoutEnum", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Graph = {
+        Output = BlendListByEnum(
+            ActiveEnumValue = Self.Direction,
+            BlendPose       = {
+                Default  = SequencePlayer(Sequence = A_Als_Walk_Forward);
+                Backward = SequencePlayer(Sequence = A_Als_Walk_Backward);
+            },
+            BlendTime       = 0.2
+        );
+    }
+}
+
+// EXPECT DAB4012 (9,31)

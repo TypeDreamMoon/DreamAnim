@@ -1248,6 +1248,8 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 
 		// A pose map keyed by enumerator or tag: Default is pin 0, each key in written order takes the next pin.
 		bool bKeyed = false;
+		// BlendPose is keyed but its keys cannot be read (DAB4012): neither can the poses a per-pose value is for.
+		bool bKeysUnread = false;
 		int32 KeyedCount = 0;
 		TArray<FString> KeyedEntries;
 		TArray<int32> KeyedEnumIndices;
@@ -1339,6 +1341,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 			{
 				Sink.Error(TEXT("DAB4012"), Value.Span, TEXT("BlendListByEnum needs its enum to read the keys of BlendPose."),
 					TEXT("Write `BoundEnum = EnumName`, or bind ActiveEnumValue to a path of that enum's type."));
+				bKeysUnread = true;
 				continue;
 			}
 
@@ -1553,6 +1556,10 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 				{
 					Items.Init(&Value, PerPoseCount);
 				}
+				else if (bKeysUnread)
+				{
+					continue;
+				}
 				else
 				{
 					Sink.Error(TEXT("DAB4006"), Value.Span, FString::Printf(TEXT("%s is a list [ ... ]%s."), *What,
@@ -1707,7 +1714,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 				AddPropertyUnlessDefault(Node.Properties, BoundEnumProperty->GetName(), MakeObjectRef(BlendEnum), BoundEnumProperty,
 					BoundEnumProperty->ContainerPtrToValuePtr<void>(Shape->Defaults));
 			}
-			else if (!BlendEnum && !bKeyed)
+			else if (!BlendEnum && !bKeyed && !bKeysUnread)
 			{
 				Sink.Error(TEXT("DAB4012"), Request.Span, TEXT("BlendListByEnum needs its enum."),
 					TEXT("Write `BoundEnum = EnumName`, or bind ActiveEnumValue to a path of that enum's type."));
