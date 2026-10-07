@@ -136,7 +136,8 @@ AnimLayerInterface(Name="ALS/Character/ALI_Overlay", Root="Plugin.ALS")
 }
 ```
 
-An `AnimTemplates` library holds templates. It is never built on its own (DAB6014).
+An `AnimTemplates` library holds templates. It makes no asset. Checked on its own, it is checked as far as
+its syntax, its includes and its templates; a document that includes it checks the rest.
 
 ## Settings
 

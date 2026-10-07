@@ -161,6 +161,6 @@ Raised by the semantic pass (`Source/DreamAnimCompiler/Private/Semantic/`). Seve
 | DAB6011 | Error | A statement or section that does not belong where it is written |
 | DAB6012 | Error | A graph or state without its result (`Output = ...;` / `Pose = ...;`) |
 | DAB6013 | Error | A shared rule that uses itself |
-| DAB6014 | Error | Nothing to build: no document, or a template library compiled on its own |
+| DAB6014 | Error | Nothing to build: the source file cannot be read |
 | DAB6015 | Error | Something an AnimLayerInterface cannot hold (a graph, a layer body, a state machine, notifies, asset slots) |
 | DAB6016 | Error | Unknown metadata on a pose statement, `Cached` on the result, or a node function with no node to go on |
