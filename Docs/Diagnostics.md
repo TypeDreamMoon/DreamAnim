@@ -218,6 +218,8 @@ language cannot express is not an error: it is listed in a comment at the top of
 | Code | Severity | Meaning | How to fix |
 |---|---|---|---|
 | DAB8101 | error | The Blueprint has neither a generated class nor a parent class, so there is nothing to read its paths against. | Open the Blueprint in the editor and compile it, or fix its parent class. |
+| DAB8102 | error | Decompiling with `-AnimSet`: the set cannot be made or saved. The path is not an asset path, an asset of another kind is there, or the package cannot be saved. | Give an asset path such as `/Game/Characters/DAS_Hero`, move the asset in the way, or make the package writable. |
+| DAB8103 | warning | Decompiling with `-AnimSet`: a slot of the set already holds another animation than the one the Blueprint used. The set keeps its animation. | Nothing, if the set was filled on purpose. Otherwise pick the animation in the set's slot. |
 
 ### Write-back
 
