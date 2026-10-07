@@ -88,10 +88,12 @@ A build updates the Blueprint's `DefaultAnimSet`:
 - it marks slots the Blueprint no longer declares as orphans;
 - it never removes an animation already chosen.
 
-The build saves only Blueprints. It updates the set in memory and marks it modified, but does not save
-it. A command-line `build` therefore loses the set's new groups and slots when the run ends. Until the
-build saves the set, fill a set's slots from a tool that calls `UDreamAnimSet::SyncSlots` and saves the
-set.
+A build that saves the Blueprint saves the set with it when its slots changed; `-NoSave` leaves both in
+memory.
+
+To make a set from an existing character, decompile its Blueprints with `-AnimSet`: every animation they
+read becomes a slot, and the set is created and filled with them. See
+[Moving the animations into a set](Decompiling.md#moving-the-animations-into-a-set).
 
 Other sets are not touched by a build. To make another character's set, duplicate a filled set and
 change its `Skeleton` and animations. A slot added to a Blueprint later reaches only the default set. To

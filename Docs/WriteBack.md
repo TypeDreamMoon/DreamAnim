@@ -129,6 +129,11 @@ Blueprint must be rebuilt from its text once before its changes can be written b
 A Blueprint with something the text cannot hold is not rebuilt. The file lists those things at the top.
 [Decompiling.md](Decompiling.md) covers moving a whole character over.
 
+**Write as DreamAnim Text with an Animation Set...** does the same, and moves the animations the Blueprints
+read into slots of an animation set you name or pick in a save dialog. Picking an existing set adds the
+Blueprints' groups to it; the dialog's warning about replacing it does not apply, nothing in it is
+replaced. See [Moving the animations into a set](Decompiling.md#moving-the-animations-into-a-set).
+
 ## Settings
 
 **Editor Preferences > Plugins > Dream Anim**:

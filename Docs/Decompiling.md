@@ -9,6 +9,7 @@ builds it. Use it to bring an existing character to DreamAnim; from then on the 
 - [What cannot be expressed](#what-cannot-be-expressed)
 - [Forwarder functions become calls](#forwarder-functions-become-calls)
 - [Asset names](#asset-names)
+- [Moving the animations into a set](#moving-the-animations-into-a-set)
 - [Checking the result](#checking-the-result)
 - [Migrating a character safely](#migrating-a-character-safely)
 
@@ -27,6 +28,7 @@ Tools/dab.ps1 decompile -Asset /Game/Characters/AB_Hero -Stdout
 | `-Out <dir or file>` | Where to write, relative to the project. A folder takes the same layout as `DAnim/`; a file is allowed for one Blueprint only. |
 | `-Stdout` | Print the text instead of writing files. |
 | `-Force` | Replace a file that exists and differs. |
+| `-AnimSet <asset path>` | Move the animations into slots of this animation set; see [Moving the animations into a set](#moving-the-animations-into-a-set). |
 | `-Json <file>` | Also write the diagnostics as JSON. |
 | `-Project <uproject>` | The project to open; the default is the plugin's test host. |
 
@@ -50,7 +52,8 @@ Things the language cannot express are not errors. The run reports how many ther
 when nothing else went wrong. Read the comment at the top of each file; see
 [What cannot be expressed](#what-cannot-be-expressed).
 
-In the editor, a Content Browser action to decompile the selected Blueprints is coming.
+In the editor, **Write as DreamAnim Text** on Animation Blueprints in the Content Browser does the same
+for the selected ones; [WriteBack.md](WriteBack.md#writing-an-existing-blueprint-as-text) describes it.
 
 ## What you get
 
@@ -219,6 +222,64 @@ reference to either is written with `Path(...)`.
 Bare names are looked up again on every check. If another asset with the same name and a fitting class
 is added later, the name becomes ambiguous (DAB3007) and needs a `Path(...)`.
 
+## Moving the animations into a set
+
+By default the text names each animation directly, as the Blueprint did. To give the Blueprints an
+[animation set](AnimSet.md) instead, so that another character can swap in its own animations, decompile
+with a set:
+
+```
+Tools/dab.ps1 decompile -Under /Game/Characters/Hero -AnimSet /Game/Characters/Hero/DAS_Hero
+```
+
+In the editor, **Write as DreamAnim Text with an Animation Set...** asks for the set in a save dialog.
+
+Every animation a Blueprint reads at run time becomes a slot, and the set gets the Blueprint's group
+with each slot filled with that animation:
+
+```dab
+Settings = {
+    Parent         = AlsLinkedAnimationInstance;
+    Skeleton       = SK_Als;
+    DefaultAnimSet = DAS_Hero;
+}
+
+Assets = {
+    AnimSequence A_Als_Stop_Left;
+    BlendSpace   BS_Als_WalkRun_Forward;
+}
+
+...
+    Walk = BlendSpacePlayer(X = Main.StandingState.StrideBlendAmount, BlendSpace = Assets.BS_Als_WalkRun_Forward);
+...
+    OnEnter = Main.PlayTransitionAnimation(Sequence = Assets.A_Als_Stop_Left, PlayRate = 1.5);
+```
+
+- **What moves:** an animation in a node argument that can be bound (a player's `Sequence`, a blend
+  space player's `BlendSpace`, ...) and an animation passed to a call (state functions, notifies, node
+  functions, `Call(...)`).
+- **What stays:** an animation where only a constant fits (a setting of the editor node, a transition
+  option, `Settings`, `Defaults`, a tuning value's default), and one the slot cannot feed: a pin or
+  parameter of a narrower type than the slot's getter returns. A call whose function cannot be found
+  from `Self` keeps its arguments too.
+- **Slot names:** one slot per asset, named after it (`A_Als_Stop_Left`). An asset read in several places
+  is one slot. When another asset or an existing slot has the name, the slot gets `_2`, `_3`.
+- **Slot types:** the asset's own class: `AnimSequence`, `BlendSpace`, `AnimMontage`, ...
+- **The set:** created when it does not exist, with the Blueprint's skeleton. A Blueprint's group is
+  added to it, or brought up to date. A slot that already holds another animation keeps it (DAB8103).
+  The set is saved, except with `-Stdout`, which prints a preview and leaves it in memory.
+- All the Blueprints of a run go into the same set: one set per character, one group per Blueprint.
+- A Blueprint that already reads its animations from slots has nothing left to move. Decompiling it
+  into a set again changes neither the text nor the set.
+
+The set is saved by the decompile. The Blueprints change only when they are built from the new text;
+until then they keep naming their animations directly. While the set is new, the text may name it with
+`Path(...)` rather than its bare name.
+
+The automated tests move every ALS-Refactored Blueprint into one set (149 animations in 23 groups),
+regenerate the character from that text, and compare it with the original over the same 420-frame
+script as above: every bone matches on every frame.
+
 ## Checking the result
 
 ```
@@ -271,5 +332,5 @@ copies, point the main copy at the copies of its linked graphs and the character
 copies of the overlay layers, and drive the character through a 420-frame script. Every bone matches the
 original on every frame, to within 0.01 cm and 0.01 degrees.
 
-After migrating, edit the text, not the Blueprint. Editor changes are not written back to the text yet,
-and the next build replaces them.
+After migrating, the text is the source. Changes made in the editor are written back into it; see
+[WriteBack.md](WriteBack.md).
