@@ -347,6 +347,8 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		/** The node class a type name means; null after DAB3001/DAB3002. */
 		UClass* ResolveNodeClass(const FString& TypeName, const FDabSpan& Span);
 		UClass* FindNodeClassByName(const TCHAR* ClassName) const;
+		/** A `Template` the file or one of its libraries defines. */
+		bool IsTemplateName(const FString& Name) const;
 		const FNodeShape* GetShape(UClass* Class);
 		/** The runtime-node field or editor-node property an argument names, and its default; null when none. */
 		const FProperty* FindNodeProperty(const FNodeShape& Shape, const FString& Name, const void*& OutDefault, bool& bOutEditor) const;

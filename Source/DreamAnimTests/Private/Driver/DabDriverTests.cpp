@@ -272,6 +272,13 @@ namespace UE::DreamAnim::Tests::DriverTests
 			TestTrue(TEXT("every diagnostic names a file"), !Result.Diagnostics.ContainsByPredicate([](const FDabDiagnostic& Diagnostic) { return Diagnostic.FilePath.IsEmpty(); }));
 		}
 
+		// A template called wrongly is reported once, not again as an unknown node type.
+		{
+			const FDabCompileResult Result = CompileDabText(MainPath, FString(TEXT("#include \"Lib/Frames.dat\"\n")) + FString(Body).Replace(TEXT("Frame(Assets.Pose, 0)"), TEXT("Frame(Assets.Pose, 0, Extra = 1)")), Options);
+			TestTrue(TEXT("the unknown argument is reported"), Result.Diagnostics.ContainsByPredicate([](const FDabDiagnostic& Diagnostic) { return Diagnostic.Code == TEXT("DAB3102"); }));
+			TestFalse(TEXT("and nothing more about the call"), Result.Diagnostics.ContainsByPredicate([](const FDabDiagnostic& Diagnostic) { return Diagnostic.Code == TEXT("DAB3001"); }));
+		}
+
 		// A file that is not there.
 		{
 			const FDabCompileResult Result = CompileDabFile(Dir / TEXT("Missing.dab"), Options);

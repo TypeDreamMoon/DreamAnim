@@ -275,6 +275,21 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		return nullptr;
 	}
 
+	bool FSemantic::IsTemplateName(const FString& Name) const
+	{
+		const auto Defines = [&Name](const FDabFile* File)
+		{
+			const FDabBlockExpr* Body = File && File->Document ? File->Document->Body.Get() : nullptr;
+			return Body && Body->Statements.ContainsByPredicate([&Name](const FDabStmtPtr& Statement)
+			{
+				const FDabNamedBlockStmt* Named = Statement ? Statement->As<FDabNamedBlockStmt>() : nullptr;
+				return Named && Named->Word == TEXT("Template") && Named->Name == Name;
+			});
+		};
+		return Defines(Unit.Main.Get())
+			|| Unit.Libraries.ContainsByPredicate([&Defines](const TUniquePtr<FDabFile>& Library) { return Defines(Library.Get()); });
+	}
+
 	UClass* FSemantic::ResolveNodeClass(const FString& TypeName, const FDabSpan& Span)
 	{
 		if (UClass* const* Known = NodeClassesByType.Find(TypeName))
@@ -319,8 +334,12 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		}
 		if (!Found || Found->HasAnyClassFlags(CLASS_Abstract))
 		{
-			Sink.Error(TEXT("DAB3001"), Span, FString::Printf(TEXT("There is no anim node type `%s`."), *TypeName),
-				TEXT("A node type is an editor node class without its `AnimGraphNode_` prefix (TwoWayBlend, SequencePlayer); the module that defines it must be loaded."));
+			// A template call left in place: expanding it failed and said why already.
+			if (!IsTemplateName(TypeName))
+			{
+				Sink.Error(TEXT("DAB3001"), Span, FString::Printf(TEXT("There is no anim node type `%s`."), *TypeName),
+					TEXT("A node type is an editor node class without its `AnimGraphNode_` prefix (TwoWayBlend, SequencePlayer); the module that defines it must be loaded."));
+			}
 			Found = nullptr;
 		}
 		NodeClassesByType.Add(TypeName, Found);
