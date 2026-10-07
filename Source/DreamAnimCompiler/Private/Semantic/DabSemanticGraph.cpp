@@ -1964,10 +1964,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		Rules.Resolving.Add(Name);
 		FDabExprPtr Value = Resolve(*(*Statement)->Value, &Rules);
 		Rules.Resolving.Remove(Name);
-		if (!Value)
-		{
-			return nullptr;
-		}
+		// A rule that failed is kept as null, so what made it fail is reported once, not at every use.
 		const FDabExpr* Result = Value.Get();
 		Rules.Resolved.Add(Name, MoveTemp(Value));
 		return Result;

@@ -257,6 +257,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 	struct FRuleSet
 	{
 		TMap<FString, const FDabAssignStmt*> Statements;
+		/** Null for a rule that failed to resolve. */
 		TMap<FString, FDabExprPtr> Resolved;
 		TSet<FString> Resolving;
 	};

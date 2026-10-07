@@ -1,0 +1,26 @@
+// Two shared rules that use each other, both named by transitions: the loop is reported once.
+AnimBlueprint(Name="Validate/RulesUseEachOther", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Properties = { bool bMoving = false; }
+
+    Graph = { Output = Locomotion; }
+
+    StateMachine Locomotion
+    {
+        Entry = Idle;
+
+        State Idle { Pose = SequencePlayer(Sequence = A_Als_Idle); }
+        State Walk { Pose = SequencePlayer(Sequence = A_Als_Walk_Forward); }
+
+        Rules = { Moving = Props.bMoving && !Stopping; Stopping = !Moving; }
+
+        Transitions = {
+            Idle -> Walk : Moving;
+            Walk -> Idle : Stopping;
+        }
+    }
+}
+
+// EXPECT DAB6013 (17,68)

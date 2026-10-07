@@ -1,0 +1,26 @@
+// A shared rule that uses itself, and a transition that names the rule: one error, not one per use.
+AnimBlueprint(Name="Validate/RuleUsesItself", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Properties = { bool bMoving = false; }
+
+    Graph = { Output = Locomotion; }
+
+    StateMachine Locomotion
+    {
+        Entry = Idle;
+
+        State Idle { Pose = SequencePlayer(Sequence = A_Als_Idle); }
+        State Walk { Pose = SequencePlayer(Sequence = A_Als_Walk_Forward); }
+
+        Rules = { Moving = Props.bMoving || Moving; }
+
+        Transitions = {
+            Idle -> Walk : Moving;
+            Walk -> Idle : !Props.bMoving;
+        }
+    }
+}
+
+// EXPECT DAB6013 (17,45)
