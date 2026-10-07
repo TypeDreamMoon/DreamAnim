@@ -32,6 +32,9 @@ class UStruct;
 
 namespace UE::DreamAnim::Compiler::GeneratePrivate
 {
+	/** MD5 of the text as a GUID, never the invalid zero GUID. */
+	FGuid DabGenHashGuid(const FString& Full);
+
 	// Members below are named Model; inside those classes the name must not also mean the namespace.
 	using FDabGenModelMachine = Model::FDabModelStateMachine;
 	using FDabGenModelGraph = Model::FDabModelGraph;

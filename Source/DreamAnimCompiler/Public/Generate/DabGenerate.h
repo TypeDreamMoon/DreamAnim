@@ -36,6 +36,14 @@ namespace UE::DreamAnim::Compiler
 	};
 
 	/**
+	 * The NodeGuid the generator gives a node: an MD5 of `<AssetPath>/<GraphPath>/<Id>`. Graph paths are
+	 * `AnimGraph`, `Layer/<Name>` and `Machine/<Machine>/State/<State>`; a state node is `State/<Name>` in
+	 * `Machine/<Machine>`, a transition `Transition/<From>-><To>#<n>`. Write-back finds the text a node came
+	 * from with it.
+	 */
+	DREAMANIMCOMPILER_API FGuid MakeDabNodeGuid(const FString& AssetPath, const FString& GraphPath, const FString& Id);
+
+	/**
 	 * Creates the asset, or rebuilds it in place when it exists (its graphs, functions, variables and
 	 * interface layers are replaced; the asset object and its generated class stay, so references to them
 	 * survive). Every node gets a GUID derived from the asset path and the node's place in the model, so

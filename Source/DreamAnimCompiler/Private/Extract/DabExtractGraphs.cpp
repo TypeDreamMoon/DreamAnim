@@ -675,6 +675,7 @@ namespace UE::DreamAnim::Compiler::ExtractPrivate
 
 			FDabModelNode ModelNode;
 			ModelNode.Id = Node.GetName();
+			ModelNode.Guid = Node.NodeGuid;
 			ModelNode.ClassName = Node.GetClass()->GetName();
 
 			if (const UAnimGraphNode_UseCachedPose* Use = Cast<UAnimGraphNode_UseCachedPose>(&Node))
@@ -863,6 +864,7 @@ namespace UE::DreamAnim::Compiler::ExtractPrivate
 		{
 			Model::FDabModelState State;
 			State.Name = GetStateNodeName(&StateNode);
+			State.Guid = StateNode.NodeGuid;
 			const FString Location = MachineName + TEXT("/") + State.Name;
 
 			static const FName StateSkip[] = {FName(TEXT("BoundGraph")), FName(TEXT("StateType"))};
@@ -898,6 +900,7 @@ namespace UE::DreamAnim::Compiler::ExtractPrivate
 		Model::FDabModelTransition ExtractTransition(FDabExtractContext& Ctx, const UAnimStateTransitionNode& TransitionNode, const FString& MachineName)
 		{
 			Model::FDabModelTransition Transition;
+			Transition.Guid = TransitionNode.NodeGuid;
 			Transition.From = GetStateNodeName(TransitionNode.GetPreviousState());
 			Transition.To = GetStateNodeName(TransitionNode.GetNextState());
 			const FString Location = FString::Printf(TEXT("%s/%s -> %s"), *MachineName, *Transition.From, *Transition.To);
@@ -976,6 +979,7 @@ namespace UE::DreamAnim::Compiler::ExtractPrivate
 					{
 						Model::FDabModelConduit Conduit;
 						Conduit.Name = GetStateNodeName(ConduitNode);
+						Conduit.Guid = ConduitNode->NodeGuid;
 						FDabExprPtr Condition = ExtractRule(Ctx, ConduitNode->BoundGraph.Get(), MachineName + TEXT("/") + Conduit.Name);
 						if (Condition.IsValid() && !IsLiteralTrue(*Condition))
 						{
@@ -987,6 +991,7 @@ namespace UE::DreamAnim::Compiler::ExtractPrivate
 					{
 						Model::FDabModelAlias Alias;
 						Alias.Name = AliasNode->StateAliasName;
+						Alias.Guid = AliasNode->NodeGuid;
 						Alias.bGlobal = AliasNode->bGlobalAlias;
 						if (!Alias.bGlobal)
 						{

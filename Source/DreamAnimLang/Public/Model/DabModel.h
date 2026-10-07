@@ -93,6 +93,8 @@ namespace UE::DreamAnim::Model
 		 * extractor chose. Only used to link nodes and to derive GUIDs; comparisons ignore it.
 		 */
 		FString Id;
+		/** The editor node's NodeGuid, set by the extractor; write-back matches nodes by it. Comparisons ignore it. */
+		FGuid Guid;
 		/** The editor node class without its U prefix: `AnimGraphNode_TwoWayBlend`, `AlsAnimGraphNode_GameplayTagsBlend`. */
 		FString ClassName;
 		/** Non-default values: fields of the runtime node struct (FAnimNode_*) and properties of the editor node (`Tag`). */
@@ -132,6 +134,8 @@ namespace UE::DreamAnim::Model
 	struct FDabModelState
 	{
 		FString Name;
+		/** The editor node's NodeGuid, set by the extractor; write-back matches nodes by it. Comparisons ignore it. */
+		FGuid Guid;
 		/** Properties of the state node: `bAlwaysResetOnEntry`, notification events. */
 		TArray<FDabModelProperty> Properties;
 		TOptional<FDabModelCall> OnEnter;
@@ -143,6 +147,8 @@ namespace UE::DreamAnim::Model
 	struct FDabModelConduit
 	{
 		FString Name;
+		/** The editor node's NodeGuid, set by the extractor; write-back matches nodes by it. Comparisons ignore it. */
+		FGuid Guid;
 		/** Null means `true`. */
 		Lang::FDabExprPtr Condition;
 	};
@@ -150,6 +156,8 @@ namespace UE::DreamAnim::Model
 	struct FDabModelAlias
 	{
 		FString Name;
+		/** The editor node's NodeGuid, set by the extractor; write-back matches nodes by it. Comparisons ignore it. */
+		FGuid Guid;
 		bool bGlobal = false;
 		TArray<FString> States;
 	};
@@ -166,6 +174,8 @@ namespace UE::DreamAnim::Model
 	{
 		FString From;
 		FString To;
+		/** The editor node's NodeGuid, set by the extractor; write-back matches nodes by it. Comparisons ignore it. */
+		FGuid Guid;
 		EDabConditionKind ConditionKind = EDabConditionKind::Expression;
 		Lang::FDabExprPtr Condition;
 		/** The shared rule this transition uses, when its rule graph is shared (the text's `Rules` entry). */

@@ -58,7 +58,11 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 
 	FGuid FDabGenContext::MakeGuid(const FString& Key) const
 	{
-		const FString Full = Model.AssetPath + TEXT("/") + Key;
+		return DabGenHashGuid(Model.AssetPath + TEXT("/") + Key);
+	}
+
+	FGuid DabGenHashGuid(const FString& Full)
+	{
 		const FTCHARToUTF8 Utf8(*Full);
 		FMD5 Md5;
 		Md5.Update(reinterpret_cast<const uint8*>(Utf8.Get()), Utf8.Length());
@@ -712,6 +716,11 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 
 namespace UE::DreamAnim::Compiler
 {
+	FGuid MakeDabNodeGuid(const FString& AssetPath, const FString& GraphPath, const FString& Id)
+	{
+		return GeneratePrivate::DabGenHashGuid(AssetPath + TEXT("/") + GraphPath + TEXT("/") + Id);
+	}
+
 	FDabGenerateResult GenerateDabBlueprint(const Model::FDabModel& Model, Lang::FDabDiagnosticSink& Sink, const FDabGenerateOptions& Options)
 	{
 		return GeneratePrivate::DabGenGenerate(Model, Sink, Options);
