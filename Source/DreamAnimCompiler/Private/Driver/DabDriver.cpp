@@ -150,6 +150,7 @@ namespace UE::DreamAnim::Compiler
 			FDabGenerateOptions GenerateOptions;
 			GenerateOptions.bSave = Options.bSave;
 			GenerateOptions.OverridePackageName = Options.OverridePackageName;
+			GenerateOptions.SourceText = Text;
 			Lang::FDabDiagnosticSink Sink(Result.FilePath);
 			const FDabGenerateResult Generated = GenerateDabBlueprint(Result.Model, Sink, GenerateOptions);
 			DriverPrivate::AppendCompileDiagnostics(Result, Sink);

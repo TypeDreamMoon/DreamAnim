@@ -23,7 +23,17 @@ namespace UE::DreamAnim::Compiler
 		 * `/Game/DreamAnimTests/AB_Copy`). The round-trip tests regenerate next to the original this way.
 		 */
 		FString OverridePackageName;
+		/** The source the model was compiled from, kept with the asset (GetDabGeneratedText). */
+		FString SourceText;
 	};
+
+	/**
+	 * The source text a Blueprint was last generated from or written back to, kept in its package's
+	 * metadata; empty for a Blueprint not made from text. While the file still holds this text, the two
+	 * agree; it is the common base when both changed.
+	 */
+	DREAMANIMCOMPILER_API FString GetDabGeneratedText(const UAnimBlueprint& Blueprint);
+	DREAMANIMCOMPILER_API void SetDabGeneratedText(UAnimBlueprint& Blueprint, const FString& Text);
 
 	struct FDabGenerateResult
 	{

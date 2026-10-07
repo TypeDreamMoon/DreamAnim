@@ -36,6 +36,7 @@
 #include "Logging/TokenizedMessage.h"
 #include "Misc/PackageName.h"
 #include "Misc/SecureHash.h"
+#include "UObject/MetaData.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "UObject/UnrealType.h"
@@ -705,6 +706,10 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 		}
 
 		const bool bModelClean = Sink.NumErrors() == ErrorsBefore;
+		if (!Options.SourceText.IsEmpty())
+		{
+			SetDabGeneratedText(*Blueprint, Options.SourceText);
+		}
 		if (Options.bSave && bModelClean && Result.CompilerErrors.IsEmpty())
 		{
 			DabGenSave(Blueprint, Sink);
@@ -724,6 +729,19 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 
 namespace UE::DreamAnim::Compiler
 {
+	static const TCHAR* const DabGeneratedTextKey = TEXT("DreamAnim.Source");
+
+	FString GetDabGeneratedText(const UAnimBlueprint& Blueprint)
+	{
+		const FString* Text = Blueprint.GetPackage()->GetMetaData().FindValue(&Blueprint, DabGeneratedTextKey);
+		return Text ? *Text : FString();
+	}
+
+	void SetDabGeneratedText(UAnimBlueprint& Blueprint, const FString& Text)
+	{
+		Blueprint.GetPackage()->GetMetaData().SetValue(&Blueprint, DabGeneratedTextKey, *Text);
+	}
+
 	FGuid MakeDabNodeGuid(const FString& AssetPath, const FString& GraphPath, const FString& Id)
 	{
 		return GeneratePrivate::DabGenHashGuid(AssetPath + TEXT("/") + GraphPath + TEXT("/") + Id);
