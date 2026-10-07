@@ -2,22 +2,59 @@
 #
 # DreamAnim command line.
 #
-#   dab.ps1 build                 build the test host's editor target
+#   dab.ps1 make                  build the test host's editor target (the C++)
 #   dab.ps1 test [-Preset P] [-Filter F] [-NoBuild]
-#                                 build, then run the automation tests headless in the test host
+#                                 make, then run the automation tests headless in the test host
 #
-# Results land in <host>/Saved/DreamAnimTests/<time>-<preset>/: the engine's index.json, the run log
-# and summary.md. Exit code: 0 green, 1 red (a test failed or an ensure fired), 2 not judged (the
-# build failed, the editor crashed or timed out, or fewer tests ran than the preset expects).
+#   dab.ps1 build [-File F] [-Root R] [-NoSave] [-Json J]
+#                                 compile the .dab/.dai sources into Animation Blueprint assets and save them
+#   dab.ps1 check [-File F] [-Root R] [-Json J]
+#                                 parse, includes, templates and semantic only; nothing is generated
+#   dab.ps1 fmt [-File F] [-Root R] [-Write | -Verify] [-Json J]
+#                                 print the canonical text; -Write rewrites the files that differ (keeping
+#                                 their line ends); -Verify writes nothing and fails on any file not canonical
+#   dab.ps1 decompile (-Asset A[,B] | -Under /Game/Folder) [-Out O] [-Stdout] [-Force] [-Json J]
+#                                 Animation Blueprints to text, below the project's DAnim/ unless -Out;
+#                                 a file that exists and differs is only replaced with -Force
+#
+# build, check, fmt and decompile run `UnrealEditor-Cmd <project> -run=DreamAnim` on -Project, else the
+# project above -File, else the test host, and keep the lines that matter: diagnostics
+# (`<file>(<line>,<col>): error DABnnnn: ...`), the summary, errors and crashes (-Raw shows everything).
+# -File is a source (absolute, relative to the current directory, or relative to the project directory);
+# a .dat stands for the documents that include it. -Root replaces the project's and the enabled plugins'
+# DAnim/ folders. -Out and -Json are relative to the project directory. -Json writes every diagnostic as
+# JSON for the VS Code extension. fmt and decompile -Stdout print the text on the output stream and their
+# status lines on the host. The engine log of each run is kept in <project>/Saved/DreamAnim/.
+# A build writes packages: close any editor that has the project open.
+#
+# Exit codes
+#   make: 0 built, 2 failed.
+#   test: 0 green, 1 red (a test failed or an ensure fired), 2 not judged (the build failed, the editor
+#         crashed or timed out, or fewer tests ran than the preset expects). Results land in
+#         <host>/Saved/DreamAnimTests/<time>-<preset>/: the engine's index.json, the run log and summary.md.
+#   build, check, fmt, decompile: 0 no errors, 1 errors (fmt -Verify: a file not canonical), 2 the
+#         commandlet did not finish (it crashed, timed out, or never printed its summary).
 
 [CmdletBinding()]
 param(
-    [Parameter(Position = 0)][ValidateSet('build', 'test')][string]$Command = 'test',
+    [Parameter(Position = 0)][ValidateSet('make', 'test', 'build', 'check', 'fmt', 'decompile')][string]$Command = 'test',
     [ValidateSet('Quick', 'All')][string]$Preset = 'Quick',
     [string]$Filter,
     [switch]$NoBuild,
     [string]$Project,
-    [int]$TimeoutMinutes = 0
+    [int]$TimeoutMinutes = 0,
+    [string]$File,
+    [string[]]$Root,
+    [switch]$Write,
+    [switch]$Verify,
+    [string[]]$Asset,
+    [string]$Under,
+    [string]$Out,
+    [switch]$Stdout,
+    [string]$Json,
+    [switch]$NoSave,
+    [switch]$Force,
+    [switch]$Raw
 )
 
 $ErrorActionPreference = 'Stop'
@@ -42,15 +79,40 @@ function Find-HostProject {
     throw 'No test host found. Create it with Tools/TestHost/New-DreamAnimTestHost.ps1, or pass -Project.'
 }
 
+function Find-ProjectAbove([string]$Path) {
+    $dir = Split-Path -Parent $Path
+    while ($dir) {
+        $found = Get-ChildItem -LiteralPath $dir -Filter '*.uproject' -File -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($found) { return $found.FullName }
+        $parent = Split-Path -Parent $dir
+        if ($parent -eq $dir) { break }
+        $dir = $parent
+    }
+    return $null
+}
+
 function Resolve-EngineRoot([string]$UProject) {
     $assoc = (Get-Content -LiteralPath $UProject -Raw | ConvertFrom-Json).EngineAssociation
     $builds = Get-ItemProperty 'HKCU:\Software\Epic Games\Unreal Engine\Builds' -ErrorAction SilentlyContinue
     $root = if ($builds) { $builds.$assoc } else { $null }
+    if (-not $root) {
+        # A launcher install of another project's engine.
+        $launcher = Get-ItemProperty "HKLM:\SOFTWARE\EpicGames\Unreal Engine\$assoc" -ErrorAction SilentlyContinue
+        if ($launcher) { $root = $launcher.InstalledDirectory }
+    }
     if (-not $root) { throw "Engine association $assoc is not registered." }
     return $root.Replace('/', '\')
 }
 
-$uproject = Find-HostProject
+# -File relative to the current directory, when it names a file there; else as given (the commandlet
+# reads it relative to the project directory).
+$sourceFile = $File
+if ($File -and (Test-Path -LiteralPath $File -PathType Leaf)) { $sourceFile = (Resolve-Path -LiteralPath $File).Path }
+
+$uproject = if ($Command -in 'make', 'test') { Find-HostProject }
+elseif ($Project) { (Resolve-Path $Project).Path }
+elseif ($sourceFile -and [IO.Path]::IsPathRooted($sourceFile) -and (Find-ProjectAbove $sourceFile)) { Find-ProjectAbove $sourceFile }
+else { Find-HostProject }
 $projectDir = Split-Path $uproject
 $hostName = [IO.Path]::GetFileNameWithoutExtension($uproject)
 $engineRoot = Resolve-EngineRoot $uproject
@@ -164,10 +226,126 @@ function Invoke-Tests {
     return (Get-Digest -RunDir $runDir -Floor $spec.MinTests -TimedOut $timedOut -ExitCode $exitCode -Seconds $watch.Elapsed.TotalSeconds)
 }
 
+# ---------------------------------------------------------------- build / check / fmt / decompile
+
+function Get-EditorsOnProject([string]$UProject) {
+    # Every UnrealEditor*.exe whose command line names this .uproject.
+    $needle = $UProject.Replace('/', '\').ToLowerInvariant()
+    foreach ($p in @(Get-CimInstance -ClassName Win32_Process -Filter "Name LIKE 'UnrealEditor%'" -ErrorAction SilentlyContinue)) {
+        $line = [string]$p.CommandLine
+        if ($line -and $line.Replace('/', '\').ToLowerInvariant().Contains($needle)) { $p }
+    }
+}
+
+function Format-Switch([string]$Name, [string]$Value) {
+    # One argument of the command line, quoted. A value may not end in a backslash (the C runtime reads \"
+    # as a quote) nor hold a quote.
+    if ($Value.Contains('"')) { throw "-$Name may not hold a quote: $Value" }
+    return "-$Name=`"$($Value.TrimEnd('\'))`""
+}
+
+$script:CommandletExit = 2
+
+function Invoke-Commandlet {
+    $arguments = @()
+    switch ($Command) {
+        'check' { $arguments += '-Check' }
+        'fmt' { $arguments += '-Format' }
+        'decompile' { $arguments += '-Decompile' }
+    }
+    if ($sourceFile) { $arguments += Format-Switch 'File' $sourceFile }
+    if ($Root) { $arguments += Format-Switch 'Root' (($Root | ForEach-Object { $_.TrimEnd('\') }) -join ',') }
+    if ($Write) { $arguments += '-Write' }
+    if ($Verify) { $arguments += '-Verify' }
+    foreach ($a in @($Asset)) { if ($a) { $arguments += Format-Switch 'Asset' $a } }
+    if ($Under) { $arguments += Format-Switch 'Under' $Under }
+    if ($Out) { $arguments += Format-Switch 'Out' $Out }
+    if ($Stdout) { $arguments += '-Stdout' }
+    if ($Json) { $arguments += Format-Switch 'Json' $Json }
+    if ($NoSave) { $arguments += '-NoSave' }
+    if ($Force) { $arguments += '-Force' }
+
+    $writesAssets = $Command -eq 'build'
+    if ($writesAssets -and @(Get-EditorsOnProject $uproject).Count -gt 0) {
+        Write-Problem "An editor has $uproject open; a build that saves packages will fight it over them."
+    }
+
+    $runDir = Join-Path $projectDir 'Saved\DreamAnim'
+    New-Item -ItemType Directory -Force -Path $runDir | Out-Null
+    $stamp = '{0}-{1}' -f $Command, (Get-Date -Format 'yyyyMMdd-HHmmss')
+    $log = Join-Path $runDir "$stamp.log"
+    $stdoutFile = Join-Path $runDir "$stamp.stdout.txt"
+    $stderrFile = Join-Path $runDir "$stamp.stderr.txt"
+    # The log goes to a file, not to stdout: the engine's own -stdout switch is also the commandlet's
+    # "print the decompiled text" switch, and stdout carries only the text this way.
+    $parts = @("`"$uproject`"", '-run=DreamAnim') + $arguments + @(
+        "-abslog=`"$log`"", '-unattended', '-nopause', '-nosplash', '-NoSound', '-nullrhi', '-NoLiveCoding')
+    $argLine = $parts -join ' '
+    Write-Verbose "`"$editorCmd`" $argLine"
+
+    $proc = Start-Process -FilePath $editorCmd -ArgumentList $argLine -WorkingDirectory $projectDir -NoNewWindow -PassThru `
+        -RedirectStandardOutput $stdoutFile -RedirectStandardError $stderrFile
+    $null = $proc.Handle
+    $timedOut = $false
+    $limit = if ($TimeoutMinutes -gt 0) { $TimeoutMinutes * 60 * 1000 } else { -1 }
+    if (-not $proc.WaitForExit($limit)) {
+        $timedOut = $true
+        try { $proc.Kill($true) } catch { }
+        $null = $proc.WaitForExit(60000)
+    }
+    $exitCode = if ($timedOut) { $null } else { $proc.ExitCode }
+
+    $stdoutLines = if (Test-Path -LiteralPath $stdoutFile) { @(Get-Content -LiteralPath $stdoutFile -Encoding utf8) } else { @() }
+    $logLines = if (Test-Path -LiteralPath $log) { @(Get-Content -LiteralPath $log -Encoding utf8) } else { @() }
+
+    # fmt and decompile -Stdout print text: that goes on the output stream, everything else on the host.
+    $printsText = ($Command -eq 'fmt' -and -not $Write -and -not $Verify) -or ($Command -eq 'decompile' -and $Stdout)
+    $status = if ($printsText) { { param($Line) Write-Host $Line } } else { { param($Line) Write-Output $Line } }
+
+    if ($Raw) {
+        $stdoutLines | ForEach-Object { Write-Output $_ }
+        $logLines | ForEach-Object { & $status $_ }
+    } else {
+        # The text blocks, between the commandlet's markers; a single one without them.
+        $blocks = [Collections.Generic.List[object]]::new()
+        $current = $null
+        foreach ($line in $stdoutLines) {
+            if ($line -match '^===== begin (.*) =====$') { $current = [pscustomobject]@{ Name = $Matches[1]; Lines = [Collections.Generic.List[string]]::new() }; continue }
+            if ($line -match '^===== end (.*) =====$') { if ($current) { $blocks.Add($current); $current = $null }; continue }
+            if ($current) { $current.Lines.Add($line) }
+        }
+        foreach ($block in $blocks) {
+            if ($blocks.Count -gt 1) { Write-Output "===== begin $($block.Name) =====" }
+            $block.Lines | ForEach-Object { Write-Output $_ }
+            if ($blocks.Count -gt 1) { Write-Output "===== end $($block.Name) =====" }
+        }
+
+        # The commandlet's own lines in full; from the rest of the engine only errors and crashes.
+        foreach ($line in $logLines) {
+            $clean = ($line -replace '^\[[^\]]*\]\[\s*\d+\]', '').TrimEnd()
+            if ($clean -match '^LogDreamAnimCommandlet: (?:(?:Display|Warning|Error|Log): )?(.*)$') { & $status $Matches[1]; continue }
+            if ($clean -match '=== Critical error|Fatal error|Unhandled Exception|Assertion failed|: Error: |DAB\d{4}') { & $status $clean }
+        }
+    }
+
+    $crashed = @($logLines + $stdoutLines | Where-Object { $_ -match '=== Critical error: ===|Fatal error!|Unhandled Exception|Assertion failed:' }).Count -gt 0
+    $finished = @($logLines | Where-Object { $_ -match 'LogDreamAnimCommandlet: (?:Display: )?DreamAnim( \w+)?: ' }).Count -gt 0
+    $script:CommandletExit = 0
+    if ($timedOut) { Write-Problem "Still running after $TimeoutMinutes minutes: the editor was killed. Log: $log"; $script:CommandletExit = 2 }
+    elseif ($crashed) { Write-Problem "The editor crashed. Log: $log"; $script:CommandletExit = 2 }
+    elseif (-not $finished) { Write-Problem "The commandlet did not finish (exit $exitCode). Log: $log"; $script:CommandletExit = 2 }
+    elseif ($exitCode -ne 0) { $script:CommandletExit = 1 }
+}
+
 switch ($Command) {
-    'build' { if (Invoke-Build) { exit 0 } else { exit 2 } }
+    'make' { if (Invoke-Build) { exit 0 } else { exit 2 } }
     'test' {
         if (-not $NoBuild) { if (-not (Invoke-Build)) { exit 2 } }
         exit (Invoke-Tests)
+    }
+    default {
+        # The function writes its lines to the output stream; its verdict comes back through a variable.
+        Invoke-Commandlet
+        exit $script:CommandletExit
     }
 }
