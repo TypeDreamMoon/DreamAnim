@@ -305,7 +305,8 @@ namespace UE::DreamAnim::Compiler::CommandletPrivate
 		{
 			for (const FDabSourceEntry& Entry : Index.GetEntries())
 			{
-				if (Lang::GetDabFileKindFromPath(Entry.FilePath) != Lang::EDabFileKind::Templates)
+				// A library is read through the documents that include it, or on its own when none does.
+				if (Lang::GetDabFileKindFromPath(Entry.FilePath) != Lang::EDabFileKind::Templates || Index.FindDependents(Entry.FilePath).IsEmpty())
 				{
 					OutFiles.Add(Entry.FilePath);
 				}
@@ -328,7 +329,16 @@ namespace UE::DreamAnim::Compiler::CommandletPrivate
 		{
 			// A library makes nothing itself; a change to it is a change to every document that includes it.
 			OutFiles = Index.FindDependents(Path);
-			UE_LOG(LogDreamAnimCommandlet, Display, TEXT("%s is a template library; %d document(s) under the roots include it."), *Path, OutFiles.Num());
+			if (OutFiles.IsEmpty())
+			{
+				// Still read on its own, so a mistake in it shows before anything includes it.
+				UE_LOG(LogDreamAnimCommandlet, Display, TEXT("%s is a template library no document under the roots includes; it is checked on its own."), *Path);
+				OutFiles.Add(Path);
+			}
+			else
+			{
+				UE_LOG(LogDreamAnimCommandlet, Display, TEXT("%s is a template library; %d document(s) under the roots include it."), *Path, OutFiles.Num());
+			}
 			return true;
 		}
 		OutFiles.Add(Path);

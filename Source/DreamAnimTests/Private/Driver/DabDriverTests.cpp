@@ -279,6 +279,14 @@ namespace UE::DreamAnim::Tests::DriverTests
 			TestFalse(TEXT("and nothing more about the call"), Result.Diagnostics.ContainsByPredicate([](const FDabDiagnostic& Diagnostic) { return Diagnostic.Code == TEXT("DAB3001"); }));
 		}
 
+		// A library on its own: its syntax and templates are checked, and that it builds nothing is no error.
+		{
+			const FDabCompileResult Good = CompileDabFile(Library, Options);
+			TestEqual(TEXT("a sound library alone has no errors"), Good.NumErrors, 0);
+			const FDabCompileResult Broken = CompileDabFile(BrokenLibrary, Options);
+			TestTrue(TEXT("a broken library alone reports its error"), Broken.Diagnostics.ContainsByPredicate([](const FDabDiagnostic& Diagnostic) { return Diagnostic.Code == TEXT("DAB2001"); }));
+		}
+
 		// A file that is not there.
 		{
 			const FDabCompileResult Result = CompileDabFile(Dir / TEXT("Missing.dab"), Options);

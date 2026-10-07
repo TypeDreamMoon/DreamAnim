@@ -136,6 +136,11 @@ namespace UE::DreamAnim::Compiler
 			Lang::ExpandDabTemplates(Unit, Sink);
 			DriverPrivate::AppendCompileDiagnostics(Result, Sink);
 		}
+		// A template library is checked as far as it can be alone: its syntax, its includes and its templates.
+		if (Unit.Main && Unit.Main->Document && Unit.Main->Document->DocumentKind == Lang::EDabDocumentKind::AnimTemplates)
+		{
+			return Result;
+		}
 		{
 			FDabSemanticOptions SemanticOptions;
 			SemanticOptions.Provenance = Options.Provenance;
