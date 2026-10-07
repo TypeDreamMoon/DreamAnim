@@ -62,7 +62,7 @@ class DREAMANIM_API UDreamAnimSet : public UPrimaryDataAsset
 	GENERATED_BODY()
 
 public:
-	/** The skeleton every animation in the set must use. The editor filters pickers by it and warns on a mismatch. */
+	/** The skeleton every animation in the set must use. The editor offers only animations of this skeleton in its pickers. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Anim Set")
 	TObjectPtr<USkeleton> Skeleton;
 
