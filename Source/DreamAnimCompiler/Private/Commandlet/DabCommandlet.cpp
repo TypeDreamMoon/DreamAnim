@@ -524,6 +524,8 @@ namespace UE::DreamAnim::Compiler::CommandletPrivate
 		Options.bGenerate = bBuild;
 		Options.bSave = !Run.bNoSave;
 		Options.IncludeRoots = Run.Roots;
+		// A source may name a Blueprint another one makes before that one is built.
+		Options.ResolveDreamAnimAsset = [&Index](const FString& AssetName) { return Index.FindByAssetName(AssetName); };
 
 		int32 NumGenerated = 0;
 		for (const FString& File : Files)

@@ -51,6 +51,12 @@ namespace UE::DreamAnim::Compiler
 		const FDabSourceEntry* FindByAsset(const FString& AssetPath) const;
 		/** The documents that include FilePath, directly or through other libraries: what a .dat change rebuilds. */
 		TArray<FString> FindDependents(const FString& FilePath) const;
+		/**
+		 * The object path of the asset a source makes, by its bare asset name (`AB_Als_Standing`); empty when
+		 * no source or more than one makes an asset of that name. What FDabCompileOptions::ResolveDreamAnimAsset
+		 * wants, so a source can name a Blueprint another one has not generated yet.
+		 */
+		FString FindByAssetName(const FString& AssetName) const;
 
 		const TArray<FDabSourceEntry>& GetEntries() const { return Entries; }
 		const TArray<FString>& GetRoots() const { return Roots; }
@@ -72,6 +78,8 @@ namespace UE::DreamAnim::Compiler
 		FString OverridePackageName;
 		/** Filled with where the model's parts came from (passed to BuildDabModel); write-back needs it. */
 		FDabProvenance* Provenance = nullptr;
+		/** Finds assets other sources make by their bare names, before the asset registry (see FDabSourceIndex::FindByAssetName). */
+		TFunction<FString(const FString& AssetName)> ResolveDreamAnimAsset;
 	};
 
 	/** Everything one compile produced. Move-only: it holds the syntax trees. */

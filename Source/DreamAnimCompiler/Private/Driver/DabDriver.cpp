@@ -139,6 +139,7 @@ namespace UE::DreamAnim::Compiler
 		{
 			FDabSemanticOptions SemanticOptions;
 			SemanticOptions.Provenance = Options.Provenance;
+			SemanticOptions.ResolveDreamAnimAsset = Options.ResolveDreamAnimAsset;
 			Lang::FDabDiagnosticSink Sink(Result.FilePath);
 			BuildDabModel(Unit, Result.Model, Sink, SemanticOptions);
 			DriverPrivate::AppendCompileDiagnostics(Result, Sink);

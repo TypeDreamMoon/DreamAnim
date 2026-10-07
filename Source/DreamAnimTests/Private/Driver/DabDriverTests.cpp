@@ -166,6 +166,8 @@ namespace UE::DreamAnim::Tests::DriverTests
 		const FDabSourceEntry* OtherByAsset = Index.FindByAsset(TEXT("/DreamAnimDriverTest/Driver/AB_Other"));
 		TestTrue(TEXT("a plugin root is the plugin's mount"), OtherByAsset && OtherByAsset->FilePath == Other);
 		TestNull(TEXT("an asset no source makes"), Index.FindByAsset(TEXT("/Game/DreamAnimTests/Driver/AB_Nobody")));
+		TestEqualSensitive(TEXT("by bare asset name"), Index.FindByAssetName(TEXT("AB_Hero")), FString(TEXT("/Game/DreamAnimTests/Driver/AB_Hero.AB_Hero")));
+		TestTrue(TEXT("no source makes an asset of that name"), Index.FindByAssetName(TEXT("AB_Nobody")).IsEmpty());
 
 		// An edit: the include goes and the asset is renamed.
 		WriteDriverFile(*this, Hero, TEXT("AnimBlueprint(Name=\"DreamAnimTests/Driver/AB_Hero2\") { Graph = { Output = LocalRefPose(); } }\n"));

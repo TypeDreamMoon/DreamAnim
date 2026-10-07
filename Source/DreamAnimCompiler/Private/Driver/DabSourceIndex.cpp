@@ -304,6 +304,25 @@ namespace UE::DreamAnim::Compiler
 		});
 	}
 
+	FString FDabSourceIndex::FindByAssetName(const FString& AssetName) const
+	{
+		FString Found;
+		for (const FDabSourceEntry& Entry : Entries)
+		{
+			FString Name;
+			if (Entry.AssetPath.Split(TEXT("."), nullptr, &Name, ESearchCase::CaseSensitive, ESearchDir::FromEnd) && Name.Equals(AssetName, ESearchCase::IgnoreCase))
+			{
+				if (!Found.IsEmpty())
+				{
+					// Two sources make assets of that name: the text has to say which with Path(...).
+					return FString();
+				}
+				Found = Entry.AssetPath;
+			}
+		}
+		return Found;
+	}
+
 	TArray<FString> FDabSourceIndex::FindDependents(const FString& FilePath) const
 	{
 		const FString Start = DriverPrivate::NormalizeDabPath(FilePath);
