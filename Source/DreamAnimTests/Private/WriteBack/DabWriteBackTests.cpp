@@ -11,7 +11,10 @@
 #include "AnimGraphNode_Root.h"
 #include "AnimGraphNode_SequencePlayer.h"
 #include "AnimGraphNode_Slot.h"
+#include "AnimGraphNode_StateMachine.h"
+#include "AnimStateEntryNode.h"
 #include "AnimGraphNode_StateMachineBase.h"
+#include "AnimGraphNode_TwoWayBlend.h"
 #include "AnimGraphNode_StateResult.h"
 #include "AnimGraphNode_TransitionResult.h"
 #include "AnimStateNode.h"
@@ -531,6 +534,70 @@ namespace UE::DreamAnim::Tests::WriteBackTests
 				TestTrue(TEXT("the slot is in the graph"), Result.Text.Contains(TEXT("Slot(")));
 				TestTrue(TEXT("the graph's comment stays"), Result.Text.Contains(TEXT("// Everything comes out of the machine.")));
 				TestTrue(TEXT("the machine is untouched"), Result.Text.Contains(TEXT("Pose = SequencePlayer(Sequence = A_Als_Idle, PlayRate = 1.2);")));
+			}
+		}
+
+		// A whole new state machine dragged in, blended with the one there.
+		if (UAnimBlueprint* Blueprint = Generate(*this, TEXT("AddMachine")))
+		{
+			UEdGraph* AnimGraph = nullptr;
+			for (UEdGraph* Graph : Blueprint->FunctionGraphs)
+			{
+				if (Graph && Graph->GetFName() == UEdGraphSchema_K2::GN_AnimGraph)
+				{
+					AnimGraph = Graph;
+				}
+			}
+			UAnimGraphNode_Root* Root = FindInGraph<UAnimGraphNode_Root>(AnimGraph);
+			UAnimGraphNode_StateMachineBase* Locomotion = FindInGraph<UAnimGraphNode_StateMachineBase>(AnimGraph);
+			UAnimSequenceBase* Stand = LoadSequence(TEXT("A_Als_Stand_Pose"));
+			if (TestNotNull(TEXT("the output"), Root) && TestNotNull(TEXT("the machine node"), Locomotion) && TestNotNull(TEXT("the stand pose"), Stand))
+			{
+				FGraphNodeCreator<UAnimGraphNode_StateMachine> MachineCreator(*AnimGraph);
+				UAnimGraphNode_StateMachine* Machine = MachineCreator.CreateNode(false);
+				MachineCreator.Finalize();
+				Machine->OnRenameNode(TEXT("Upper"));
+				UAnimationStateMachineGraph* MachineGraph = Machine->EditorStateMachineGraph;
+
+				FGraphNodeCreator<UAnimStateNode> StateCreator(*MachineGraph);
+				UAnimStateNode* State = StateCreator.CreateNode(false);
+				StateCreator.Finalize();
+				State->OnRenameNode(TEXT("Hold"));
+				MachineGraph->EntryNode->GetOutputPin()->MakeLinkTo(State->GetInputPin());
+
+				UAnimationStateGraph* StateGraph = Cast<UAnimationStateGraph>(State->BoundGraph);
+				FGraphNodeCreator<UAnimGraphNode_SequencePlayer> PlayerCreator(*StateGraph);
+				UAnimGraphNode_SequencePlayer* Player = PlayerCreator.CreateNode(false);
+				PlayerCreator.Finalize();
+				SetNodeField(*this, *Player, TEXT("Sequence"), FString(), Stand);
+				StateGraph->GetSchema()->TryCreateConnection(FindPosePin(*Player, EGPD_Output), FindPosePin(*StateGraph->GetResultNode(), EGPD_Input));
+
+				FGraphNodeCreator<UAnimGraphNode_TwoWayBlend> BlendCreator(*AnimGraph);
+				UAnimGraphNode_TwoWayBlend* Blend = BlendCreator.CreateNode(false);
+				BlendCreator.Finalize();
+				UEdGraphPin* RootInput = FindPosePin(*Root, EGPD_Input);
+				RootInput->BreakAllPinLinks();
+				const UEdGraphSchema* Schema = AnimGraph->GetSchema();
+				TArray<UEdGraphPin*> BlendInputs;
+				for (UEdGraphPin* Pin : Blend->Pins)
+				{
+					if (Pin->Direction == EGPD_Input && UAnimationGraphSchema::IsPosePin(Pin->PinType))
+					{
+						BlendInputs.Add(Pin);
+					}
+				}
+				if (TestEqual(TEXT("a two-way blend has two poses"), BlendInputs.Num(), 2))
+				{
+					Schema->TryCreateConnection(FindPosePin(*Locomotion, EGPD_Output), BlendInputs[0]);
+					Schema->TryCreateConnection(FindPosePin(*Machine, EGPD_Output), BlendInputs[1]);
+					Schema->TryCreateConnection(FindPosePin(*Blend, EGPD_Output), RootInput);
+
+					const FDabWriteBackResult Result = WriteBack(*Blueprint);
+					ExpectWritten(*this, TEXT("AddMachine"), Result);
+					TestTrue(TEXT("the new machine is in the text"), Result.Text.Contains(TEXT("StateMachine Upper")) && Result.Text.Contains(TEXT("State Hold")));
+					TestTrue(TEXT("the output blends both"), Result.Text.Contains(TEXT("TwoWayBlend(")) && Result.Text.Contains(TEXT("Upper")));
+					TestTrue(TEXT("the first machine is untouched"), Result.Text.Contains(TEXT("Pose = SequencePlayer(Sequence = A_Als_Idle, PlayRate = 1.2);")));
+				}
 			}
 		}
 		return true;
