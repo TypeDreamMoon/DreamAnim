@@ -668,6 +668,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		FGraphScope Scope;
 		Scope.Graph = &Graph;
 		Scope.Location = Location;
+		Scope.GraphPath = CurrentGraphPath;
 
 		const FDabAssignStmt* Result = nullptr;
 		for (const FDabStmtPtr& Statement : Statements)
@@ -733,6 +734,10 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 			Def.Stmt = Assign;
 			Def.bCached = IsSemanticCachedPose(*Assign);
 			Scope.Poses.Add(Assign->Name, Def);
+			if (Options.Provenance)
+			{
+				Options.Provenance->NamedPoses.Add(Scope.GraphPath + TEXT("/") + Assign->Name, Assign);
+			}
 			Scope.PoseOrder.Add(Assign->Name);
 		}
 
@@ -797,6 +802,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		FGraphScope Scope;
 		Scope.Graph = &Graph;
 		Scope.Location = Location;
+		Scope.GraphPath = CurrentGraphPath;
 		Graph.ResultNodeId = BuildPose(Value, Scope, TEXT("Output"), nullptr);
 		// `Layer X = Pose;` has no room for `Inputs`: its inputs are in the order they are written.
 		TArray<FString> Written;
@@ -1168,7 +1174,24 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 			Sink.Error(TEXT("DAB3001"), Callee->Span, FString::Printf(TEXT("The node class behind `%s` is not loaded."), *TypeName));
 			return FString();
 		}
-		return BuildAnimNode(Request, Scope, IdHint, Feed);
+		const FString Id = BuildAnimNode(Request, Scope, IdHint, Feed);
+		if (Options.Provenance && !Id.IsEmpty())
+		{
+			FDabProvenance::FNodeOrigin Origin;
+			Origin.Call = &Call;
+			if (const FDabModelNode* Node = Feed ? FindNodeMutable(Scope, Id) : nullptr)
+			{
+				for (const FDabModelPoseLink& Link : Node->PoseInputs)
+				{
+					if (Link.SourceNodeId == *Feed)
+					{
+						Origin.FedPin = Link.PinName;
+					}
+				}
+			}
+			Options.Provenance->Nodes.Add(Scope.GraphPath + TEXT("/") + Id, MoveTemp(Origin));
+		}
+		return Id;
 	}
 
 	FString FSemantic::BuildAnimNode(FNodeRequest& Request, FGraphScope& Scope, const FString& IdHint, const FString* Feed)
@@ -1923,6 +1946,10 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		FDabModelStateMachine Machine;
 		Machine.Name = Stmt.Name;
 		const FString Location = FString::Printf(TEXT("StateMachine %s"), *Stmt.Name);
+		if (Options.Provenance)
+		{
+			Options.Provenance->Machines.Add(Stmt.Name, &Stmt);
+		}
 
 		// The machine node's settings: its runtime struct first, then the editor node (Tag).
 		if (const FNodeShape* Shape = GetShape(FindNodeClassByName(TEXT("AnimGraphNode_StateMachine"))))
@@ -1986,6 +2013,10 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 					else
 					{
 						Members.Add(Named->Name, MemberKind);
+						if (Options.Provenance)
+						{
+							Options.Provenance->States.Add(Stmt.Name + TEXT("/") + Named->Name, Named);
+						}
 					}
 				}
 				continue;
@@ -2038,6 +2069,10 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 						continue;
 					}
 					Rules.Statements.Add(Rule->Name, Rule);
+					if (Options.Provenance)
+					{
+						Options.Provenance->Rules.Add(Stmt.Name + TEXT("/") + Rule->Name, Rule);
+					}
 				}
 				for (const TPair<FString, const FDabAssignStmt*>& Rule : Rules.Statements)
 				{
@@ -2183,6 +2218,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 					Slot = MoveTemp(Call);
 				}
 			}
+			CurrentGraphPath = FString::Printf(TEXT("Machine/%s/State/%s"), *MachineName, *Stmt.Name);
 			BuildGraph(Stmt.Body->Statements, OutState.Graph, Location, TEXT("Pose"), StateReserved, Stmt.NameSpan);
 		}
 		else if (Stmt.Value)
@@ -2199,6 +2235,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 	void FSemantic::ReadTransitions(const FDabBlockExpr& Block, const FString& MachineName, const TMap<FString, int32>& Members, FRuleSet& Rules,
 		FDabModelStateMachine& Machine)
 	{
+		TMap<FString, int32> PairCounts;
 		for (const FDabStmtPtr& Statement : Block.Statements)
 		{
 			if (!Statement || Statement->Is<FDabRegionStmt>())
@@ -2215,6 +2252,12 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 			FDabModelTransition Transition;
 			Transition.From = Row->From;
 			Transition.To = Row->To;
+			if (Options.Provenance)
+			{
+				const FString Pair = Row->From + TEXT("->") + Row->To;
+				const int32 Occurrence = PairCounts.FindOrAdd(Pair)++;
+				Options.Provenance->Transitions.Add(FString::Printf(TEXT("%s/%s#%d"), *MachineName, *Pair, Occurrence), Row);
+			}
 			const FString What = FString::Printf(TEXT("the transition %s -> %s of StateMachine %s"), *Row->From, *Row->To, *MachineName);
 			if (!Members.Contains(Row->From))
 			{

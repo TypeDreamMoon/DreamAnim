@@ -151,6 +151,10 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 				continue;
 			}
 			*Slot = Assign;
+			if (Options.Provenance)
+			{
+				Options.Provenance->Sections.Add(Assign->Name, Assign);
+			}
 		}
 
 		const auto BlockOf = [](const FDabAssignStmt* Section) -> const FDabBlockExpr*
@@ -217,6 +221,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 
 		if (const FDabBlockExpr* Block = BlockOf(GraphStmt))
 		{
+			CurrentGraphPath = TEXT("AnimGraph");
 			BuildGraph(Block->Statements, Model.AnimGraph, TEXT("Graph"), TEXT("Output"), NoReserved, GraphStmt->NameSpan);
 			// The AnimGraph's result node has no settings worth writing: its group only matters for layers.
 			if (GraphStmt->Meta)
@@ -343,6 +348,10 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 			FDabModelVariable Variable;
 			Variable.Name = Decl->Name;
 			Variable.Type = Decl->TypeName;
+			if (Options.Provenance)
+			{
+				Options.Provenance->Variables.Add(Decl->Name, Decl);
+			}
 			const FSemType Type = FSemType::FromSpelling(Decl->TypeName);
 			if (Type.Kind == ESemTypeKind::Unknown)
 			{
@@ -398,6 +407,10 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 			{
 				Sink.Error(TEXT("DAB6008"), Decl->NameSpan, FString::Printf(TEXT("The asset slot `%s` is declared twice."), *Decl->Name));
 				continue;
+			}
+			if (Options.Provenance)
+			{
+				Options.Provenance->AssetSlots.Add(Decl->Name, Decl);
 			}
 			if (Decl->Value)
 			{
@@ -719,6 +732,11 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		Layer.Name = Stmt.Name;
 		Layer.Graph.Name = Stmt.Name;
 		const FString Location = FString::Printf(TEXT("Layer %s"), *Stmt.Name);
+		CurrentGraphPath = TEXT("Layer/") + Stmt.Name;
+		if (Options.Provenance)
+		{
+			Options.Provenance->Layers.Add(Stmt.Name, &Stmt);
+		}
 		ReadResultMeta(Stmt.Meta.Get(), Layer.Graph, Location);
 
 		const bool bInterface = Kind == EDabDocumentKind::AnimLayerInterface;

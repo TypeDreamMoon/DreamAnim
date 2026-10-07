@@ -203,6 +203,8 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 	struct FGraphScope
 	{
 		FDabModelGraph* Graph = nullptr;
+		/** `AnimGraph`, `Layer/X`, `Machine/M/State/S`: the generator's graph path, for provenance. */
+		FString GraphPath;
 		/** `Graph`, `Layer Overlay`, `StateMachine M, state S`: for messages. */
 		FString Location;
 		TMap<FString, FPoseDef> Poses;
@@ -405,6 +407,8 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		EDabDocumentKind Kind = EDabDocumentKind::Unknown;
 		/** Asset name of the Blueprint being built (`AB_Als_Standing`). */
 		FString BlueprintName;
+		/** The graph path the next BuildGraph / BuildValueGraph builds (see FGraphScope::GraphPath). */
+		FString CurrentGraphPath;
 		/** The parent class, for typing `Self` paths; null when unknown. */
 		UClass* SelfClass = nullptr;
 
