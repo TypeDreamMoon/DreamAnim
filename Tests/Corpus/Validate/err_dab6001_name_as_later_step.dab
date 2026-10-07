@@ -1,0 +1,21 @@
+// A state machine's name as a later step of a stack. The machine is not also reported as unused.
+AnimBlueprint(Name="Validate/NameAsLaterStep", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Graph = {
+        Output = {
+            SequencePlayer(Sequence = A_Als_Idle);
+            Locomotion;
+        };
+    }
+
+    StateMachine Locomotion
+    {
+        Entry = Idle;
+
+        State Idle { Pose = SequencePlayer(Sequence = A_Als_Idle); }
+    }
+}
+
+// EXPECT DAB6001 (9,13)

@@ -846,6 +846,8 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 				Sink.Error(TEXT("DAB6001"), Expr.Span,
 					FString::Printf(TEXT("`%s` is a pose of its own; every step of a stack after the first is a node with one free pose input."), *Name->Name),
 					TEXT("Put the name first in the stack, or pass it as a pose argument."));
+				// Still a use: the pose or machine it names is not also reported as unused.
+				BuildPoseName(*Name, Scope, IdHint);
 				return FString();
 			}
 			return BuildPoseName(*Name, Scope, IdHint);
