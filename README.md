@@ -146,7 +146,7 @@ Sources live in the project's `DAnim/` folder, or in `DAnim/` of an enabled plug
 | `build [-File F] [-Root R] [-NoSave] [-Json J]` | Compiles the `.dab` and `.dai` sources into Animation Blueprint assets and saves them. `-NoSave` keeps them in memory only. |
 | `check [-File F] [-Root R] [-Json J]` | Parses and checks: includes, templates, names. Nothing is generated. |
 | `fmt [-File F] [-Root R] [-Write \| -Verify] [-Json J]` | Prints the canonical text. `-Write` rewrites the files that differ, keeping their line ends. `-Verify` writes nothing and fails on any file that is not canonical. |
-| `decompile (-Asset A[,B] \| -Under /Game/Folder) [-Out O] [-Stdout] [-Force] [-Json J]` | Animation Blueprints to text, under the project's `DAnim/` unless `-Out`. `-Stdout` prints instead. A file that exists and differs is replaced only with `-Force`. |
+| `decompile (-Asset A[,B] \| -Under /Game/Folder) [-AnimSet S] [-Out O] [-Stdout] [-Force] [-Json J]` | Animation Blueprints to text, under the project's `DAnim/` unless `-Out`. `-Stdout` prints instead. A file that exists and differs is replaced only with `-Force`. `-AnimSet` moves their animations into slots of that animation set. |
 
 - `build`, `check`, `fmt` and `decompile` run `UnrealEditor-Cmd <project> -run=DreamAnim`. The project
   is `-Project`, else the project above `-File`, else the plugin's test host. `make` and `test` use the

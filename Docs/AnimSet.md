@@ -206,7 +206,9 @@ the new animation. What happens to playback is up to the node that plays it:
 
 ## Cooking and skeletons
 
-- A set holds hard references to its animations, so they cook with the set.
+- A set holds hard references to its animations, so they cook with the set. This was checked by cooking
+  only a Blueprint whose one animation is in its default set: the Blueprint's package references the set
+  and the skeleton, not the animation, and the animation is in the cooked output.
 - The default set is referenced by the Blueprint's class defaults and cooks with the Blueprint. Any other
   set needs a reference of its own (from a character class, a data asset, ...) or an entry in the
   project's cook settings, and must be loaded before it is passed to `SetAnimSet`.

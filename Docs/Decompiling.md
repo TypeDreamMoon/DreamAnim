@@ -276,9 +276,10 @@ The set is saved by the decompile. The Blueprints change only when they are buil
 until then they keep naming their animations directly. While the set is new, the text may name it with
 `Path(...)` rather than its bare name.
 
-The automated tests move every ALS-Refactored Blueprint into one set (149 animations in 23 groups),
-regenerate the character from that text, and compare it with the original over the same 420-frame
-script as above: every bone matches on every frame.
+The automated tests move the animations of every ALS-Refactored Blueprint into slots and check that each
+one comes back the same through text and generation. They also regenerate the character that way (its 20
+Blueprints with slots read 96 animations from one set) and drive it through the same 420-frame script as
+above: every bone matches the original on every frame.
 
 ## Checking the result
 
@@ -330,7 +331,8 @@ Why everything together:
 The automated tests do exactly this for ALS-Refactored. They regenerate the character's Blueprints into
 copies, point the main copy at the copies of its linked graphs and the character's overlay map at the
 copies of the overlay layers, and drive the character through a 420-frame script. Every bone matches the
-original on every frame, to within 0.01 cm and 0.01 degrees.
+original on every frame, to within 0.01 cm and 0.01 degrees. The same runs time the frames: the
+generated Blueprints update in about the time the originals take, within a few percent either way.
 
 After migrating, the text is the source. Changes made in the editor are written back into it; see
 [WriteBack.md](WriteBack.md).
