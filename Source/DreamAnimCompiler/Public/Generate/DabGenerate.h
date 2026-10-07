@@ -11,6 +11,7 @@
 #include "Model/DabModel.h"
 
 class UAnimBlueprint;
+class UClass;
 
 namespace UE::DreamAnim::Compiler
 {
@@ -56,6 +57,13 @@ namespace UE::DreamAnim::Compiler
 
 		bool Succeeded() const { return Blueprint != nullptr && CompilerErrors.IsEmpty(); }
 	};
+
+	/**
+	 * What the getter of a slot of SlotClass returns (`DreamAnimAsset_<Slot>`): AnimMontage for a montage,
+	 * BlendSpace for a blend space, AnimSequenceBase for any other sequence, AnimationAsset otherwise. A pin
+	 * or parameter a slot read feeds must take it.
+	 */
+	DREAMANIMCOMPILER_API UClass* GetDabAssetSlotReadClass(const UClass* SlotClass);
 
 	/**
 	 * The NodeGuid the generator gives a node: an MD5 of `<AssetPath>/<GraphPath>/<Id>`. Graph paths are

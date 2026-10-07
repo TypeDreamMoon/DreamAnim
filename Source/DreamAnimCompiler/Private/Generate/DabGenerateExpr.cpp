@@ -1197,23 +1197,11 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 
 		// The getter returns what the slot's pins take, read from the active set with the library's typed getter.
 		const UClass* SlotClass = Cast<UClass>(DabGenFindType(SlotModel->Type, UClass::StaticClass()));
-		const TCHAR* LibraryFunction = TEXT("GetAnimSetAsset");
-		UClass* ReturnClass = UAnimationAsset::StaticClass();
-		if (SlotClass && SlotClass->IsChildOf(UAnimMontage::StaticClass()))
-		{
-			LibraryFunction = TEXT("GetAnimSetMontage");
-			ReturnClass = UAnimMontage::StaticClass();
-		}
-		else if (SlotClass && SlotClass->IsChildOf(UBlendSpace::StaticClass()))
-		{
-			LibraryFunction = TEXT("GetAnimSetBlendSpace");
-			ReturnClass = UBlendSpace::StaticClass();
-		}
-		else if (SlotClass && SlotClass->IsChildOf(UAnimSequenceBase::StaticClass()))
-		{
-			LibraryFunction = TEXT("GetAnimSetSequence");
-			ReturnClass = UAnimSequenceBase::StaticClass();
-		}
+		UClass* ReturnClass = GetDabAssetSlotReadClass(SlotClass);
+		const TCHAR* LibraryFunction = ReturnClass == UAnimMontage::StaticClass() ? TEXT("GetAnimSetMontage")
+			: ReturnClass == UBlendSpace::StaticClass() ? TEXT("GetAnimSetBlendSpace")
+			: ReturnClass == UAnimSequenceBase::StaticClass() ? TEXT("GetAnimSetSequence")
+			: TEXT("GetAnimSetAsset");
 		const UFunction* Getter = UDreamAnimLibrary::StaticClass()->FindFunctionByName(LibraryFunction);
 		if (!Getter)
 		{

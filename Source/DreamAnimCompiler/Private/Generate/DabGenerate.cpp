@@ -18,6 +18,9 @@
 #include "Animation/AnimBlueprint.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimLayerInterface.h"
+#include "Animation/AnimMontage.h"
+#include "Animation/AnimSequenceBase.h"
+#include "Animation/BlendSpace.h"
 #include "Animation/Skeleton.h"
 #include "AnimationGraph.h"
 #include "AnimationGraphSchema.h"
@@ -825,6 +828,23 @@ namespace UE::DreamAnim::Compiler
 			}
 		}
 		return Positions;
+	}
+
+	UClass* GetDabAssetSlotReadClass(const UClass* SlotClass)
+	{
+		if (SlotClass && SlotClass->IsChildOf(UAnimMontage::StaticClass()))
+		{
+			return UAnimMontage::StaticClass();
+		}
+		if (SlotClass && SlotClass->IsChildOf(UBlendSpace::StaticClass()))
+		{
+			return UBlendSpace::StaticClass();
+		}
+		if (SlotClass && SlotClass->IsChildOf(UAnimSequenceBase::StaticClass()))
+		{
+			return UAnimSequenceBase::StaticClass();
+		}
+		return UAnimationAsset::StaticClass();
 	}
 
 	FGuid MakeDabNodeGuid(const FString& AssetPath, const FString& GraphPath, const FString& Id)
