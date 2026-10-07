@@ -686,6 +686,27 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 			Node->ReconstructNode();
 		}
 		Ctx.AssignRemainingGuids();
+		if (!Options.NodePositions.IsEmpty())
+		{
+			// Where the editor last had them; nodes the layout does not know keep the automatic place.
+			TArray<UEdGraph*> AllGraphs;
+			Blueprint->GetAllGraphs(AllGraphs);
+			for (const UEdGraph* Graph : AllGraphs)
+			{
+				if (!Graph)
+				{
+					continue;
+				}
+				for (UEdGraphNode* Node : Graph->Nodes)
+				{
+					if (const FIntPoint* Position = Node ? Options.NodePositions.Find(Node->NodeGuid) : nullptr)
+					{
+						Node->NodePosX = Position->X;
+						Node->NodePosY = Position->Y;
+					}
+				}
+			}
+		}
 		Blueprint->RequestRefreshExtensions();
 
 		Result.Blueprint = Blueprint;
@@ -740,6 +761,70 @@ namespace UE::DreamAnim::Compiler
 	void SetDabGeneratedText(UAnimBlueprint& Blueprint, const FString& Text)
 	{
 		Blueprint.GetPackage()->GetMetaData().SetValue(&Blueprint, DabGeneratedTextKey, *Text);
+	}
+
+	FString GetDabLayoutPath(const FString& SourcePath)
+	{
+		return SourcePath + TEXT(".layout");
+	}
+
+	FString MakeDabLayout(const UAnimBlueprint& Blueprint)
+	{
+		TArray<UEdGraph*> Graphs;
+		Blueprint.GetAllGraphs(Graphs);
+		TArray<TPair<FString, FString>> Lines;
+		for (const UEdGraph* Graph : Graphs)
+		{
+			if (!Graph)
+			{
+				continue;
+			}
+			for (const UEdGraphNode* Node : Graph->Nodes)
+			{
+				if (!Node || !Node->NodeGuid.IsValid())
+				{
+					continue;
+				}
+				// The comment is for whoever reads a diff of the file; only the GUID and position are read back.
+				FString Title = Node->GetNodeTitle(ENodeTitleType::ListView).ToString().Replace(TEXT("\r"), TEXT(" ")).Replace(TEXT("\n"), TEXT(" "));
+				const FString Sort = Graph->GetName() + TEXT("\n") + Node->NodeGuid.ToString(EGuidFormats::Digits);
+				Lines.Emplace(Sort, FString::Printf(TEXT("%s %d %d  # %s: %s"), *Node->NodeGuid.ToString(EGuidFormats::Digits), Node->NodePosX, Node->NodePosY,
+					*Graph->GetName(), *Title.TrimStartAndEnd()));
+			}
+		}
+		Lines.Sort([](const TPair<FString, FString>& A, const TPair<FString, FString>& B) { return A.Key < B.Key; });
+
+		FString Text = FString::Printf(TEXT("# Where the editor put the nodes of %s, by node GUID. Written by the editor; safe to delete.\n"), *Blueprint.GetName());
+		for (const TPair<FString, FString>& Line : Lines)
+		{
+			Text += Line.Value;
+			Text += TEXT("\n");
+		}
+		return Text;
+	}
+
+	TMap<FGuid, FIntPoint> ParseDabLayout(const FString& Text)
+	{
+		TMap<FGuid, FIntPoint> Positions;
+		TArray<FString> Lines;
+		Text.ParseIntoArrayLines(Lines);
+		for (const FString& Line : Lines)
+		{
+			FString Data = Line;
+			int32 Hash = INDEX_NONE;
+			if (Data.FindChar(TEXT('#'), Hash))
+			{
+				Data.LeftInline(Hash);
+			}
+			TArray<FString> Fields;
+			Data.ParseIntoArrayWS(Fields);
+			FGuid Guid;
+			if (Fields.Num() == 3 && FGuid::Parse(Fields[0], Guid) && Fields[1].IsNumeric() && Fields[2].IsNumeric())
+			{
+				Positions.Add(Guid, FIntPoint(FCString::Atoi(*Fields[1]), FCString::Atoi(*Fields[2])));
+			}
+		}
+		return Positions;
 	}
 
 	FGuid MakeDabNodeGuid(const FString& AssetPath, const FString& GraphPath, const FString& Id)

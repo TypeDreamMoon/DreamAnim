@@ -126,6 +126,7 @@ bool FDreamAnimEditorSyncTest::RunTest(const FString& Parameters)
 	const FString Written = FString(SourceText).Replace(TEXT("PlayRate = 1.2"), TEXT("PlayRate = 1.5"));
 	TestEqualSensitive(TEXT("the file has the edit"), Load(Path), Written);
 	TestEqualSensitive(TEXT("the Blueprint keeps the written text"), GetDabGeneratedText(*Blueprint), Written);
+	TestTrue(TEXT("the node positions are written next to the source"), FPaths::FileExists(GetDabLayoutPath(Path)));
 
 	// The watcher's report of that write is not a change.
 	Subsystem->HandleChangedSources({ Path });

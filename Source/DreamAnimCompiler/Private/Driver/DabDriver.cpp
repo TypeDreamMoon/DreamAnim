@@ -151,6 +151,11 @@ namespace UE::DreamAnim::Compiler
 			GenerateOptions.bSave = Options.bSave;
 			GenerateOptions.OverridePackageName = Options.OverridePackageName;
 			GenerateOptions.SourceText = Text;
+			FString Layout;
+			if (FFileHelper::LoadFileToString(Layout, *GetDabLayoutPath(Result.FilePath)))
+			{
+				GenerateOptions.NodePositions = ParseDabLayout(Layout);
+			}
 			Lang::FDabDiagnosticSink Sink(Result.FilePath);
 			const FDabGenerateResult Generated = GenerateDabBlueprint(Result.Model, Sink, GenerateOptions);
 			DriverPrivate::AppendCompileDiagnostics(Result, Sink);

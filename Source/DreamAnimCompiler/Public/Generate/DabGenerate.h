@@ -25,7 +25,19 @@ namespace UE::DreamAnim::Compiler
 		FString OverridePackageName;
 		/** The source the model was compiled from, kept with the asset (GetDabGeneratedText). */
 		FString SourceText;
+		/** Where nodes go instead of the automatic layout, by the NodeGuid they get (a source's `.layout` file). */
+		TMap<FGuid, FIntPoint> NodePositions;
 	};
+
+	/** `<source>.layout`: where the editor put a Blueprint's nodes, next to the source it is made from. */
+	DREAMANIMCOMPILER_API FString GetDabLayoutPath(const FString& SourcePath);
+	/**
+	 * Every node of every graph of the Blueprint as a line `<NodeGuid> <X> <Y>  # <graph>: <node>`, sorted, with
+	 * a comment at the top. Generated GUIDs come from the node's place in the text, so they hold across rebuilds.
+	 */
+	DREAMANIMCOMPILER_API FString MakeDabLayout(const UAnimBlueprint& Blueprint);
+	/** The positions in a layout file's text; lines that do not read as one are skipped. */
+	DREAMANIMCOMPILER_API TMap<FGuid, FIntPoint> ParseDabLayout(const FString& Text);
 
 	/**
 	 * The source text a Blueprint was last generated from or written back to, kept in its package's

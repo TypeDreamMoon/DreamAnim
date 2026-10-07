@@ -493,6 +493,16 @@ bool UDreamAnimEditorSubsystem::WriteBack(UAnimBlueprint& Blueprint, bool bExpan
 		SetDabGeneratedText(Blueprint, Result.Text);
 	}
 
+	// Where the nodes are, so a rebuild puts them back there; moving nodes changes nothing else.
+	const FString LayoutPath = GetDabLayoutPath(Path);
+	const FString Layout = MakeDabLayout(Blueprint);
+	FString OldLayout;
+	if ((!FFileHelper::LoadFileToString(OldLayout, *LayoutPath) || !OldLayout.Equals(Layout, ESearchCase::CaseSensitive))
+		&& !FFileHelper::SaveStringToFile(Layout, *LayoutPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+	{
+		FMessageLog(LogName).Warning(FText::Format(LOCTEXT("CannotWriteLayout", "Cannot write {0}; node positions will not survive a rebuild."), FText::FromString(LayoutPath)));
+	}
+
 	// Refusals are repeated only when they change: moving nodes about writes nothing and says nothing.
 	TArray<FString> RefusalKeys;
 	bool bTemplateBody = false;

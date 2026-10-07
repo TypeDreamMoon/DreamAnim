@@ -5,10 +5,13 @@
 // diagnostic forms tools read, and the command line's check mode run in this process.
 
 #include "Animation/AnimBlueprint.h"
+#include "AnimStateNode.h"
 #include "Commandlets/Commandlet.h"
 #include "Driver/DabDriver.h"
+#include "Generate/DabGenerate.h"
 #include "HAL/FileManager.h"
 #include "Interfaces/IPluginManager.h"
+#include "Kismet2/BlueprintEditorUtils.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
@@ -478,6 +481,78 @@ namespace UE::DreamAnim::Tests::DriverTests
 		const FString ErrorField = TEXT("\"severity\":\"error\"");
 		const int32 ErrorsInJson = (Json.Len() - Json.Replace(*ErrorField, TEXT(""), ESearchCase::CaseSensitive).Len()) / ErrorField.Len();
 		TestEqual(TEXT("the exit code is the number of errors"), Errors, ErrorsInJson);
+		return true;
+	}
+
+	// ---------------------------------------------------------------------------------------------
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDabDriverLayoutTest, "DreamAnim.Driver.Layout",
+		EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+	bool FDabDriverLayoutTest::RunTest(const FString& Parameters)
+	{
+		const FString Dir = MakeDriverScratchDir(TEXT("Layout"));
+		const FString Path = Dir / TEXT("AB_Layout.dab");
+		const FString Text = TEXT(
+			"AnimBlueprint(Name=\"DreamAnimTests/Driver/AB_Layout\", Root=\"Game\")\n"
+			"{\n"
+			"    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }\n"
+			"    Graph = { Output = Locomotion; }\n"
+			"    StateMachine Locomotion\n"
+			"    {\n"
+			"        Entry = Idle;\n"
+			"        State Idle { Pose = SequencePlayer(Sequence = A_Als_Idle); }\n"
+			"    }\n"
+			"}\n");
+		FDabCompileOptions Options;
+		Options.bSave = false;
+		const auto Generate = [this, &Path, &Text, &Options]() -> UAnimBlueprint*
+		{
+			const FDabCompileResult Result = CompileDabText(Path, Text, Options);
+			ReportCompileErrors(*this, Result);
+			return Result.Blueprint;
+		};
+		const auto FindIdle = [](UAnimBlueprint& Blueprint) -> UAnimStateNode*
+		{
+			TArray<UAnimStateNode*> States;
+			FBlueprintEditorUtils::GetAllNodesOfClass(&Blueprint, States);
+			return States.IsEmpty() ? nullptr : States[0];
+		};
+
+		UAnimBlueprint* Blueprint = Generate();
+		UAnimStateNode* Idle = Blueprint ? FindIdle(*Blueprint) : nullptr;
+		if (!TestNotNull(TEXT("the state"), Idle))
+		{
+			return false;
+		}
+		const FIntPoint Automatic(Idle->NodePosX, Idle->NodePosY);
+		const FGuid IdleGuid = Idle->NodeGuid;
+		Idle->NodePosX = 1234;
+		Idle->NodePosY = -56;
+
+		const FString Layout = MakeDabLayout(*Blueprint);
+		TestTrue(TEXT("the layout says what it is"), Layout.StartsWith(TEXT("# Where the editor put the nodes of AB_Layout")));
+		const TMap<FGuid, FIntPoint> Positions = ParseDabLayout(Layout);
+		TestTrue(TEXT("the layout has the moved state"), Positions.FindRef(IdleGuid) == FIntPoint(1234, -56));
+		TestTrue(TEXT("and the other nodes"), Positions.Num() > 3);
+		TestTrue(TEXT("lines that are not positions are skipped"), ParseDabLayout(TEXT("# a comment\nnot a line\n")).IsEmpty());
+
+		// A rebuild puts the node where the layout file says; without the file it goes back to the automatic place.
+		FFileHelper::SaveStringToFile(Layout, *GetDabLayoutPath(Path));
+		Blueprint = Generate();
+		Idle = Blueprint ? FindIdle(*Blueprint) : nullptr;
+		if (TestNotNull(TEXT("the state after a rebuild"), Idle))
+		{
+			TestEqual(TEXT("the same GUID after a rebuild"), Idle->NodeGuid, IdleGuid);
+			TestEqual(TEXT("where the layout put it"), FIntPoint(Idle->NodePosX, Idle->NodePosY), FIntPoint(1234, -56));
+		}
+		IFileManager::Get().Delete(*GetDabLayoutPath(Path));
+		Blueprint = Generate();
+		Idle = Blueprint ? FindIdle(*Blueprint) : nullptr;
+		if (TestNotNull(TEXT("the state without a layout"), Idle))
+		{
+			TestEqual(TEXT("the automatic place"), FIntPoint(Idle->NodePosX, Idle->NodePosY), Automatic);
+		}
 		return true;
 	}
 }
