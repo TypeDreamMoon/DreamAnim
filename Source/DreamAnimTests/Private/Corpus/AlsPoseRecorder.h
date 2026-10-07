@@ -24,6 +24,8 @@ namespace UE::DreamAnim::Tests
 		TArray<FVector> Locations;
 		/** What ran: the anim instance class, world time, movement mode. For failure messages. */
 		FString Notes;
+		/** Wall-clock seconds spent ticking the world, every frame together: what the Blueprints cost, give or take the rest of the frame. */
+		double TickSeconds = 0.0;
 	};
 
 	struct FAlsPoseScript

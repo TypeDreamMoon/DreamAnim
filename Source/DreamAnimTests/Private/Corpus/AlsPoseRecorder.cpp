@@ -199,7 +199,9 @@ namespace UE::DreamAnim::Tests
 				Character->AddMovementInput(Input, 1.f, true);
 			}
 			FApp::SetDeltaTime(Script.DeltaSeconds);
+			const double TickStart = FPlatformTime::Seconds();
 			Wrapper.TickTestWorld(Script.DeltaSeconds);
+			Out.TickSeconds += FPlatformTime::Seconds() - TickStart;
 
 			Out.Frames.Add(Mesh.GetComponentSpaceTransforms());
 			Out.Locations.Add(Character->GetActorLocation());

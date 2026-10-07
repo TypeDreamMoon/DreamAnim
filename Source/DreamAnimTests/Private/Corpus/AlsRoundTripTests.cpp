@@ -606,6 +606,27 @@ namespace UE::DreamAnim::Tests
 		const FString Difference = CompareAlsPoses(Expected, Actual);
 		if (Difference.IsEmpty())
 		{
+			// What the generated functions cost against the hand-made Blueprints: a few runs of each, the fastest
+			// of each kept, so a busy machine does not decide it.
+			double Originals = Expected.TickSeconds;
+			double Copies = Actual.TickSeconds;
+			for (int32 Run = 0; Run < 2; ++Run)
+			{
+				FAlsPoseRecording Again;
+				FString Ignored;
+				if (RecordAlsPoses(Original, Again, Ignored))
+				{
+					Originals = FMath::Min(Originals, Again.TickSeconds);
+				}
+				if (RecordAlsPoses(Regenerated, Again, Ignored))
+				{
+					Copies = FMath::Min(Copies, Again.TickSeconds);
+				}
+			}
+			const double Ratio = Originals > 0.0 ? Copies / Originals : 0.0;
+			Test.AddInfo(FString::Printf(TEXT("%d frames: the originals tick in %.1f ms, the generated Blueprints in %.1f ms (x%.2f)"),
+				Expected.Frames.Num(), Originals * 1000.0, Copies * 1000.0, Ratio));
+			Test.TestTrue(FString::Printf(TEXT("the generated Blueprints cost no more than half again as much (x%.2f)"), Ratio), Ratio < 1.5);
 			return true;
 		}
 		Test.AddError(FString::Printf(TEXT("The generated Blueprints move the character differently: %s"), *Difference));
