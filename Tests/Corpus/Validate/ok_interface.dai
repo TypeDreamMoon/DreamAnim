@@ -1,0 +1,8 @@
+// An AnimLayerInterface declares its layers and their settings.
+AnimLayerInterface(Name="Validate/OkInterface", Root="Game")
+{
+    Settings = { Parent = AnimLayerInterface; }
+
+    Layer Overlay [ LayerGroup = "Overlay" ];
+    Layer Lean;
+}

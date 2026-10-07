@@ -1,0 +1,49 @@
+// A state machine with a conduit, an alias, rules, state functions and transition options.
+AnimBlueprint(Name="Validate/OkStateMachine", Root="Game")
+{
+    Settings = { Parent = AlsLiteAnimInstance; Skeleton = SK_Als; }
+
+    Graph = {
+        Output = {
+            Locomotion;
+            Inertialization(bResetOnBecomingRelevant = true);
+        };
+    }
+
+    StateMachine Locomotion [ MaxTransitionsPerFrame = 2; bAllowConduitEntryStates ]
+    {
+        Entry = Start;
+
+        Conduit Start;
+
+        State Idle
+        {
+            OnEnter = Self.StopTransitionAndTurnInPlaceAnimations(0.3);
+
+            Pose = SequencePlayer(Sequence = A_Als_Idle);
+        }
+
+        State Walk [ bAlwaysResetOnEntry = true ]
+        {
+            Pose = SequencePlayer(Sequence = A_Als_Walk_Forward, PlayRate = Self.StandingPlayRate);
+        }
+
+        State Stop { Pose = SequencePlayer(Sequence = A_Als_Stop_Left, bLoopAnimation = false); }
+
+        Alias Moving = [ Walk, Stop ];
+
+        Rules = {
+            Move = Self.bMovingSmooth;
+            Halt = !Move && StateWeight(Walk) >= 1;
+        }
+
+        Transitions = {
+            Start  -> Idle : !Move;
+            Start  -> Walk : Move;
+            Idle   -> Walk : Move        [ Blend = 0.3; Curve = Cubic ];
+            Walk   -> Stop : Halt        [ Inertialize = 0.2 ];
+            Stop   -> Idle : Auto        [ Priority = 2 ];
+            Moving -> Idle : Self.bInAir [ Bidirectional ];
+        }
+    }
+}

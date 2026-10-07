@@ -1,0 +1,8 @@
+// Templates the clean validation cases include.
+AnimTemplates(Name="Validate/Common", Root="Game")
+{
+    // A pose held on one frame of an animation.
+    Template Still(Seq, Frame = 0) = SequenceEvaluator(Sequence = Seq, ExplicitFrame = Frame);
+
+    Template Looped(Seq, Rate = 1) = SequencePlayer(Sequence = Seq, PlayRate = Rate, bLoopAnimation = true);
+}

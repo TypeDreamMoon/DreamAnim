@@ -1,0 +1,47 @@
+// Settings, class defaults, aliases, tuning values, asset slots, notifies, templates, named and cached
+// poses, node functions, stacks, Call and Slot: all of it checks clean.
+#include "lib/common.dat"
+
+AnimBlueprint(Name="Validate/OkGraph", Root="Game")
+{
+    Settings = {
+        Parent                           = AlsLiteAnimInstance;
+        Skeleton                         = SK_Als;
+        bUseMultiThreadedAnimationUpdate = true;
+    }
+
+    Defaults = { RootMotionMode = RootMotionFromMontagesOnly; }
+
+    Aliases = { Lite = Self; }
+
+    Properties = {
+        float IdleRate  = 1    [ Group = "Idle" ];
+        float StopBlend = 0.3;
+        bool  bLean     = true;
+    }
+
+    Assets = { AnimSequence Idle; }
+
+    Notifies = {
+        ActivatePivot = Lite.ActivatePivot();
+        StopQuick     = { Self.PlayQuickStopAnimation(); Self.StopTransitionAndTurnInPlaceAnimations(Props.StopBlend); };
+    }
+
+    Graph = {
+        Stand = Still(A_Als_Stand_Pose) [ Cached ];
+
+        Breathing = ApplyAdditive(
+            Alpha    = 0.75,
+            Base     = Stand,
+            Additive = Looped(Assets.Idle, Props.IdleRate)
+        ) [ OnBecomeRelevant = Self.InitializeLean() ];
+
+        Output = {
+            Breathing;
+            ModifyCurve(FootLeftLock = 1, FootRightLock = 1, "Pose Standing" = Lite.GroundedAmount);
+            Call(Self.RefreshGrounded);
+            Call(Self.InitializeGrounded, On = BecomeRelevant);
+            Slot("Transition");
+        };
+    }
+}

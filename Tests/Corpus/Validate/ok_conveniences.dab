@@ -1,0 +1,41 @@
+// Input poses, a keyed BlendListByEnum, bones(...), curves on ModifyCurve, and a layer of this Blueprint
+// run as a stack step.
+AnimBlueprint(Name="Validate/OkConveniences", Root="Game")
+{
+    Settings = { Parent = AlsLiteAnimInstance; Skeleton = SK_Als; }
+
+    Graph = {
+        Inputs = [ "Base Input" ];
+        Base   = Input("Base Input") [ Cached ];
+
+        Planted = BlendListByEnum(
+            BoundEnum       = EAlsLiteHipsDirection,
+            ActiveEnumValue = Self.HipsDirection,
+            BlendPose       = {
+                Default      = SequenceEvaluator(Sequence = A_Als_Walk_Left_Forward, ExplicitFrame = 6);
+                LeftBackward = SequenceEvaluator(Sequence = A_Als_Walk_Left_Backward, ExplicitFrame = 4);
+            },
+            BlendTime       = { Default = 0; LeftBackward = 0.1; }
+        );
+
+        Output = {
+            LayeredBoneBlend(
+                LayerSetup              = [ bones(thigh_l, "VB foot_l", Depth = 1) ],
+                bMeshSpaceRotationBlend = true,
+                BasePose                = Base,
+                BlendPoses              = [ Planted ]
+            );
+            ModifyCurve(FootLeftLock = 1, "Pose Planted" = 1);
+            LinkedAnimLayer(Layer = Lean);
+        };
+    }
+
+    Layer Lean [ BlendOptions = (BlendInTime = 0.2, BlendOutTime = 0.2) ]
+    {
+        Output = ApplyAdditive(
+            Alpha    = 1,
+            Base     = Input("Lean Input"),
+            Additive = BlendSpaceEvaluator(BlendSpace = BS_Als_Lean, X = Self.LeanRightAmount, Y = Self.LeanForwardAmount)
+        );
+    }
+}
