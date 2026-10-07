@@ -98,6 +98,14 @@ namespace UE::DreamAnim::Compiler
 		bool Succeeded() const { return NumErrors == 0; }
 	};
 
+	/**
+	 * Sources in the order they build: interfaces first, and every document after the DreamAnim assets it
+	 * mentions, because the generator needs a linked graph's target or an implemented interface to exist
+	 * already. A cycle is broken where it is found; the build then reports what it cannot resolve. Roots
+	 * resolve the includes of files the index does not know.
+	 */
+	DREAMANIMCOMPILER_API TArray<FString> OrderDabSourcesForBuild(const TArray<FString>& Files, const FDabSourceIndex& Index, const TArray<FString>& Roots);
+
 	/** Reads one source and runs it through the pipeline. */
 	DREAMANIMCOMPILER_API FDabCompileResult CompileDabFile(const FString& FilePath, const FDabCompileOptions& Options = FDabCompileOptions());
 	/** The same from text held in memory (an editor buffer, a test); FilePath names it in diagnostics and resolves includes. */
