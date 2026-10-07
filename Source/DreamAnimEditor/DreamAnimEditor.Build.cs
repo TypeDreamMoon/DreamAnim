@@ -2,7 +2,8 @@
 
 using UnrealBuildTool;
 
-// Editor-only pieces: how animation sets look and are created in the editor.
+// Editor-only pieces: how animation sets look and are created in the editor, and keeping Animation
+// Blueprints and their sources in step (rebuild on save, write editor changes back, asset menus).
 public class DreamAnimEditor : ModuleRules
 {
 	public DreamAnimEditor(ReadOnlyTargetRules Target) : base(Target)
@@ -15,14 +16,25 @@ public class DreamAnimEditor : ModuleRules
 			"CoreUObject",
 			"Engine",
 			"UnrealEd",
+			"DeveloperSettings",
+			"EditorSubsystem",
+			"DreamAnimLang",
+			"DreamAnimCompiler",
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
+			"AnimGraph",
 			"AssetTools",
+			"BlueprintGraph",
+			"ContentBrowser",
+			"DirectoryWatcher",
+			"InputCore",
+			"MessageLog",
 			"PropertyEditor",
 			"Slate",
 			"SlateCore",
+			"ToolMenus",
 			"DreamAnim",
 		});
 	}
