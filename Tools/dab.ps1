@@ -10,10 +10,10 @@
 #                                 compile the .dab/.dai sources into Animation Blueprint assets and save them
 #   dab.ps1 check [-File F] [-Root R] [-Json J]
 #                                 parse, includes, templates and semantic only; nothing is generated
-#   dab.ps1 fmt [-File F] [-Root R] [-Write | -Verify] [-Json J]
+#   dab.ps1 fmt [-File F] [-Root R] [-Write | -Verify] [-Markers] [-Json J]
 #                                 print the canonical text; -Write rewrites the files that differ (keeping
 #                                 their line ends); -Verify writes nothing and fails on any file not canonical
-#   dab.ps1 decompile (-Asset A[,B] | -Under /Game/Folder) [-Out O] [-Stdout] [-Force] [-Json J]
+#   dab.ps1 decompile (-Asset A[,B] | -Under /Game/Folder) [-Out O] [-Stdout [-Markers]] [-Force] [-Json J]
 #                                 Animation Blueprints to text, below the project's DAnim/ unless -Out;
 #                                 a file that exists and differs is only replaced with -Force
 #
@@ -24,7 +24,10 @@
 # a .dat stands for the documents that include it. -Root replaces the project's and the enabled plugins'
 # DAnim/ folders. -Out and -Json are relative to the project directory. -Json writes every diagnostic as
 # JSON for the VS Code extension. fmt and decompile -Stdout print the text on the output stream and their
-# status lines on the host. The engine log of each run is kept in <project>/Saved/DreamAnim/.
+# status lines on the host; several files' texts come between `===== begin <name> =====` and
+# `===== end <name> =====` lines, and -Markers puts those lines around a single text too (a host line
+# also reaches a redirected stdout, so a tool reading it needs them). Redirected output is UTF-8.
+# The engine log of each run is kept in <project>/Saved/DreamAnim/.
 # A build writes packages: close any editor that has the project open.
 #
 # Exit codes
@@ -54,10 +57,15 @@ param(
     [string]$Json,
     [switch]$NoSave,
     [switch]$Force,
-    [switch]$Raw
+    [switch]$Raw,
+    [switch]$Markers
 )
 
 $ErrorActionPreference = 'Stop'
+
+# A redirected stdout is otherwise written in the console's code page, which mangles Chinese names. An
+# interactive console keeps its own setting.
+if ([Console]::IsOutputRedirected) { [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false) }
 
 $Presets = @{
     Quick = @{ Filter = 'DreamAnim.'; MinTests = 1; Timeout = 30 }
@@ -306,7 +314,7 @@ function Invoke-Commandlet {
         $stdoutLines | ForEach-Object { Write-Output $_ }
         $logLines | ForEach-Object { & $status $_ }
     } else {
-        # The text blocks, between the commandlet's markers; a single one without them.
+        # The text blocks, between the commandlet's markers; a single one without them unless -Markers.
         $blocks = [Collections.Generic.List[object]]::new()
         $current = $null
         foreach ($line in $stdoutLines) {
@@ -314,10 +322,11 @@ function Invoke-Commandlet {
             if ($line -match '^===== end (.*) =====$') { if ($current) { $blocks.Add($current); $current = $null }; continue }
             if ($current) { $current.Lines.Add($line) }
         }
+        $marked = $Markers -or $blocks.Count -gt 1
         foreach ($block in $blocks) {
-            if ($blocks.Count -gt 1) { Write-Output "===== begin $($block.Name) =====" }
+            if ($marked) { Write-Output "===== begin $($block.Name) =====" }
             $block.Lines | ForEach-Object { Write-Output $_ }
-            if ($blocks.Count -gt 1) { Write-Output "===== end $($block.Name) =====" }
+            if ($marked) { Write-Output "===== end $($block.Name) =====" }
         }
 
         # The commandlet's own lines in full; from the rest of the engine only errors and crashes.
