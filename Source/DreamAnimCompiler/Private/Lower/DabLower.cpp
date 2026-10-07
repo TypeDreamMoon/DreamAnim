@@ -523,6 +523,35 @@ namespace UE::DreamAnim::Compiler::LowerPrivate
 
 	// -- lowering ---------------------------------------------------------------------------------
 
+	/**
+	 * Asset name -> how many registered assets carry it. Shared by every lowering: writing back lowers
+	 * node by node, and walking the whole registry each time costs far more than the lowering itself.
+	 */
+	const TMap<FString, int32>& GetAssetNameCounts()
+	{
+		static TMap<FString, int32> Counts;
+		static double LoadedAt = -1.0;
+		const double Now = FPlatformTime::Seconds();
+		if (LoadedAt >= 0.0 && Now - LoadedAt < 5.0)
+		{
+			return Counts;
+		}
+		LoadedAt = Now;
+		Counts.Reset();
+		IAssetRegistry& Registry = IAssetRegistry::GetChecked();
+		if (Registry.IsLoadingAssets())
+		{
+			Registry.SearchAllAssets(true);
+		}
+		TArray<FAssetData> Assets;
+		Registry.GetAllAssets(Assets, true);
+		for (const FAssetData& Asset : Assets)
+		{
+			++Counts.FindOrAdd(Asset.AssetName.ToString());
+		}
+		return Counts;
+	}
+
 	struct FFileLowering
 	{
 		const FDabModel& Model;
@@ -531,9 +560,6 @@ namespace UE::DreamAnim::Compiler::LowerPrivate
 		bool bUsedMain = false;
 		TSet<FString> TakenNames;
 		TMap<FString, int32> Counters;
-		/** Asset name -> how many registered assets carry it; filled on first use. */
-		TMap<FString, int32> AssetNameCounts;
-		bool bAssetNamesLoaded = false;
 
 		FFileLowering(const FDabModel& InModel, const FDabLowerOptions& InOptions, FDabFile& InFile)
 			: Model(InModel), Options(InOptions), File(InFile)
@@ -636,22 +662,7 @@ namespace UE::DreamAnim::Compiler::LowerPrivate
 
 		bool IsUniqueAssetName(const FString& Name)
 		{
-			if (!bAssetNamesLoaded)
-			{
-				bAssetNamesLoaded = true;
-				IAssetRegistry& Registry = IAssetRegistry::GetChecked();
-				if (Registry.IsLoadingAssets())
-				{
-					Registry.SearchAllAssets(true);
-				}
-				TArray<FAssetData> Assets;
-				Registry.GetAllAssets(Assets, true);
-				for (const FAssetData& Asset : Assets)
-				{
-					++AssetNameCounts.FindOrAdd(Asset.AssetName.ToString());
-				}
-			}
-			return AssetNameCounts.FindRef(Name) == 1;
+			return GetAssetNameCounts().FindRef(Name) == 1;
 		}
 
 		/** `Path(Plugin.ALS, "ALS/Animations/A_Als_Idle")` -> `A_Als_Idle` when no other asset has that name. */
@@ -687,7 +698,7 @@ namespace UE::DreamAnim::Compiler::LowerPrivate
 			}
 			if (IsSelfGetParent(*Slot))
 			{
-				Slot = MakeName(TEXT("Main"));
+				Slot = MakeName(Options.ParentAlias);
 				bUsedMain = true;
 				return;
 			}
@@ -727,6 +738,8 @@ namespace UE::DreamAnim::Compiler::LowerPrivate
 		const FDabModelGraph& Graph;
 		TArray<FDabStmtPtr>& Out;
 		TSet<FString> Reached;
+		/** Write DabPoseMarker for every pose argument instead of lowering the pose (one node at a time). */
+		bool bPoseMarkers = false;
 
 		FGraphLowering(FFileLowering& InFile, const FDabModelGraph& InGraph, TArray<FDabStmtPtr>& InOut)
 			: File(InFile), Graph(InGraph), Out(InOut)
@@ -893,6 +906,10 @@ namespace UE::DreamAnim::Compiler::LowerPrivate
 		/** A pose argument: inline, or pulled out when it is a stack or nests too deep. */
 		FDabExprPtr PoseArgument(const FDabModelNode* Source, int32& InOutDepth, const FString& Pin = FString())
 		{
+			if (bPoseMarkers)
+			{
+				return MakeName(DabPoseMarker);
+			}
 			int32 Depth = 0;
 			FDabExprPtr Expr = Pose(Source, Depth);
 			// A stack inside an argument list is hard to follow; it reads better as a named pose.
@@ -1479,6 +1496,162 @@ namespace UE::DreamAnim::Compiler::LowerPrivate
 		return Only && Only->Value && Only->Value->Is<FDabNameExpr>();
 	}
 
+	/** One row of a Transitions table. */
+	TUniquePtr<FDabTransitionStmt> LowerTransitionRow(FFileLowering& File, const FDabModelTransition& Transition)
+	{
+		TUniquePtr<FDabTransitionStmt> Row = MakeUnique<FDabTransitionStmt>();
+		Row->From = Transition.From;
+		Row->To = Transition.To;
+		if (Transition.ConditionKind == EDabConditionKind::Auto)
+		{
+			Row->Condition = MakeName(TEXT("Auto"));
+		}
+		else if (!Transition.SharedRuleName.IsEmpty())
+		{
+			Row->Condition = MakeName(Transition.SharedRuleName);
+		}
+		else
+		{
+			Row->Condition = File.Value(Transition.Condition);
+		}
+
+		TUniquePtr<FDabMeta> RowOptions = MakeUnique<FDabMeta>();
+		for (const FDabModelProperty& Option : Transition.Options)
+		{
+			if (Option.Name == TEXT("CrossfadeDuration"))
+			{
+				RowOptions->Entries.Add(MakeMetaEntry(TEXT("Blend"), File.Value(Option.Value)));
+			}
+			else if (Option.Name == TEXT("BlendMode"))
+			{
+				RowOptions->Entries.Add(MakeMetaEntry(TEXT("Curve"), File.Value(Option.Value)));
+			}
+			else if (Option.Name == TEXT("PriorityOrder"))
+			{
+				RowOptions->Entries.Add(MakeMetaEntry(TEXT("Priority"), File.Value(Option.Value)));
+			}
+			else if (Option.Name == TEXT("LogicType") && ReadNameOrString(Option.Value.Get()).Contains(TEXT("Inertialization")))
+			{
+				RowOptions->Entries.Add(MakeMetaEntry(TEXT("Inertialize"), nullptr));
+			}
+			else
+			{
+				RowOptions->Entries.Add(MakeMetaEntry(Option.Name, File.Value(Option.Value)));
+			}
+		}
+		if (!RowOptions->Entries.IsEmpty())
+		{
+			Row->Meta = MoveTemp(RowOptions);
+		}
+		return Row;
+	}
+
+	/** A whole `StateMachine Name [meta] { ... }` statement. */
+	TUniquePtr<FDabNamedBlockStmt> LowerMachine(FFileLowering& File, const FDabModelStateMachine& Machine)
+	{
+		TUniquePtr<FDabNamedBlockStmt> MachineStmt = MakeUnique<FDabNamedBlockStmt>();
+		MachineStmt->Word = TEXT("StateMachine");
+		MachineStmt->Name = Machine.Name;
+		MachineStmt->Meta = File.Meta(Machine.Properties);
+		MachineStmt->Body = MakeUnique<FDabBlockExpr>();
+		TArray<FDabStmtPtr>& Members = MachineStmt->Body->Statements;
+		if (!Machine.Entry.IsEmpty())
+		{
+			Members.Add(MakeAssign(TEXT("Entry"), MakeName(Machine.Entry)));
+		}
+
+		for (const FDabModelState& State : Machine.States)
+		{
+			TUniquePtr<FDabNamedBlockStmt> StateStmt = MakeUnique<FDabNamedBlockStmt>();
+			StateStmt->Word = TEXT("State");
+			StateStmt->Name = State.Name;
+			StateStmt->Meta = File.Meta(State.Properties);
+			StateStmt->Body = MakeUnique<FDabBlockExpr>();
+			if (State.OnEnter.IsSet())
+			{
+				StateStmt->Body->Statements.Add(MakeAssign(TEXT("OnEnter"), File.Call(*State.OnEnter)));
+			}
+			if (State.OnExit.IsSet())
+			{
+				StateStmt->Body->Statements.Add(MakeAssign(TEXT("OnExit"), File.Call(*State.OnExit)));
+			}
+			if (State.OnBlended.IsSet())
+			{
+				StateStmt->Body->Statements.Add(MakeAssign(TEXT("OnBlended"), File.Call(*State.OnBlended)));
+			}
+			FGraphLowering(File, State.Graph, StateStmt->Body->Statements).Lower(TEXT("Pose"));
+			Members.Add(MoveTemp(StateStmt));
+		}
+
+		for (const FDabModelConduit& Conduit : Machine.Conduits)
+		{
+			TUniquePtr<FDabNamedBlockStmt> ConduitStmt = MakeUnique<FDabNamedBlockStmt>();
+			ConduitStmt->Word = TEXT("Conduit");
+			ConduitStmt->Name = Conduit.Name;
+			if (Conduit.Condition && !IsLiteralTrue(Conduit.Condition.Get()))
+			{
+				ConduitStmt->Value = File.Value(Conduit.Condition);
+			}
+			Members.Add(MoveTemp(ConduitStmt));
+		}
+
+		for (const FDabModelAlias& Alias : Machine.Aliases)
+		{
+			TUniquePtr<FDabNamedBlockStmt> AliasStmt = MakeUnique<FDabNamedBlockStmt>();
+			AliasStmt->Word = TEXT("Alias");
+			AliasStmt->Name = Alias.Name;
+			if (Alias.bGlobal)
+			{
+				AliasStmt->Value = MakeName(TEXT("All"));
+			}
+			else
+			{
+				TUniquePtr<FDabListExpr> States = MakeUnique<FDabListExpr>();
+				for (const FString& State : Alias.States)
+				{
+					States->Items.Add(MakeName(State));
+				}
+				AliasStmt->Value = MoveTemp(States);
+			}
+			Members.Add(MoveTemp(AliasStmt));
+		}
+
+		// Shared rules, each once, in first-use order.
+		TUniquePtr<FDabBlockExpr> Rules = MakeUnique<FDabBlockExpr>();
+		TSet<FString> RulesSeen;
+		for (const FDabModelTransition& Transition : Machine.Transitions)
+		{
+			if (!Transition.SharedRuleName.IsEmpty() && !RulesSeen.Contains(Transition.SharedRuleName))
+			{
+				RulesSeen.Add(Transition.SharedRuleName);
+				Rules->Statements.Add(MakeAssign(Transition.SharedRuleName, File.Value(Transition.Condition)));
+			}
+		}
+		if (!Rules->Statements.IsEmpty())
+		{
+			Members.Add(MakeAssign(TEXT("Rules"), MoveTemp(Rules)));
+		}
+
+		if (!Machine.Transitions.IsEmpty())
+		{
+			TUniquePtr<FDabBlockExpr> Transitions = MakeUnique<FDabBlockExpr>();
+			for (const FDabModelTransition& Transition : Machine.Transitions)
+			{
+				Transitions->Statements.Add(LowerTransitionRow(File, Transition));
+			}
+			Members.Add(MakeAssign(TEXT("Transitions"), MoveTemp(Transitions)));
+		}
+		for (int32 Index = 1; Index < Members.Num(); ++Index)
+		{
+			if (!IsSmallMachineMember(*Members[Index]) || !IsSmallMachineMember(*Members[Index - 1])
+				|| Members[Index]->Kind != Members[Index - 1]->Kind)
+			{
+				File.BlankLineBefore(Members[Index].Get());
+			}
+		}
+		return MachineStmt;
+	}
+
 	TUniquePtr<FDabFile> LowerModel(const FDabModel& Model, const FDabLowerOptions& Options)
 	{
 		TUniquePtr<FDabFile> Result = MakeUnique<FDabFile>();
@@ -1623,158 +1796,14 @@ namespace UE::DreamAnim::Compiler::LowerPrivate
 
 		for (const FDabModelStateMachine& Machine : Model.StateMachines)
 		{
-			TUniquePtr<FDabNamedBlockStmt> MachineStmt = MakeUnique<FDabNamedBlockStmt>();
-			MachineStmt->Word = TEXT("StateMachine");
-			MachineStmt->Name = Machine.Name;
-			MachineStmt->Meta = File.Meta(Machine.Properties);
-			MachineStmt->Body = MakeUnique<FDabBlockExpr>();
-			TArray<FDabStmtPtr>& Members = MachineStmt->Body->Statements;
-			if (!Machine.Entry.IsEmpty())
-			{
-				Members.Add(MakeAssign(TEXT("Entry"), MakeName(Machine.Entry)));
-			}
-
-			for (const FDabModelState& State : Machine.States)
-			{
-				TUniquePtr<FDabNamedBlockStmt> StateStmt = MakeUnique<FDabNamedBlockStmt>();
-				StateStmt->Word = TEXT("State");
-				StateStmt->Name = State.Name;
-				StateStmt->Meta = File.Meta(State.Properties);
-				StateStmt->Body = MakeUnique<FDabBlockExpr>();
-				if (State.OnEnter.IsSet())
-				{
-					StateStmt->Body->Statements.Add(MakeAssign(TEXT("OnEnter"), File.Call(*State.OnEnter)));
-				}
-				if (State.OnExit.IsSet())
-				{
-					StateStmt->Body->Statements.Add(MakeAssign(TEXT("OnExit"), File.Call(*State.OnExit)));
-				}
-				if (State.OnBlended.IsSet())
-				{
-					StateStmt->Body->Statements.Add(MakeAssign(TEXT("OnBlended"), File.Call(*State.OnBlended)));
-				}
-				FGraphLowering(File, State.Graph, StateStmt->Body->Statements).Lower(TEXT("Pose"));
-				Members.Add(MoveTemp(StateStmt));
-			}
-
-			for (const FDabModelConduit& Conduit : Machine.Conduits)
-			{
-				TUniquePtr<FDabNamedBlockStmt> ConduitStmt = MakeUnique<FDabNamedBlockStmt>();
-				ConduitStmt->Word = TEXT("Conduit");
-				ConduitStmt->Name = Conduit.Name;
-				if (Conduit.Condition && !IsLiteralTrue(Conduit.Condition.Get()))
-				{
-					ConduitStmt->Value = File.Value(Conduit.Condition);
-				}
-				Members.Add(MoveTemp(ConduitStmt));
-			}
-
-			for (const FDabModelAlias& Alias : Machine.Aliases)
-			{
-				TUniquePtr<FDabNamedBlockStmt> AliasStmt = MakeUnique<FDabNamedBlockStmt>();
-				AliasStmt->Word = TEXT("Alias");
-				AliasStmt->Name = Alias.Name;
-				if (Alias.bGlobal)
-				{
-					AliasStmt->Value = MakeName(TEXT("All"));
-				}
-				else
-				{
-					TUniquePtr<FDabListExpr> States = MakeUnique<FDabListExpr>();
-					for (const FString& State : Alias.States)
-					{
-						States->Items.Add(MakeName(State));
-					}
-					AliasStmt->Value = MoveTemp(States);
-				}
-				Members.Add(MoveTemp(AliasStmt));
-			}
-
-			// Shared rules, each once, in first-use order.
-			TUniquePtr<FDabBlockExpr> Rules = MakeUnique<FDabBlockExpr>();
-			TSet<FString> RulesSeen;
-			for (const FDabModelTransition& Transition : Machine.Transitions)
-			{
-				if (!Transition.SharedRuleName.IsEmpty() && !RulesSeen.Contains(Transition.SharedRuleName))
-				{
-					RulesSeen.Add(Transition.SharedRuleName);
-					Rules->Statements.Add(MakeAssign(Transition.SharedRuleName, File.Value(Transition.Condition)));
-				}
-			}
-			if (!Rules->Statements.IsEmpty())
-			{
-				Members.Add(MakeAssign(TEXT("Rules"), MoveTemp(Rules)));
-			}
-
-			if (!Machine.Transitions.IsEmpty())
-			{
-				TUniquePtr<FDabBlockExpr> Transitions = MakeUnique<FDabBlockExpr>();
-				for (const FDabModelTransition& Transition : Machine.Transitions)
-				{
-					TUniquePtr<FDabTransitionStmt> Row = MakeUnique<FDabTransitionStmt>();
-					Row->From = Transition.From;
-					Row->To = Transition.To;
-					if (Transition.ConditionKind == EDabConditionKind::Auto)
-					{
-						Row->Condition = MakeName(TEXT("Auto"));
-					}
-					else if (!Transition.SharedRuleName.IsEmpty())
-					{
-						Row->Condition = MakeName(Transition.SharedRuleName);
-					}
-					else
-					{
-						Row->Condition = File.Value(Transition.Condition);
-					}
-
-					TUniquePtr<FDabMeta> RowOptions = MakeUnique<FDabMeta>();
-					for (const FDabModelProperty& Option : Transition.Options)
-					{
-						if (Option.Name == TEXT("CrossfadeDuration"))
-						{
-							RowOptions->Entries.Add(MakeMetaEntry(TEXT("Blend"), File.Value(Option.Value)));
-						}
-						else if (Option.Name == TEXT("BlendMode"))
-						{
-							RowOptions->Entries.Add(MakeMetaEntry(TEXT("Curve"), File.Value(Option.Value)));
-						}
-						else if (Option.Name == TEXT("PriorityOrder"))
-						{
-							RowOptions->Entries.Add(MakeMetaEntry(TEXT("Priority"), File.Value(Option.Value)));
-						}
-						else if (Option.Name == TEXT("LogicType") && ReadNameOrString(Option.Value.Get()).Contains(TEXT("Inertialization")))
-						{
-							RowOptions->Entries.Add(MakeMetaEntry(TEXT("Inertialize"), nullptr));
-						}
-						else
-						{
-							RowOptions->Entries.Add(MakeMetaEntry(Option.Name, File.Value(Option.Value)));
-						}
-					}
-					if (!RowOptions->Entries.IsEmpty())
-					{
-						Row->Meta = MoveTemp(RowOptions);
-					}
-					Transitions->Statements.Add(MoveTemp(Row));
-				}
-				Members.Add(MakeAssign(TEXT("Transitions"), MoveTemp(Transitions)));
-			}
-			for (int32 Index = 1; Index < Members.Num(); ++Index)
-			{
-				if (!IsSmallMachineMember(*Members[Index]) || !IsSmallMachineMember(*Members[Index - 1])
-					|| Members[Index]->Kind != Members[Index - 1]->Kind)
-				{
-					File.BlankLineBefore(Members[Index].Get());
-				}
-			}
-			Body.Add(MoveTemp(MachineStmt));
+			Body.Add(LowerMachine(File, Machine));
 		}
 
 		if (File.bUsedMain)
 		{
 			TUniquePtr<FDabBlockExpr> Aliases = MakeUnique<FDabBlockExpr>();
 			TUniquePtr<FDabCallExpr> GetParent = MakeCall(MakeMember(MakeName(TEXT("Self")), TEXT("GetParent")));
-			Aliases->Statements.Add(MakeAssign(TEXT("Main"), MoveTemp(GetParent)));
+			Aliases->Statements.Add(MakeAssign(Options.ParentAlias, MoveTemp(GetParent)));
 			Body.Insert(MakeAssign(TEXT("Aliases"), MoveTemp(Aliases)), AliasInsertAt);
 		}
 
@@ -1822,10 +1851,96 @@ namespace UE::DreamAnim::Compiler::LowerPrivate
 	}
 }
 
+namespace UE::DreamAnim::Compiler::LowerPrivate
+{
+	FDabExprPtr LowerNodeCall(const FDabModel& Model, const FDabModelGraph& Graph, const FDabModelNode& Node, const FString& SkipPin, const FDabLowerOptions& Options)
+	{
+		FDabFile Scratch;
+		FFileLowering File(Model, Options, Scratch);
+		if (Node.ClassName == TEXT("AnimGraphNode_UseCachedPose"))
+		{
+			return MakeName(Node.CacheName);
+		}
+		if (Node.ClassName == TEXT("AnimGraphNode_StateMachine"))
+		{
+			return MakeName(Node.StateMachineName);
+		}
+		if (Node.ClassName == TEXT("AnimGraphNode_LinkedInputPose"))
+		{
+			TUniquePtr<FDabCallExpr> Input = MakeCall(MakeName(TEXT("Input")));
+			Input->Args.Add(MakeArgument(FString(), IsDabIdentifierText(Node.InputPoseName) ? MakeName(Node.InputPoseName) : MakeString(Node.InputPoseName)));
+			return Input;
+		}
+		TArray<FDabStmtPtr> Hoisted;
+		FGraphLowering Lowering(File, Graph, Hoisted);
+		Lowering.bPoseMarkers = true;
+		int32 Depth = 0;
+		return Lowering.NodeCall(Node, SkipPin, Depth);
+	}
+
+	TArray<FDabStmtPtr> LowerGraph(const FDabModel& Model, const FDabModelGraph& Graph, const FString& ResultName, FDabFile& TriviaFile, const FDabLowerOptions& Options)
+	{
+		FFileLowering File(Model, Options, TriviaFile);
+		TArray<FDabStmtPtr> Statements;
+		FGraphLowering(File, Graph, Statements).Lower(ResultName);
+		return Statements;
+	}
+}
+
 namespace UE::DreamAnim::Compiler
 {
+	const TCHAR* const DabPoseMarker = TEXT("__DabPose__");
+
 	TUniquePtr<Lang::FDabFile> LowerDabModel(const Model::FDabModel& Model, const FDabLowerOptions& Options)
 	{
 		return LowerPrivate::LowerModel(Model, Options);
+	}
+
+	Lang::FDabExprPtr LowerDabNodeCall(const Model::FDabModel& Model, const Model::FDabModelGraph& Graph, const Model::FDabModelNode& Node,
+		const FString& SkipPin, const FDabLowerOptions& Options)
+	{
+		return LowerPrivate::LowerNodeCall(Model, Graph, Node, SkipPin, Options);
+	}
+
+	Lang::FDabExprPtr LowerDabValue(const Model::FDabModel& Model, const Lang::FDabExpr& Value, const FDabLowerOptions& Options)
+	{
+		Lang::FDabFile Scratch;
+		LowerPrivate::FFileLowering File(Model, Options, Scratch);
+		const Lang::FDabExprPtr Copy = Lang::CloneExpr(Value);
+		return File.Value(Copy);
+	}
+
+	Lang::FDabExprPtr LowerDabCall(const Model::FDabModel& Model, const Model::FDabModelCall& Call, const FDabLowerOptions& Options)
+	{
+		Lang::FDabFile Scratch;
+		LowerPrivate::FFileLowering File(Model, Options, Scratch);
+		return File.Call(Call);
+	}
+
+	TUniquePtr<Lang::FDabMeta> LowerDabMeta(const Model::FDabModel& Model, const TArray<Model::FDabModelProperty>& Properties, const FDabLowerOptions& Options)
+	{
+		Lang::FDabFile Scratch;
+		LowerPrivate::FFileLowering File(Model, Options, Scratch);
+		return File.Meta(Properties);
+	}
+
+	TUniquePtr<Lang::FDabTransitionStmt> LowerDabTransition(const Model::FDabModel& Model, const Model::FDabModelTransition& Transition, const FDabLowerOptions& Options)
+	{
+		Lang::FDabFile Scratch;
+		LowerPrivate::FFileLowering File(Model, Options, Scratch);
+		return LowerPrivate::LowerTransitionRow(File, Transition);
+	}
+
+	TArray<Lang::FDabStmtPtr> LowerDabGraph(const Model::FDabModel& Model, const Model::FDabModelGraph& Graph, const FString& ResultName,
+		Lang::FDabFile& TriviaFile, const FDabLowerOptions& Options)
+	{
+		return LowerPrivate::LowerGraph(Model, Graph, ResultName, TriviaFile, Options);
+	}
+
+	TUniquePtr<Lang::FDabNamedBlockStmt> LowerDabStateMachine(const Model::FDabModel& Model, const Model::FDabModelStateMachine& Machine,
+		Lang::FDabFile& TriviaFile, const FDabLowerOptions& Options)
+	{
+		LowerPrivate::FFileLowering File(Model, Options, TriviaFile);
+		return LowerPrivate::LowerMachine(File, Machine);
 	}
 }
