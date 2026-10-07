@@ -42,6 +42,7 @@ namespace UE::DreamAnim::Compiler::CommandletPrivate
 		FString Under;
 		FString Out;
 		FString Json;
+		FString AnimSet;
 
 		TArray<Lang::FDabDiagnostic> Diagnostics;
 		int32 NumErrors = 0;
@@ -138,6 +139,10 @@ namespace UE::DreamAnim::Compiler::CommandletPrivate
 				{
 					Run.Json = Value;
 				}
+				else if (Key == TEXT("AnimSet"))
+				{
+					Run.AnimSet = Value;
+				}
 				continue;
 			}
 
@@ -203,6 +208,11 @@ namespace UE::DreamAnim::Compiler::CommandletPrivate
 		if ((Run.bWrite || Run.bVerify) && Run.Mode != EDabCommandletMode::Format)
 		{
 			Run.Fail(TEXT("-Write and -Verify go with -Format."));
+			return false;
+		}
+		if (!Run.AnimSet.IsEmpty() && Run.Mode != EDabCommandletMode::Decompile)
+		{
+			Run.Fail(TEXT("-AnimSet goes with -Decompile."));
 			return false;
 		}
 		if (Run.Mode == EDabCommandletMode::Decompile && Run.Assets.IsEmpty() && Run.Under.IsEmpty())
@@ -553,9 +563,15 @@ namespace UE::DreamAnim::Compiler::CommandletPrivate
 			ObjectPaths.Reset();
 		}
 
+		// Every Blueprint of the run moves its animations into the same set; a printed preview leaves it unsaved.
+		FDabAnimSetMigration Migration;
+		Migration.AnimSetPath = Run.AnimSet;
+		Migration.bSave = !Run.bStdout;
+
 		int32 NumDone = 0;
 		int32 NumUnchanged = 0;
 		int32 NumUnsupported = 0;
+		int32 NumSlots = 0;
 		for (const FString& ObjectPath : ObjectPaths)
 		{
 			const UAnimBlueprint* Blueprint = LoadObject<UAnimBlueprint>(nullptr, *ObjectPath);
@@ -564,7 +580,8 @@ namespace UE::DreamAnim::Compiler::CommandletPrivate
 				Run.Fail(FString::Printf(TEXT("Cannot load the Animation Blueprint %s."), *ObjectPath));
 				continue;
 			}
-			const FDabDecompileResult Decompiled = DecompileDabBlueprint(*Blueprint);
+			const FDabDecompileResult Decompiled = DecompileDabBlueprint(*Blueprint, FDabLowerOptions(), Run.AnimSet.IsEmpty() ? nullptr : &Migration);
+			NumSlots += Decompiled.LiftedAssets.Num();
 			const int32 ErrorsBefore = Run.NumErrors;
 			for (const Lang::FDabDiagnostic& Diagnostic : Decompiled.Diagnostics)
 			{
@@ -619,8 +636,9 @@ namespace UE::DreamAnim::Compiler::CommandletPrivate
 			UE_LOG(LogDreamAnimCommandlet, Display, TEXT("Wrote %s (%d unsupported construct(s))"), *Target, Decompiled.NumUnsupported);
 		}
 
-		UE_LOG(LogDreamAnimCommandlet, Display, TEXT("DreamAnim decompile: %d asset(s), %d %s, %d unchanged, %d unsupported construct(s), %d error(s), %d warning(s)"),
-			ObjectPaths.Num(), NumDone, Run.bStdout ? TEXT("printed") : TEXT("written"), NumUnchanged, NumUnsupported, Run.NumErrors, Run.NumWarnings);
+		const FString Slots = Run.AnimSet.IsEmpty() ? FString() : FString::Printf(TEXT(", %d animation(s) moved into %s"), NumSlots, *Run.AnimSet);
+		UE_LOG(LogDreamAnimCommandlet, Display, TEXT("DreamAnim decompile: %d asset(s), %d %s, %d unchanged, %d unsupported construct(s)%s, %d error(s), %d warning(s)"),
+			ObjectPaths.Num(), NumDone, Run.bStdout ? TEXT("printed") : TEXT("written"), NumUnchanged, NumUnsupported, *Slots, Run.NumErrors, Run.NumWarnings);
 	}
 }
 

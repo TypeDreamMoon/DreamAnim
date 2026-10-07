@@ -7,7 +7,9 @@
 #include "Animation/AnimBlueprint.h"
 #include "AnimStateNode.h"
 #include "Commandlets/Commandlet.h"
+#include "Animation/Skeleton.h"
 #include "Driver/DabDriver.h"
+#include "DreamAnimSet.h"
 #include "Generate/DabGenerate.h"
 #include "HAL/FileManager.h"
 #include "Interfaces/IPluginManager.h"
@@ -366,6 +368,119 @@ namespace UE::DreamAnim::Tests::DriverTests
 		TestTrue(FString::Printf(TEXT("the text is the golden's (%s)"), *Difference), Difference.IsEmpty());
 		// The golden lists nothing unsupported at its top.
 		TestEqual(TEXT("nothing unsupported"), Result.NumUnsupported, 0);
+		return true;
+	}
+
+	// ---------------------------------------------------------------------------------------------
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDabDriverDecompileToAnimSetTest, "DreamAnim.Driver.DecompileToAnimSet",
+		EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+	/**
+	 * Decompiling into an animation set: the animations in pins and in a state function's call become slots,
+	 * one per asset; the set gets the Blueprint's group with each slot filled; the text builds a Blueprint
+	 * that reads them from the set, and decompiles back to the same text.
+	 */
+	bool FDabDriverDecompileToAnimSetTest::RunTest(const FString& Parameters)
+	{
+		const FString Path = MakeDriverScratchDir(TEXT("AnimSet")) / TEXT("AB_Move.dab");
+		const FString Text = TEXT(
+			"AnimBlueprint(Name=\"DreamAnimTests/AnimSetMove/AB_Move\", Root=\"Game\")\n"
+			"{\n"
+			"    Settings = { Parent = AlsLinkedAnimationInstance; Skeleton = SK_Als; }\n"
+			"\n"
+			"    Aliases = { Main = Self.GetParent(); }\n"
+			"\n"
+			"    Graph = { Output = Locomotion; }\n"
+			"\n"
+			"    StateMachine Locomotion\n"
+			"    {\n"
+			"        Entry = Walk;\n"
+			"\n"
+			"        State Walk { Pose = BlendSpacePlayer(BlendSpace = BS_Als_WalkRun_Forward, X = Main.StandingState.StrideBlendAmount); }\n"
+			"\n"
+			"        State Stop\n"
+			"        {\n"
+			"            OnEnter = Main.PlayTransitionAnimation(Sequence = A_Als_Stop_Left, PlayRate = 1.5);\n"
+			"\n"
+			"            Pose = SequencePlayer(Sequence = A_Als_Stop_Left);\n"
+			"        }\n"
+			"\n"
+			"        Transitions = {\n"
+			"            Walk -> Stop : Main.FeetState.FootPlantedAmount <= -0.5;\n"
+			"        }\n"
+			"    }\n"
+			"}\n");
+		FDabCompileOptions Options;
+		Options.bSave = false;
+		const FDabCompileResult Built = CompileDabText(Path, Text, Options);
+		ReportCompileErrors(*this, Built);
+		if (!Built.Blueprint)
+		{
+			return false;
+		}
+
+		FDabAnimSetMigration Migration;
+		Migration.AnimSetPath = TEXT("/Game/DreamAnimTests/AnimSetMove/DAS_Move");
+		Migration.bSave = false;
+		const FDabDecompileResult Moved = DecompileDabBlueprint(*Built.Blueprint, FDabLowerOptions(), &Migration);
+		for (const FDabDiagnostic& Diagnostic : Moved.Diagnostics)
+		{
+			AddError(FormatDabDiagnosticLine(Diagnostic));
+		}
+		if (!TestTrue(TEXT("decompiles into the set"), Moved.bSucceeded))
+		{
+			return false;
+		}
+
+		// One slot per asset: the stop animation is read twice.
+		TArray<FString> Slots;
+		for (const FDabLiftedAsset& Lifted : Moved.LiftedAssets)
+		{
+			Slots.Add(Lifted.Slot + TEXT(":") + Lifted.Type);
+		}
+		TestEqual(TEXT("one slot per asset"), FString::Join(Slots, TEXT(" ")), FString(TEXT("A_Als_Stop_Left:AnimSequence BS_Als_WalkRun_Forward:BlendSpace")));
+		for (const TCHAR* Expected : {
+			TEXT("DefaultAnimSet"),
+			TEXT("DreamAnimTests/AnimSetMove/DAS_Move"),
+			TEXT("Assets = {"),
+			TEXT("AnimSequence A_Als_Stop_Left;"),
+			TEXT("BlendSpace   BS_Als_WalkRun_Forward;"),
+			TEXT("BlendSpace = Assets.BS_Als_WalkRun_Forward"),
+			TEXT("Sequence = Assets.A_Als_Stop_Left"),
+			TEXT("PlayTransitionAnimation(Sequence = Assets.A_Als_Stop_Left, PlayRate = 1.5)") })
+		{
+			TestTrue(FString::Printf(TEXT("the text has `%s`"), Expected), Moved.Text.Contains(Expected, ESearchCase::CaseSensitive));
+		}
+		TestFalse(TEXT("no asset is read directly any more"), Moved.Text.Contains(TEXT("= A_Als_Stop_Left"), ESearchCase::CaseSensitive));
+
+		const UDreamAnimSet* Set = LoadObject<UDreamAnimSet>(nullptr, TEXT("/Game/DreamAnimTests/AnimSetMove/DAS_Move.DAS_Move"));
+		if (!TestNotNull(TEXT("the set is made"), Set))
+		{
+			return false;
+		}
+		const UObject* Stop = Set->Find(TEXT("AB_Move"), TEXT("A_Als_Stop_Left"));
+		const UObject* Walk = Set->Find(TEXT("AB_Move"), TEXT("BS_Als_WalkRun_Forward"));
+		TestTrue(TEXT("the set holds the stop animation"), Stop && Stop->GetName() == TEXT("A_Als_Stop_Left"));
+		TestTrue(TEXT("the set holds the blend space"), Walk && Walk->GetName() == TEXT("BS_Als_WalkRun_Forward"));
+		TestTrue(TEXT("the set takes the Blueprint's skeleton"), Set->Skeleton && Set->Skeleton->GetName() == TEXT("SK_Als"));
+
+		// The text builds a Blueprint that reads the set, and that Blueprint decompiles back to the same text.
+		const FDabCompileResult Rebuilt = CompileDabText(Path, Moved.Text, Options);
+		ReportCompileErrors(*this, Rebuilt);
+		if (!Rebuilt.Blueprint)
+		{
+			return false;
+		}
+		const FDabDecompileResult Again = DecompileDabBlueprint(*Rebuilt.Blueprint);
+		TestEqual(TEXT("nothing unsupported in the rebuilt Blueprint"), Again.NumUnsupported, 0);
+		const FString Difference = DescribeDriverDifference(Moved.Text, Again.Text);
+		TestTrue(FString::Printf(TEXT("the rebuilt Blueprint decompiles to the same text (%s)"), *Difference), Difference.IsEmpty());
+
+		// Again into the set: nothing left to move, nothing in the set changes.
+		const FDabDecompileResult Twice = DecompileDabBlueprint(*Rebuilt.Blueprint, FDabLowerOptions(), &Migration);
+		TestEqual(TEXT("nothing left to move"), Twice.LiftedAssets.Num(), 0);
+		TestTrue(TEXT("and the text stays"), DescribeDriverDifference(Moved.Text, Twice.Text).IsEmpty());
 		return true;
 	}
 

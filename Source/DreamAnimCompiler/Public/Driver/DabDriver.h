@@ -9,11 +9,13 @@
 #include "CoreMinimal.h"
 #include "Lang/DabDiagnostic.h"
 #include "Lang/DabTemplates.h"
+#include "Lower/DabAssetSlots.h"
 #include "Lower/DabLower.h"
 #include "Model/DabModel.h"
 #include "Semantic/DabSemantic.h"
 
 class UAnimBlueprint;
+class UDreamAnimSet;
 
 namespace UE::DreamAnim::Compiler
 {
@@ -114,17 +116,41 @@ namespace UE::DreamAnim::Compiler
 	/** The canonical text of a source. False, with diagnostics, when it does not parse. */
 	DREAMANIMCOMPILER_API bool FormatDabText(const FString& FilePath, const FString& Text, FString& OutText, TArray<Lang::FDabDiagnostic>& OutDiagnostics);
 
+	/** Decompiling with the Blueprint's animations moved into an animation set (LiftDabAnimationAssets). */
+	struct FDabAnimSetMigration
+	{
+		/**
+		 * The set, as an object or package path (`/Game/Characters/Hero/DAS_Hero`). It is created when it does
+		 * not exist; the Blueprint's group is added to it and filled with the animations the Blueprint used.
+		 */
+		FString AnimSetPath;
+		/** Save the set when it changed; false leaves it dirty in memory. */
+		bool bSave = true;
+	};
+
 	struct FDabDecompileResult
 	{
 		FString Text;
 		TArray<Lang::FDabDiagnostic> Diagnostics;
 		/** What the language cannot hold; listed at the top of Text too. */
 		int32 NumUnsupported = 0;
+		/** With an animation set: the slots made from the Blueprint's animations. */
+		TArray<FDabLiftedAsset> LiftedAssets;
 		bool bSucceeded = false;
 	};
 
-	/** An Animation Blueprint as text: extract, make names identifiers, lower, print. */
-	DREAMANIMCOMPILER_API FDabDecompileResult DecompileDabBlueprint(const UAnimBlueprint& Blueprint, const FDabLowerOptions& Options = FDabLowerOptions());
+	/**
+	 * An Animation Blueprint as text: extract, make names identifiers, lower, print. With AnimSet, the
+	 * animations it reads at run time become slots first, and the set is filled with them (DAB8102, DAB8103).
+	 */
+	DREAMANIMCOMPILER_API FDabDecompileResult DecompileDabBlueprint(const UAnimBlueprint& Blueprint, const FDabLowerOptions& Options = FDabLowerOptions(),
+		const FDabAnimSetMigration* AnimSet = nullptr);
+
+	/**
+	 * The animation set at AnimSetPath (an object or package path), created in memory when there is none.
+	 * Null, with DAB8102 reported, when the path is not a valid asset path or holds an asset of another kind.
+	 */
+	DREAMANIMCOMPILER_API UDreamAnimSet* LoadOrCreateDabAnimSet(const FString& AnimSetPath, Lang::FDabDiagnosticSink& Sink);
 
 	/**
 	 * Where a decompiled Blueprint's text goes by default: under the project's `DAnim/`, the package path

@@ -32,6 +32,8 @@
  *   -Stdout        decompile: print the text instead of writing it (-stdout also makes the engine echo its
  *                  log to stdout)
  *   -Force         decompile: overwrite a file that exists and differs (it may be a hand-written source)
+ *   -AnimSet=<path> decompile: move the animations the Blueprints read at run time into asset slots and
+ *                  fill this animation set with them (created when missing; saved unless -Stdout)
  *   -Json=<file>   also write every diagnostic as JSON (what the VS Code extension reads)
  *
  * Every diagnostic is logged as `<file>(<line>,<col>): error DABnnnn: message`, then a one-line summary.

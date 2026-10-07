@@ -7,16 +7,64 @@
 #include "Driver/DabDriverPrivate.h"
 
 #include "Animation/AnimBlueprint.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "DreamAnimSet.h"
 #include "Extract/DabExtract.h"
 #include "Generate/DabGenerate.h"
 #include "Lang/DabParser.h"
 #include "Lang/DabPrinter.h"
 #include "Misc/FileHelper.h"
+#include "Misc/PackageName.h"
 #include "Misc/Paths.h"
 #include "UObject/Package.h"
+#include "UObject/SavePackage.h"
 
 namespace UE::DreamAnim::Compiler::DriverPrivate
 {
+	/** LiftDabAnimationAssets, then the set: created when missing, given the Blueprint's group, saved when asked. */
+	bool MoveDabAnimationsToSet(const UAnimBlueprint& Blueprint, Model::FDabModel& Model, const FDabAnimSetMigration& Migration,
+		Lang::FDabDiagnosticSink& Sink, TArray<FDabLiftedAsset>& OutLifted)
+	{
+		UDreamAnimSet* Set = LoadOrCreateDabAnimSet(Migration.AnimSetPath, Sink);
+		if (!Set)
+		{
+			return false;
+		}
+		OutLifted = LiftDabAnimationAssets(Model, Set->GetPathName());
+		if (Model.AssetSlots.IsEmpty())
+		{
+			return true;
+		}
+		TArray<FString> Kept;
+		const bool bChanged = FillDabAnimSet(*Set, Blueprint.GetFName(), Model, OutLifted, &Kept);
+		for (const FString& Slot : Kept)
+		{
+			Sink.Warning(TEXT("DAB8103"), Lang::FDabSpan(), FString::Printf(TEXT("%s already holds another animation in %s's slot %s; it is kept"),
+				*Set->GetName(), *Blueprint.GetName(), *Slot));
+		}
+		if (!bChanged && !Set->GetPackage()->IsDirty())
+		{
+			return true;
+		}
+		Set->MarkPackageDirty();
+		if (!Migration.bSave)
+		{
+			return true;
+		}
+		UPackage* Package = Set->GetPackage();
+		const FString Filename = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
+		FSavePackageArgs Args;
+		Args.TopLevelFlags = RF_Public | RF_Standalone;
+		Args.SaveFlags = SAVE_NoError;
+		Args.bSlowTask = false;
+		if (!UPackage::SavePackage(Package, Set, *Filename, Args))
+		{
+			Sink.Error(TEXT("DAB8102"), Lang::FDabSpan(), FString::Printf(TEXT("%s cannot be saved to %s"), *Package->GetName(), *Filename));
+			return false;
+		}
+		return true;
+	}
+
 	/** Moves one pass's diagnostics onto the result, each naming its file absolutely, and counts the errors. */
 	void AppendCompileDiagnostics(FDabCompileResult& Result, const Lang::FDabDiagnosticSink& Sink)
 	{
@@ -192,13 +240,48 @@ namespace UE::DreamAnim::Compiler
 		return true;
 	}
 
-	FDabDecompileResult DecompileDabBlueprint(const UAnimBlueprint& Blueprint, const FDabLowerOptions& Options)
+	UDreamAnimSet* LoadOrCreateDabAnimSet(const FString& AnimSetPath, Lang::FDabDiagnosticSink& Sink)
+	{
+		const FString ObjectPath = DriverPrivate::ToDabObjectPath(AnimSetPath);
+		const FString PackageName = FPackageName::ObjectPathToPackageName(ObjectPath);
+		const FString AssetName = FPackageName::ObjectPathToObjectName(ObjectPath);
+		if (ObjectPath.IsEmpty() || AssetName.IsEmpty() || !FPackageName::IsValidLongPackageName(PackageName))
+		{
+			Sink.Error(TEXT("DAB8102"), Lang::FDabSpan(), FString::Printf(TEXT("%s is not an asset path such as /Game/Characters/DAS_Hero"), *AnimSetPath));
+			return nullptr;
+		}
+		if (UObject* Existing = LoadObject<UObject>(nullptr, *ObjectPath, nullptr, LOAD_NoWarn | LOAD_Quiet))
+		{
+			UDreamAnimSet* Set = Cast<UDreamAnimSet>(Existing);
+			if (!Set)
+			{
+				Sink.Error(TEXT("DAB8102"), Lang::FDabSpan(), FString::Printf(TEXT("%s is a %s, not an animation set"), *ObjectPath, *Existing->GetClass()->GetName()));
+			}
+			return Set;
+		}
+		UPackage* Package = CreatePackage(*PackageName);
+		if (FindObject<UObject>(Package, *AssetName))
+		{
+			Sink.Error(TEXT("DAB8102"), Lang::FDabSpan(), FString::Printf(TEXT("%s holds another object named %s"), *PackageName, *AssetName));
+			return nullptr;
+		}
+		UDreamAnimSet* Set = NewObject<UDreamAnimSet>(Package, FName(*AssetName), RF_Public | RF_Standalone | RF_Transactional);
+		FAssetRegistryModule::AssetCreated(Set);
+		Set->MarkPackageDirty();
+		return Set;
+	}
+
+	FDabDecompileResult DecompileDabBlueprint(const UAnimBlueprint& Blueprint, const FDabLowerOptions& Options, const FDabAnimSetMigration* AnimSet)
 	{
 		FDabDecompileResult Result;
 		const FString ObjectPath = Blueprint.GetPathName();
 		Lang::FDabDiagnosticSink Sink(ObjectPath);
 		Model::FDabModel Model;
-		const bool bExtracted = ExtractDabModel(Blueprint, Model, Sink);
+		bool bExtracted = ExtractDabModel(Blueprint, Model, Sink);
+		if (bExtracted && AnimSet)
+		{
+			bExtracted = DriverPrivate::MoveDabAnimationsToSet(Blueprint, Model, *AnimSet, Sink, Result.LiftedAssets);
+		}
 		if (bExtracted)
 		{
 			TMap<FString, FString> Renames;

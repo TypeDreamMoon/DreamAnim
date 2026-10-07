@@ -13,9 +13,10 @@
 #   dab.ps1 fmt [-File F] [-Root R] [-Write | -Verify] [-Markers] [-Json J]
 #                                 print the canonical text; -Write rewrites the files that differ (keeping
 #                                 their line ends); -Verify writes nothing and fails on any file not canonical
-#   dab.ps1 decompile (-Asset A[,B] | -Under /Game/Folder) [-Out O] [-Stdout [-Markers]] [-Force] [-Json J]
+#   dab.ps1 decompile (-Asset A[,B] | -Under /Game/Folder) [-AnimSet S] [-Out O] [-Stdout [-Markers]] [-Force] [-Json J]
 #                                 Animation Blueprints to text, below the project's DAnim/ unless -Out;
-#                                 a file that exists and differs is only replaced with -Force
+#                                 a file that exists and differs is only replaced with -Force; -AnimSet moves
+#                                 their animations into slots of that animation set (created when missing)
 #
 # build, check, fmt and decompile run `UnrealEditor-Cmd <project> -run=DreamAnim` on -Project, else the
 # project above -File, else the test host, and keep the lines that matter: diagnostics
@@ -52,6 +53,7 @@ param(
     [switch]$Verify,
     [string[]]$Asset,
     [string]$Under,
+    [string]$AnimSet,
     [string]$Out,
     [switch]$Stdout,
     [string]$Json,
@@ -267,6 +269,7 @@ function Invoke-Commandlet {
     if ($Verify) { $arguments += '-Verify' }
     foreach ($a in @($Asset)) { if ($a) { $arguments += Format-Switch 'Asset' $a } }
     if ($Under) { $arguments += Format-Switch 'Under' $Under }
+    if ($AnimSet) { $arguments += Format-Switch 'AnimSet' $AnimSet }
     if ($Out) { $arguments += Format-Switch 'Out' $Out }
     if ($Stdout) { $arguments += '-Stdout' }
     if ($Json) { $arguments += Format-Switch 'Json' $Json }
