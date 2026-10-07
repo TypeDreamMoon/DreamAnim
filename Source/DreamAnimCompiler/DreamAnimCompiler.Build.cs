@@ -28,6 +28,7 @@ public class DreamAnimCompiler : ModuleRules
 			"GameplayTags",
 			"Kismet",
 			"KismetCompiler",
+			"Projects",
 			"PropertyAccessEditor",
 			"UnrealEd",
 			"DreamAnim",
