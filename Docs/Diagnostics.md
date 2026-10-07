@@ -175,6 +175,7 @@ DAB3001-DAB6099 come from this pass; [Mapping.md](Mapping.md) lists them with th
 | DAB6014 | error | Nothing to build: the source file cannot be read. | Check that the file exists and is not locked by another program. |
 | DAB6015 | error | Something an AnimLayerInterface cannot hold: a graph, a layer body, a state machine, notifies, asset slots. | An interface only declares layers: `Layer Name [ meta ];`. Write the layers' poses in the Blueprints that implement it. |
 | DAB6016 | error | Unknown metadata on a pose statement, `Cached` with a value, `Cached` on the result, a node function without a call, or a node function with no node to go on. | A named pose takes `Cached`, `OnInitialUpdate`, `OnBecomeRelevant` and `OnUpdate`. Cache a named pose and output its name. |
+| DAB6017 | error | A cached pose is used outside the graph that saves it: in another layer, or in the AnimGraph when a layer saves it. The engine's compiler reads a cache only in the AnimGraph or layer that saves it and in the states of the machines that graph runs. | Save a cache of that pose in the graph that uses it, or give the layer the pose as an input (`Input(...)`). |
 
 ## DAB7xxx: generator
 

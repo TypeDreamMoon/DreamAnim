@@ -242,6 +242,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 			BuildStateMachine(*Machine);
 		}
 		CheckMachineUses();
+		CheckCacheUses();
 
 		return !Sink.HasErrors();
 	}

@@ -319,10 +319,10 @@ MovementDetails = {
 ```
 
 - A cached pose may be used any number of times.
-- Its name is visible in every graph of the file: the AnimGraph, layers and states. The engine's own
-  editor offers a cache only inside the AnimGraph or layer that saves it, together with the states of
-  that graph's machines; keep uses there.
-  <!-- check: the checker and the generator accept a cache saved in one layer and used in another; whether the engine compiles and runs that is not covered by the code or the tests. -->
+- It can be used in the AnimGraph or layer that saves it, and in the states of the machines that graph
+  runs. Anywhere else (another layer, or the AnimGraph for a cache a layer saves) is DAB6017: the
+  engine's compiler cannot place a cache read in another graph. Give a layer the pose as an input
+  instead.
 - Cache names are shared by the whole Blueprint: a second cache of the same name is DAB6008, and so is a
   cache named like a state machine.
 - `Output` cannot be cached (DAB6016). Cache a named pose and output its name.

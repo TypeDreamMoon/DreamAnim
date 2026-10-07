@@ -957,6 +957,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		}
 		if (CacheOwners.Contains(Name.Name))
 		{
+			CacheUses.Add({ Name.Name, Scope.GraphPath, Name.Span });
 			return AddSimpleNode(Scope, IdHint, TEXT("AnimGraphNode_UseCachedPose"), Name.Name, FString());
 		}
 		if (MachineStmts.Contains(Name.Name))
@@ -968,6 +969,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 					TEXT("Cache the pose where the machine runs ([ Cached ]) and use the cache here."));
 				return FString();
 			}
+			MachineGraphs.Add(Name.Name, Scope.GraphPath);
 			return AddSimpleNode(Scope, IdHint, TEXT("AnimGraphNode_StateMachine"), FString(), Name.Name);
 		}
 
@@ -1002,6 +1004,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 	void FSemantic::BuildCacheDefinition(const FString& Name, FPoseDef& Def, FGraphScope& Scope)
 	{
 		Def.bBuilding = true;
+		CacheGraphs.Add(Name, Scope.GraphPath);
 		const FString SaveId = MakeNodeId(Scope, Name);
 		const FString PoseId = Def.Stmt->Value ? BuildPose(*Def.Stmt->Value, Scope, Name + TEXT("/Pose"), nullptr) : FString();
 		Def.bBuilding = false;
@@ -2471,6 +2474,45 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 				Seen.Add(Property->GetName());
 				ReadMetaValue(*Property, Entry->Value.Get(), Entry->KeySpan, Default, Transition.Options, FString::Printf(TEXT("%s of %s"), *Key, *What));
 			}
+		}
+	}
+
+	FString FSemantic::FindRootGraph(const FString& GraphPath) const
+	{
+		FString Path = GraphPath;
+		// `Machine/<M>/State/<S>` runs where M runs; machines can nest, but no deeper than there are machines.
+		for (int32 Depth = 0; Depth <= MachineGraphs.Num() && Path.StartsWith(TEXT("Machine/")); ++Depth)
+		{
+			FString Machine = Path.RightChop(8);
+			Machine.Split(TEXT("/"), &Machine, nullptr);
+			const FString* Runs = MachineGraphs.Find(Machine);
+			if (!Runs)
+			{
+				return FString();
+			}
+			Path = *Runs;
+		}
+		return Path.StartsWith(TEXT("Machine/")) ? FString() : Path;
+	}
+
+	void FSemantic::CheckCacheUses()
+	{
+		const auto Describe = [](const FString& Root)
+		{
+			return Root == TEXT("AnimGraph") ? FString(TEXT("the AnimGraph")) : FString::Printf(TEXT("the layer %s"), *Root.RightChop(6));
+		};
+		for (const FCacheUse& Use : CacheUses)
+		{
+			const FString* Saved = CacheGraphs.Find(Use.Name);
+			const FString SavedRoot = Saved ? FindRootGraph(*Saved) : FString();
+			const FString UsedRoot = FindRootGraph(Use.GraphPath);
+			if (SavedRoot.IsEmpty() || UsedRoot.IsEmpty() || SavedRoot == UsedRoot)
+			{
+				continue;
+			}
+			Sink.Error(TEXT("DAB6017"), Use.Span,
+				FString::Printf(TEXT("The cached pose `%s` is saved in %s and cannot be used in %s."), *Use.Name, *Describe(SavedRoot), *Describe(UsedRoot)),
+				TEXT("The engine reads a cache only in the graph that saves it and in that graph's state machines. Save a cache in this graph, or pass the pose in as an input."));
 		}
 	}
 

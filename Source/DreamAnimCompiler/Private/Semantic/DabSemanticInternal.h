@@ -344,6 +344,10 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		void ReadTransitionOptions(const FDabMeta* Meta, FDabModelTransition& Transition, const FString& What);
 		const FDabExpr* ResolveRule(FRuleSet& Rules, const FString& Name, const FDabSpan& UseSpan);
 		void CheckMachineUses();
+		/** A cache used outside the graph that saves it and that graph's machines: DAB6017. */
+		void CheckCacheUses();
+		/** The AnimGraph or layer a graph path belongs to, through the machines that run its states; empty when unknown. */
+		FString FindRootGraph(const FString& GraphPath) const;
 
 		/** The node class a type name means; null after DAB3001/DAB3002. */
 		UClass* ResolveNodeClass(const FString& TypeName, const FDabSpan& Span);
@@ -423,6 +427,18 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 
 		/** Cache name -> the graph location that defines it. */
 		TMap<FString, FString> CacheOwners;
+		/** Cache name -> the graph path that saves it, once built. */
+		TMap<FString, FString> CacheGraphs;
+		/** Every use of a cache from another graph than the one that saves it: checked once every graph is built. */
+		struct FCacheUse
+		{
+			FString Name;
+			FString GraphPath;
+			FDabSpan Span;
+		};
+		TArray<FCacheUse> CacheUses;
+		/** Machine name -> the graph path that runs it. */
+		TMap<FString, FString> MachineGraphs;
 		/** Every non-cached named pose of every graph -> its graph, to say why a name is not visible elsewhere. */
 		TMap<FString, FString> PoseOwners;
 		/** State machine statements by name, how often a pose names each, and the first use. */

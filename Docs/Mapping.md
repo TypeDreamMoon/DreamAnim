@@ -164,3 +164,4 @@ Raised by the semantic pass (`Source/DreamAnimCompiler/Private/Semantic/`). Seve
 | DAB6014 | Error | Nothing to build: the source file cannot be read |
 | DAB6015 | Error | Something an AnimLayerInterface cannot hold (a graph, a layer body, a state machine, notifies, asset slots) |
 | DAB6016 | Error | Unknown metadata on a pose statement, `Cached` on the result, or a node function with no node to go on |
+| DAB6017 | Error | A cached pose used outside the AnimGraph or layer that saves it and that graph's state machines |

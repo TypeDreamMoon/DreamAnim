@@ -1,0 +1,22 @@
+// A cache saved in the AnimGraph and used in a layer: the engine's compiler cannot order it there.
+// Its use in a state of a machine the AnimGraph runs is fine.
+AnimBlueprint(Name="Validate/CacheAcrossGraphs", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Graph = {
+        Crouch = SequenceEvaluator(Sequence = A_Als_Crouch_Pose, ExplicitFrame = 0) [ Cached ];
+        Output = TwoWayBlend(Alpha = 0.5, A = Locomotion, B = LinkedAnimLayer(Layer = "Upper"));
+    }
+
+    Layer Upper = Crouch;
+
+    StateMachine Locomotion
+    {
+        Entry = Idle;
+
+        State Idle { Pose = Crouch; }
+    }
+}
+
+// EXPECT DAB6017 (12,19)
