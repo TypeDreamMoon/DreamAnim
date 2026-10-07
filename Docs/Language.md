@@ -776,8 +776,8 @@ These functions read the state machine a condition belongs to. They are anim get
 
 In a node argument inside a state, there is no transition source: name the state for `StateWeight`,
 `TimeRemaining` and `TimeRemainingRatio`. `StateTime()` and `MachineWeight()` without an argument read
-the machine whose state holds the node.
-<!-- check: the generator builds these getters into node arguments, but no test covers it, and whether the engine accepts the getter there is not shown by the code. -->
+the machine whose state holds the node. The generator binds such an argument to a function it writes;
+the engine runs it with the values these getters have in that state.
 
 ## Conveniences
 
