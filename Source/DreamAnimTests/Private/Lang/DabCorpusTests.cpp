@@ -7,6 +7,9 @@
 //   Format/     each file is printed and compared with its `.formatted` golden.
 //   Templates/  each .dab is parsed, its #includes resolved and its templates expanded; EXPECT lines as
 //               above, and the expanded tree is compared with its `.expanded.tree` golden.
+//   Validate/   each .dab and .dai is checked as the command line's `check` does (parse, includes,
+//               templates, semantic; nothing generated); EXPECT lines as above. A file without them must
+//               check clean, warnings included. Libraries the cases include live in Validate/lib/.
 //
 // Every clean file in Parse/ and Format/ is also printed twice, to check that the printer keeps the
 // tree and that formatting is idempotent.
@@ -14,6 +17,7 @@
 // A golden that is missing or different is written next to the case as `<golden>.actual` and the test
 // fails; review the .actual and rename it to promote it.
 
+#include "Driver/DabDriver.h"
 #include "Interfaces/IPluginManager.h"
 #include "Lang/DabParser.h"
 #include "Lang/DabPrinter.h"
@@ -160,9 +164,9 @@ namespace UE::DreamAnim::Tests
 		 * Every expectation must match one diagnostic and every diagnostic one expectation. Diagnostics in
 		 * other files (an #included library) match on the code alone.
 		 */
-		void CheckDiagnostics(FAutomationTestBase& Test, const FString& MainPath, const TArray<FExpectation>& Expected, const FDabDiagnosticSink& Sink)
+		void CheckDiagnostics(FAutomationTestBase& Test, const FString& MainPath, const TArray<FExpectation>& Expected, TConstArrayView<FDabDiagnostic> Diagnostics)
 		{
-			TArray<FDabDiagnostic> Unmatched = Sink.GetDiagnostics();
+			TArray<FDabDiagnostic> Unmatched(Diagnostics);
 			for (const FExpectation& Expectation : Expected)
 			{
 				const int32 Index = Unmatched.IndexOfByPredicate([&Expectation, &MainPath](const FDabDiagnostic& Diagnostic)
@@ -251,7 +255,7 @@ namespace UE::DreamAnim::Tests
 		}
 
 		const TArray<FExpectation> Expected = ReadExpectations(Text);
-		CheckDiagnostics(*this, Path, Expected, Sink);
+		CheckDiagnostics(*this, Path, Expected, Sink.GetDiagnostics());
 
 		if (Expected.IsEmpty() && !Sink.HasErrors())
 		{
@@ -318,11 +322,36 @@ namespace UE::DreamAnim::Tests
 		ResolveDabIncludes(Unit, Loader, Sink);
 		ExpandDabTemplates(Unit, Sink);
 
-		CheckDiagnostics(*this, Path, Expected, Sink);
+		CheckDiagnostics(*this, Path, Expected, Sink.GetDiagnostics());
 		if (Expected.IsEmpty() && !Sink.HasErrors())
 		{
 			CheckGolden(*this, FPaths::ChangeExtension(Path, TEXT(".expanded.tree")), DumpDabTree(*Unit.Main));
 		}
+		return true;
+	}
+
+	IMPLEMENT_COMPLEX_AUTOMATION_TEST(FDabCorpusValidateTest, "DreamAnim.Lang.Corpus.Validate",
+		EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+	void FDabCorpusValidateTest::GetTests(TArray<FString>& OutBeautifiedNames, TArray<FString>& OutTestCommands) const
+	{
+		FindCases(TEXT("Validate"), { TEXT(".dab"), TEXT(".dai") }, OutBeautifiedNames, OutTestCommands);
+	}
+
+	bool FDabCorpusValidateTest::RunTest(const FString& InPath)
+	{
+		const FString Path = FPaths::ConvertRelativePathToFull(InPath);
+		FString Text;
+		if (!LoadText(Path, Text))
+		{
+			AddError(FString::Printf(TEXT("Cannot read %s"), *Path));
+			return false;
+		}
+
+		UE::DreamAnim::Compiler::FDabCompileOptions Options;
+		Options.bGenerate = false;
+		const UE::DreamAnim::Compiler::FDabCompileResult Result = UE::DreamAnim::Compiler::CompileDabText(Path, Text, Options);
+		CheckDiagnostics(*this, Path, ReadExpectations(Text), Result.Diagnostics);
 		return true;
 	}
 }
