@@ -1,0 +1,11 @@
+// Without a Parent setting the parent class is AnimInstance: class defaults and calls are checked against it.
+AnimBlueprint(Name="Validate/OkDefaultsWithoutParent", Root="Game")
+{
+    Settings = { Skeleton = SK_Als; }
+
+    Defaults = { RootMotionMode = RootMotionFromMontagesOnly; }
+
+    Notifies = { StopMontages = Self.Montage_Stop(0.2); }
+
+    Graph = { Output = SequencePlayer(Sequence = A_Als_Idle); }
+}

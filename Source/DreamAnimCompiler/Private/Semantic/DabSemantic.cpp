@@ -56,6 +56,8 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		}
 		Model.Kind = Kind;
 		Model.AnimGraph.Name = TEXT("AnimGraph");
+		// Without a Parent setting the Blueprint derives from AnimInstance, as the generator makes it.
+		SelfClass = Kind == EDabDocumentKind::AnimBlueprint ? UAnimInstance::StaticClass() : nullptr;
 		ReadHeader(*Document);
 
 		for (TObjectIterator<UClass> It; It; ++It)
@@ -488,6 +490,8 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		const FDabExpr& Value = SkipParens(InValue);
 		const bool bInterface = Kind == EDabDocumentKind::AnimLayerInterface;
 		const UClass* Required = bInterface ? UAnimLayerInterface::StaticClass() : UAnimInstance::StaticClass();
+		// Unknown until the parent is found: nothing is checked against a class the file does not name.
+		SelfClass = nullptr;
 
 		UClass* ParentClass = nullptr;
 		FString BlueprintPath;
@@ -647,7 +651,12 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 
 	void FSemantic::ReadClassDefaults(const FDabBlockExpr& Block)
 	{
-		const UObject* ParentDefaults = SelfClass ? SelfClass->GetDefaultObject() : nullptr;
+		if (!SelfClass)
+		{
+			// The parent class could not be found, and that was reported; there is nothing to check the defaults against.
+			return;
+		}
+		const UObject* ParentDefaults = SelfClass->GetDefaultObject();
 		for (const FDabStmtPtr& Statement : Block.Statements)
 		{
 			if (!Statement || Statement->Is<FDabRegionStmt>())
@@ -661,14 +670,14 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 				continue;
 			}
 			// What the Class Defaults panel edits, as the extractor reads it: editable properties of the parent class.
-			const FProperty* Property = SelfClass ? FindFProperty<FProperty>(SelfClass, FName(*Assign->Name)) : nullptr;
+			const FProperty* Property = FindFProperty<FProperty>(SelfClass, FName(*Assign->Name));
 			const bool bEditable = Property && Property->HasAnyPropertyFlags(CPF_Edit)
 				&& !Property->HasAnyPropertyFlags(CPF_Transient | CPF_Deprecated | CPF_DisableEditOnTemplate)
 				&& Property->GetOwnerClass() != UObject::StaticClass();
 			if (!bEditable || !ParentDefaults)
 			{
 				Sink.Error(TEXT("DAB4014"), Assign->NameSpan,
-					FString::Printf(TEXT("`%s` is not an editable property of the parent class %s."), *Assign->Name, SelfClass ? *SelfClass->GetName() : TEXT("(unknown)")));
+					FString::Printf(TEXT("`%s` is not an editable property of the parent class %s."), *Assign->Name, *SelfClass->GetName()));
 				continue;
 			}
 			ReadMetaValue(*Property, Assign->Value.Get(), Assign->NameSpan, Property->ContainerPtrToValuePtr<void>(ParentDefaults), Model.ClassDefaults,

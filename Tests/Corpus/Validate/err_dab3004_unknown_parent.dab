@@ -1,0 +1,12 @@
+// A parent class that does not exist. The class defaults are not also reported: there is no class to
+// check them against.
+AnimBlueprint(Name="Validate/UnknownParent", Root="Game")
+{
+    Settings = { Parent = AlsLiteAnimInstanc; Skeleton = SK_Als; }
+
+    Defaults = { RootMotionMode = RootMotionFromMontagesOnly; }
+
+    Graph = { Output = SequencePlayer(Sequence = A_Als_Idle); }
+}
+
+// EXPECT DAB3004 (5,27)

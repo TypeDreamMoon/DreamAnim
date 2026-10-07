@@ -141,7 +141,7 @@ DAB3001-DAB6099 come from this pass; [Mapping.md](Mapping.md) lists them with th
 | DAB4011 | error | The same field, key, option or node function given twice, or given both directly and by the shorthand that implies it. | Give it once. With a keyed `BlendPose`, leave out `Tags` and `VisibleEnumEntries`. Give `ModifyCurve` curves either as arguments or as `CurveNames` / `CurveValues`. |
 | DAB4012 | error | `BlendListByEnum` whose enum is neither written as `BoundEnum` nor the type of the path bound to `ActiveEnumValue`. | Write `BoundEnum = EnumName`, or bind `ActiveEnumValue` to a path of that enum's type. |
 | DAB4013 | warning | `Inputs` names an input pose the linked graph or layer's target does not have. The hint lists the ones it has. | Use one of the listed names. When the target's inputs changed, update the file. |
-| DAB4014 | error | A `Defaults` entry that is not an editable property of the parent class, or not written `Property = Value;`. | Use an editable property of the parent class, as the Class Defaults panel shows it. |
+| DAB4014 | error | A `Defaults` entry that is not an editable property of the parent class (AnimInstance when `Settings` names no `Parent`), or not written `Property = Value;`. | Use an editable property of the parent class, as the Class Defaults panel shows it. |
 
 ## DAB5xxx: paths, calls and aliases
 
