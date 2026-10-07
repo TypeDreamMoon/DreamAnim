@@ -36,7 +36,9 @@
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/CompilerResultsLog.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "EdGraphToken.h"
 #include "Logging/TokenizedMessage.h"
+#include "Misc/UObjectToken.h"
 #include "Misc/PackageName.h"
 #include "Misc/SecureHash.h"
 #include "UObject/MetaData.h"
@@ -93,7 +95,8 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 			UsedGuids.Remove(Node->NodeGuid);
 		}
 		// The engine replaces duplicate GUIDs on load, so a collision gets a salt instead.
-		FString Key = GraphPath + TEXT("/") + Id;
+		const FString Place = GraphPath + TEXT("/") + Id;
+		FString Key = Place;
 		FGuid Guid = MakeGuid(Key);
 		while (UsedGuids.Contains(Guid))
 		{
@@ -103,6 +106,7 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 		Node->NodeGuid = Guid;
 		UsedGuids.Add(Guid);
 		GuidNodes.Add(Node);
+		GuidPlaces.Add(Guid, Place);
 	}
 
 	void FDabGenContext::AssignRemainingGuids()
@@ -560,7 +564,42 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 		return Set;
 	}
 
-	static void DabGenCompile(UAnimBlueprint* Blueprint, FDabGenerateResult& Result)
+	/**
+	 * The places in the model of the generated nodes a compiler message names: each node the message
+	 * mentions, then the nodes whose graphs hold it (a rule's transition, a state), innermost first.
+	 */
+	static TArray<FString> DabGenMessageOrigins(const FTokenizedMessage& Message, const TMap<FGuid, FString>& GuidPlaces)
+	{
+		TArray<FString> Origins;
+		for (const TSharedRef<IMessageToken>& Token : Message.GetMessageTokens())
+		{
+			const UObject* Object = nullptr;
+			if (Token->GetType() == EMessageToken::EdGraph)
+			{
+				const FEdGraphToken& GraphToken = static_cast<const FEdGraphToken&>(*Token);
+				Object = GraphToken.GetGraphObject();
+				if (!Object && GraphToken.GetPin())
+				{
+					Object = GraphToken.GetPin()->GetOwningNodeUnchecked();
+				}
+			}
+			else if (Token->GetType() == EMessageToken::Object)
+			{
+				Object = static_cast<const FUObjectToken&>(*Token).GetObject().Get();
+			}
+			for (const UObject* Current = Object; Current && !Current->IsA<UBlueprint>(); Current = Current->GetOuter())
+			{
+				const UEdGraphNode* Node = Cast<UEdGraphNode>(Current);
+				if (const FString* Place = Node ? GuidPlaces.Find(Node->NodeGuid) : nullptr)
+				{
+					Origins.AddUnique(*Place);
+				}
+			}
+		}
+		return Origins;
+	}
+
+	static void DabGenCompile(UAnimBlueprint* Blueprint, const TMap<FGuid, FString>& GuidPlaces, FDabGenerateResult& Result)
 	{
 		// Silent: an error in the log would fail the automation test that generates on purpose broken models.
 		FCompilerResultsLog Log;
@@ -573,15 +612,18 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 			if (Severity == EMessageSeverity::Error)
 			{
 				Result.CompilerErrors.Add(Message->ToText().ToString());
+				Result.CompilerErrorOrigins.Add(DabGenMessageOrigins(*Message, GuidPlaces));
 			}
 			else if (Severity == EMessageSeverity::Warning || Severity == EMessageSeverity::PerformanceWarning)
 			{
 				Result.CompilerWarnings.Add(Message->ToText().ToString());
+				Result.CompilerWarningOrigins.Add(DabGenMessageOrigins(*Message, GuidPlaces));
 			}
 		}
 		if (Blueprint->Status == BS_Error && Result.CompilerErrors.IsEmpty())
 		{
 			Result.CompilerErrors.Add(FString::Printf(TEXT("%s failed to compile"), *Blueprint->GetName()));
+			Result.CompilerErrorOrigins.AddDefaulted();
 		}
 	}
 
@@ -720,13 +762,15 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 		{
 			DabGenApplyObjectProperties(Ctx, Blueprint->GeneratedClass->GetDefaultObject(), Model.ClassDefaults, TEXT("Defaults"));
 		}
-		DabGenCompile(Blueprint, Result);
+		DabGenCompile(Blueprint, Ctx.GuidPlaces, Result);
 		if (!bDefaultsFirst && Blueprint->GeneratedClass && !Model.ClassDefaults.IsEmpty())
 		{
 			DabGenApplyObjectProperties(Ctx, Blueprint->GeneratedClass->GetDefaultObject(), Model.ClassDefaults, TEXT("Defaults"));
 			Result.CompilerErrors.Reset();
 			Result.CompilerWarnings.Reset();
-			DabGenCompile(Blueprint, Result);
+			Result.CompilerErrorOrigins.Reset();
+			Result.CompilerWarningOrigins.Reset();
+			DabGenCompile(Blueprint, Ctx.GuidPlaces, Result);
 		}
 
 		const bool bModelClean = Sink.NumErrors() == ErrorsBefore;

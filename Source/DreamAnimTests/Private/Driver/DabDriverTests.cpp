@@ -5,9 +5,9 @@
 // diagnostic forms tools read, and the command line's check mode run in this process.
 
 #include "Animation/AnimBlueprint.h"
+#include "Animation/Skeleton.h"
 #include "AnimStateNode.h"
 #include "Commandlets/Commandlet.h"
-#include "Animation/Skeleton.h"
 #include "Driver/DabDriver.h"
 #include "DreamAnimSet.h"
 #include "Generate/DabGenerate.h"
@@ -368,6 +368,59 @@ namespace UE::DreamAnim::Tests::DriverTests
 		TestTrue(FString::Printf(TEXT("the text is the golden's (%s)"), *Difference), Difference.IsEmpty());
 		// The golden lists nothing unsupported at its top.
 		TestEqual(TEXT("nothing unsupported"), Result.NumUnsupported, 0);
+		return true;
+	}
+
+	// ---------------------------------------------------------------------------------------------
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDabDriverCompilerMessagePlaceTest, "DreamAnim.Driver.CompilerMessagePlace",
+		EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+	/**
+	 * A node the language accepts but the Blueprint compiler rejects (a player set to sync with no group):
+	 * the compiler's error lands on the node's call in the text, in the AnimGraph and inside a state.
+	 */
+	bool FDabDriverCompilerMessagePlaceTest::RunTest(const FString& Parameters)
+	{
+		const FString Path = MakeDriverScratchDir(TEXT("CompilerMessages")) / TEXT("AB_Messages.dab");
+		const FString Text = TEXT(
+			"AnimBlueprint(Name=\"DreamAnimTests/CompilerMessages/AB_Messages\", Root=\"Game\")\n"
+			"{\n"
+			"    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }\n"
+			"\n"
+			"    Graph = {\n"
+			"        Output = TwoWayBlend(\n"
+			"            Alpha = 0.5,\n"
+			"            A     = Locomotion,\n"
+			"            B     = SequencePlayer(Sequence = A_Als_Stop_Left, Method = SyncGroup)\n"
+			"        );\n"
+			"    }\n"
+			"\n"
+			"    StateMachine Locomotion\n"
+			"    {\n"
+			"        Entry = Idle;\n"
+			"\n"
+			"        State Idle\n"
+			"        {\n"
+			"            Pose = SequencePlayer(Sequence = A_Als_Stop_Right, Method = SyncGroup);\n"
+			"        }\n"
+			"    }\n"
+			"}\n");
+		FDabCompileOptions Options;
+		Options.bSave = false;
+		const FDabCompileResult Result = CompileDabText(Path, Text, Options);
+
+		TArray<FString> Places;
+		for (const FDabDiagnostic& Diagnostic : Result.Diagnostics)
+		{
+			AddInfo(FormatDabDiagnosticLine(Diagnostic));
+			if (Diagnostic.Code == TEXT("DAB7100"))
+			{
+				Places.AddUnique(FString::Printf(TEXT("%d,%d"), Diagnostic.Span.Line, Diagnostic.Span.Column));
+			}
+		}
+		Places.Sort();
+		TestEqual(TEXT("the compiler's errors land on both players' calls"), FString::Join(Places, TEXT(" ")), FString(TEXT("19,20 9,21")));
 		return true;
 	}
 

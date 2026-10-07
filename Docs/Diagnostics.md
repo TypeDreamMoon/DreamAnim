@@ -190,6 +190,11 @@ After the generator, the engine's Blueprint compiler compiles the result. Its me
 DAB7100 and DAB7101, with the compiler's text after `The Blueprint compiler:`. A compiler error fails the
 build like any other error.
 
+Each message is placed on the text that made the node it names: the node's call, or its named pose. A
+message about a node the generator added inside a transition's rule or a state is placed on that
+transition's row or that state. One about a function the generator wrote (for an expression, a call, a
+slot), or that names no node, is placed at the top of the file.
+
 When there are errors, the Blueprint is left unsaved, in memory.
 
 | Code | Severity | Meaning | How to fix |

@@ -80,27 +80,75 @@ namespace UE::DreamAnim::Compiler::DriverPrivate
 	}
 
 	/**
-	 * The Blueprint compiler's own messages as diagnostics, so a Blueprint that does not compile fails the
-	 * build like any other error. They have no position in the text.
+	 * Where in the text a place in the model was written (`<graph path>/<id>`, as the generator makes GUIDs
+	 * from it): a node's call or named pose, a state, conduit or alias, a transition's row. Empty when the
+	 * place is not one the text names.
 	 */
-	void AppendBlueprintCompilerMessages(FDabCompileResult& Result, const FDabGenerateResult& Generated)
+	Lang::FDabSpan FindDabPlaceSpan(const FDabProvenance& Provenance, const FString& Place)
 	{
-		const auto Add = [&Result](const Lang::EDabSeverity Severity, const TCHAR* Code, const FString& Message)
+		if (const FDabProvenance::FNodeOrigin* Node = Provenance.Nodes.Find(Place); Node && Node->Call)
+		{
+			return Node->Call->Span;
+		}
+		if (const Lang::FDabAssignStmt* const* Named = Provenance.NamedPoses.Find(Place))
+		{
+			return (*Named)->Span;
+		}
+		// Machine/<machine>/<State|Conduit|Alias>/<name>, Machine/<machine>/Transition/<from>-><to>#<n>
+		TArray<FString> Parts;
+		Place.ParseIntoArray(Parts, TEXT("/"));
+		if (Parts.Num() == 4 && Parts[0] == TEXT("Machine"))
+		{
+			const FString Key = Parts[1] + TEXT("/") + Parts[3];
+			if (Parts[2] == TEXT("Transition"))
+			{
+				if (const Lang::FDabTransitionStmt* const* Row = Provenance.Transitions.Find(Key))
+				{
+					return (*Row)->Span;
+				}
+			}
+			else if (const Lang::FDabNamedBlockStmt* const* Block = Provenance.States.Find(Key))
+			{
+				return (*Block)->Span;
+			}
+		}
+		return Lang::FDabSpan();
+	}
+
+	/**
+	 * The Blueprint compiler's own messages as diagnostics, so a Blueprint that does not compile fails the
+	 * build like any other error. Each is placed on the text of the innermost node it names that the text
+	 * wrote; one that names none is placed at the top of the file.
+	 */
+	void AppendBlueprintCompilerMessages(FDabCompileResult& Result, const FDabGenerateResult& Generated, const FDabProvenance& Provenance)
+	{
+		const auto Add = [&Result, &Provenance](const Lang::EDabSeverity Severity, const TCHAR* Code, const FString& Message, const TArray<FString>* Origins)
 		{
 			Lang::FDabDiagnostic& Diagnostic = Result.Diagnostics.AddDefaulted_GetRef();
 			Diagnostic.Code = Code;
 			Diagnostic.Severity = Severity;
 			Diagnostic.Message = FString::Printf(TEXT("The Blueprint compiler: %s"), *Message);
 			Diagnostic.FilePath = Result.FilePath;
+			for (const FString& Origin : Origins ? *Origins : TArray<FString>())
+			{
+				const Lang::FDabSpan Span = FindDabPlaceSpan(Provenance, Origin);
+				if (!Span.IsEmpty())
+				{
+					Diagnostic.Span = Span;
+					break;
+				}
+			}
 		};
-		for (const FString& Message : Generated.CompilerErrors)
+		for (int32 Index = 0; Index < Generated.CompilerErrors.Num(); ++Index)
 		{
-			Add(Lang::EDabSeverity::Error, TEXT("DAB7100"), Message);
+			Add(Lang::EDabSeverity::Error, TEXT("DAB7100"), Generated.CompilerErrors[Index],
+				Generated.CompilerErrorOrigins.IsValidIndex(Index) ? &Generated.CompilerErrorOrigins[Index] : nullptr);
 			++Result.NumErrors;
 		}
-		for (const FString& Message : Generated.CompilerWarnings)
+		for (int32 Index = 0; Index < Generated.CompilerWarnings.Num(); ++Index)
 		{
-			Add(Lang::EDabSeverity::Warning, TEXT("DAB7101"), Message);
+			Add(Lang::EDabSeverity::Warning, TEXT("DAB7101"), Generated.CompilerWarnings[Index],
+				Generated.CompilerWarningOrigins.IsValidIndex(Index) ? &Generated.CompilerWarningOrigins[Index] : nullptr);
 		}
 	}
 
@@ -189,9 +237,12 @@ namespace UE::DreamAnim::Compiler
 		{
 			return Result;
 		}
+		// Where the model's parts came from: write-back asks for it, and compiler messages are placed with it.
+		FDabProvenance OwnProvenance;
+		FDabProvenance& Provenance = Options.Provenance ? *Options.Provenance : OwnProvenance;
 		{
 			FDabSemanticOptions SemanticOptions;
-			SemanticOptions.Provenance = Options.Provenance;
+			SemanticOptions.Provenance = &Provenance;
 			SemanticOptions.ResolveDreamAnimAsset = Options.ResolveDreamAnimAsset;
 			Lang::FDabDiagnosticSink Sink(Result.FilePath);
 			BuildDabModel(Unit, Result.Model, Sink, SemanticOptions);
@@ -212,7 +263,7 @@ namespace UE::DreamAnim::Compiler
 			Lang::FDabDiagnosticSink Sink(Result.FilePath);
 			const FDabGenerateResult Generated = GenerateDabBlueprint(Result.Model, Sink, GenerateOptions);
 			DriverPrivate::AppendCompileDiagnostics(Result, Sink);
-			DriverPrivate::AppendBlueprintCompilerMessages(Result, Generated);
+			DriverPrivate::AppendBlueprintCompilerMessages(Result, Generated, Provenance);
 			Result.Blueprint = Generated.Blueprint;
 		}
 		return Result;

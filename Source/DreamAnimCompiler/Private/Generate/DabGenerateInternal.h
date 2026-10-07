@@ -138,6 +138,8 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 
 		/** Gives Node the GUID of its place in the model; collisions get a salt so GUIDs stay unique in the Blueprint. */
 		void AssignGuid(UEdGraphNode* Node, const FString& GraphPath, const FString& Id);
+		/** The place each assigned GUID was made from, `<graph path>/<id>`: what a compiler message about the node points back to. */
+		TMap<FGuid, FString> GuidPlaces;
 		/** A deterministic GUID for any key (graphs, shared rules). */
 		FGuid MakeGuid(const FString& Key) const;
 		/** Every node no other step gave a GUID (default nodes, conversion nodes) gets one from its graph and order. */

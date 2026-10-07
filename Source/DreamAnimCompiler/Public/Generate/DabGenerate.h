@@ -54,6 +54,14 @@ namespace UE::DreamAnim::Compiler
 		/** Problems the Blueprint compiler reported, as text. */
 		TArray<FString> CompilerErrors;
 		TArray<FString> CompilerWarnings;
+		/**
+		 * One entry per message of CompilerErrors and CompilerWarnings, in the same order: where in the model
+		 * the generated nodes the message names come from, innermost first (a node in a transition's rule,
+		 * then the transition), as the `<graph path>/<id>` keys their GUIDs are made from (MakeDabNodeGuid).
+		 * Empty for a message that names no generated node.
+		 */
+		TArray<TArray<FString>> CompilerErrorOrigins;
+		TArray<TArray<FString>> CompilerWarningOrigins;
 
 		bool Succeeded() const { return Blueprint != nullptr && CompilerErrors.IsEmpty(); }
 	};
