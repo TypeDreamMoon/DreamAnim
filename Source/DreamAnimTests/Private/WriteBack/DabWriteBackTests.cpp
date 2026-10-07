@@ -180,9 +180,9 @@ namespace UE::DreamAnim::Tests::WriteBackTests
 		return Property->ImportText_Direct(*ValueText, Value, &Node, PPF_None) != nullptr;
 	}
 
-	FDabWriteBackResult WriteBack(UAnimBlueprint& Blueprint)
+	FDabWriteBackResult WriteBack(UAnimBlueprint& Blueprint, const FDabWriteBackOptions& Options = FDabWriteBackOptions())
 	{
-		return WriteBackDabBlueprint(Blueprint, GetSourcePath(), BaseText);
+		return WriteBackDabBlueprint(Blueprint, GetSourcePath(), BaseText, Options);
 	}
 
 	FString DescribeResult(const FDabWriteBackResult& Result)
@@ -317,6 +317,17 @@ namespace UE::DreamAnim::Tests::WriteBackTests
 					AddError(TEXT("a template body's value is refused\n") + DescribeResult(Result));
 				}
 				TestEqualSensitive(TEXT("a refused change leaves the text alone"), Result.Text, FString(BaseText));
+
+				// Asked to, the state's graph is written out from the Blueprint instead.
+				FDabWriteBackOptions Expand;
+				Expand.bExpandTemplates = true;
+				const FDabWriteBackResult Expanded = WriteBack(*Blueprint, Expand);
+				if (!Expanded.bFixedPoint || !Expanded.HasEdits() || !HasCode(Expanded, TEXT("DAB8004")) || HasCode(Expanded, TEXT("DAB8001")))
+				{
+					AddError(TEXT("a template body's value is written by writing the template out\n") + DescribeResult(Expanded));
+				}
+				TestEqualSensitive(TEXT("only the state's pose is written out"), FString::Join(ChangedLines(Expanded.Text), TEXT(" | ")),
+					FString(TEXT("Pose = SequencePlayer(Sequence = A_Als_Crouch_Pose, PlayRate = 0.9); | -Pose = Still(A_Als_Crouch_Pose);")));
 			}
 		}
 

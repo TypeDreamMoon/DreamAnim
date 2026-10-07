@@ -337,7 +337,27 @@ namespace UE::DreamAnim::Compiler::WriteBackPrivate
 		FDabCallExpr* Fresh = static_cast<FDabCallExpr*>(Text->FindSame(*Origin->Call));
 		if (!Fresh)
 		{
-			// The node comes from a template body: only values passed in as the template's arguments can be written.
+			// The node comes from a template body: only values passed in as the template's arguments can be written,
+			// unless the template may be written out.
+			const auto WrittenInBody = [&]()
+			{
+				for (const FString& Key : Changed)
+				{
+					const FDabArgument* ExpandedArg = FindKey(KeyArguments(*Origin->Call), Key);
+					const FDabNode* RealValue = ExpandedArg && ExpandedArg->Value ? Text->FindSame(*ExpandedArg->Value) : nullptr;
+					const FDabNode* Parent = RealValue ? Text->GetParent(*RealValue) : nullptr;
+					if (!Parent || !Parent->Is<FDabArgument>())
+					{
+						return true;
+					}
+				}
+				return false;
+			};
+			if (Options.bExpandTemplates && Options.bStructure && (!Added.IsEmpty() || !Removed.IsEmpty() || WrittenInBody()))
+			{
+				RewriteGraph(GraphPath, EditedGraph, Location);
+				return;
+			}
 			if (!Added.IsEmpty() || !Removed.IsEmpty())
 			{
 				Change(Where, What, false);

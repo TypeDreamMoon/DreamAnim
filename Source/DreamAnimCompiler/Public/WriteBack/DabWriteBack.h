@@ -34,6 +34,11 @@ namespace UE::DreamAnim::Compiler
 	{
 		/** Write structural changes by rewriting the block they are in; false refuses them (DAB8003). */
 		bool bStructure = true;
+		/**
+		 * A value changed inside a template's body: rewrite the graph block the node is in from the Blueprint,
+		 * which writes that block's template calls out (DAB8004), rather than refusing the change (DAB8001).
+		 */
+		bool bExpandTemplates = false;
 	};
 
 	struct FDabWriteBackResult
