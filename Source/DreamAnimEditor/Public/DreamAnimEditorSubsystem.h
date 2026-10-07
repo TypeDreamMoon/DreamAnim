@@ -74,9 +74,10 @@ public:
 	/**
 	 * Writes a Blueprint not made from text as a source at its default place (DAnim/...). bRebuild then
 	 * rebuilds the Blueprint from that text, which write-back needs; it is skipped when the text cannot hold
-	 * everything the Blueprint has. Returns the file, or empty.
+	 * everything the Blueprint has. With AnimSetPath, the animations it reads become asset slots and that
+	 * animation set (created when missing) holds them. Returns the file, or empty.
 	 */
-	FString Decompile(UAnimBlueprint& Blueprint, bool bOverwrite, bool bRebuild);
+	FString Decompile(UAnimBlueprint& Blueprint, bool bOverwrite, bool bRebuild, const FString& AnimSetPath = FString());
 
 	/** Opens a source at a line, with the command in the settings. */
 	void OpenSource(const FString& FilePath, int32 Line = 1, int32 Column = 1) const;

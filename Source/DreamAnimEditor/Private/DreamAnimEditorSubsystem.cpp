@@ -734,10 +734,12 @@ void UDreamAnimEditorSubsystem::OnAssetOpened(UObject* Asset, IAssetEditorInstan
 // Decompiling and opening sources
 // ---------------------------------------------------------------------------------------------
 
-FString UDreamAnimEditorSubsystem::Decompile(UAnimBlueprint& Blueprint, bool bOverwrite, bool bRebuild)
+FString UDreamAnimEditorSubsystem::Decompile(UAnimBlueprint& Blueprint, bool bOverwrite, bool bRebuild, const FString& AnimSetPath)
 {
 	const FString Path = NormalizeSourcePath(GetDefaultDecompilePath(Blueprint));
-	const FDabDecompileResult Result = DecompileDabBlueprint(Blueprint);
+	FDabAnimSetMigration Migration;
+	Migration.AnimSetPath = AnimSetPath;
+	const FDabDecompileResult Result = DecompileDabBlueprint(Blueprint, FDabLowerOptions(), AnimSetPath.IsEmpty() ? nullptr : &Migration);
 	Report(FString::Printf(TEXT("Writing %s as text"), *Blueprint.GetName()), Result.Diagnostics);
 	if (!Result.bSucceeded)
 	{

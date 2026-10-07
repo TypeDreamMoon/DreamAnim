@@ -7,11 +7,15 @@
 
 #include "Animation/AnimBlueprint.h"
 #include "ContentBrowserMenuContexts.h"
+#include "ContentBrowserModule.h"
 #include "DreamAnimEditorSubsystem.h"
+#include "DreamAnimSet.h"
 #include "Driver/DabDriver.h"
 #include "Editor.h"
 #include "Logging/MessageLog.h"
+#include "IContentBrowserSingleton.h"
 #include "Misc/MessageDialog.h"
+#include "Misc/PackageName.h"
 #include "Misc/Paths.h"
 #include "ToolMenus.h"
 
@@ -37,12 +41,33 @@ namespace DreamAnimEditorMenus
 		return Blueprints;
 	}
 
-	/** Blueprints not made from text, as text; existing files are replaced only when the user says so. */
-	void Decompile(const TArray<FAssetData>& Assets)
+	/** The animation set the Blueprints' animations go into, picked or named in a save dialog; empty when cancelled. */
+	FString PickAnimSet(const TArray<UAnimBlueprint*>& Blueprints)
+	{
+		FSaveAssetDialogConfig Config;
+		Config.DialogTitleOverride = LOCTEXT("PickAnimSet", "Animation Set for the Blueprints' Animations");
+		Config.DefaultPath = FPackageName::GetLongPackagePath(Blueprints[0]->GetPackage()->GetName());
+		Config.DefaultAssetName = TEXT("DAS_") + Blueprints[0]->GetName().Replace(TEXT("AB_"), TEXT(""));
+		Config.AssetClassNames.Add(UDreamAnimSet::StaticClass()->GetClassPathName());
+		// An existing set is fine: the Blueprints' groups are added to it, nothing in it is replaced.
+		Config.ExistingAssetPolicy = ESaveAssetDialogExistingAssetPolicy::AllowButWarn;
+		return IContentBrowserSingleton::Get().CreateModalSaveAssetDialog(Config);
+	}
+
+	/**
+	 * Blueprints not made from text, as text; existing files are replaced only when the user says so. With
+	 * bAnimSet, their animations move into an animation set the user picks.
+	 */
+	void Decompile(const TArray<FAssetData>& Assets, bool bAnimSet)
 	{
 		UDreamAnimEditorSubsystem* Subsystem = GetSubsystem();
 		const TArray<UAnimBlueprint*> Blueprints = LoadBlueprints(Assets);
 		if (!Subsystem || Blueprints.IsEmpty())
+		{
+			return;
+		}
+		const FString AnimSetPath = bAnimSet ? PickAnimSet(Blueprints) : FString();
+		if (bAnimSet && AnimSetPath.IsEmpty())
 		{
 			return;
 		}
@@ -63,7 +88,7 @@ namespace DreamAnimEditorMenus
 		FString First;
 		for (UAnimBlueprint* Blueprint : Blueprints)
 		{
-			const FString Path = Subsystem->Decompile(*Blueprint, bOverwrite, bRebuild);
+			const FString Path = Subsystem->Decompile(*Blueprint, bOverwrite, bRebuild, AnimSetPath);
 			if (First.IsEmpty())
 			{
 				First = Path;
@@ -139,7 +164,10 @@ namespace DreamAnimEditorMenus
 		{
 			Section.AddMenuEntry(TEXT("DreamAnim_Decompile"), LOCTEXT("Decompile", "Write as DreamAnim Text"),
 				LOCTEXT("DecompileTip", "Write the Blueprint as a DreamAnim source under the project's DAnim folder."), FSlateIcon(),
-				FUIAction(FExecuteAction::CreateLambda([WithoutSource]() { Decompile(WithoutSource); })));
+				FUIAction(FExecuteAction::CreateLambda([WithoutSource]() { Decompile(WithoutSource, false); })));
+			Section.AddMenuEntry(TEXT("DreamAnim_DecompileToSet"), LOCTEXT("DecompileToSet", "Write as DreamAnim Text with an Animation Set..."),
+				LOCTEXT("DecompileToSetTip", "Write the Blueprint as a DreamAnim source whose animations are slots of an animation set, and fill the set with them."),
+				FSlateIcon(), FUIAction(FExecuteAction::CreateLambda([WithoutSource]() { Decompile(WithoutSource, true); })));
 		}
 	}
 
