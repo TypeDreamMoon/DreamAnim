@@ -561,6 +561,14 @@ namespace UE::DreamAnim::Compiler::WriteBackPrivate
 		TArray<FDabStmtPtr> Kept;
 		TMap<FString, FDabStmtPtr*> OldByName;
 		const TSet<FString> Templates = CollectTemplateNames(*Compiled.Unit);
+		TSet<FString> NewNames;
+		for (const FDabStmtPtr& New : Statements)
+		{
+			if (const FDabAssignStmt* Assign = New ? New->As<FDabAssignStmt>() : nullptr)
+			{
+				NewNames.Add(Assign->Name);
+			}
+		}
 		bool bLosesTemplates = false;
 		for (FDabStmtPtr& Old : Block->Statements)
 		{
@@ -570,7 +578,8 @@ namespace UE::DreamAnim::Compiler::WriteBackPrivate
 				Kept.Add(MoveTemp(Old));
 				continue;
 			}
-			if (Old && CallsAny(*Old, Templates))
+			// A statement that is gone took its template calls with it; one that is still there has them written out.
+			if (Old && (!Assign || NewNames.Contains(Assign->Name)) && CallsAny(*Old, Templates))
 			{
 				bLosesTemplates = true;
 			}

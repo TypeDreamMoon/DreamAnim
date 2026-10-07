@@ -427,7 +427,19 @@ namespace UE::DreamAnim::Compiler::WriteBackPrivate
 		{
 			File.Trivia.FindOrAdd(Machine.Get()) = *Trivia;
 		}
-		if (CallsAny(Fresh, CollectTemplateNames(*Compiled.Unit)))
+		// What is left of the old body: states that changed shape and states that are gone. Only the first lose their template calls.
+		bool bLosesTemplates = false;
+		if (Fresh.Body)
+		{
+			const TSet<FString> Templates = CollectTemplateNames(*Compiled.Unit);
+			for (const FDabStmtPtr& Statement : Fresh.Body->Statements)
+			{
+				const FDabNamedBlockStmt* Named = Statement ? Statement->As<FDabNamedBlockStmt>() : nullptr;
+				const bool bGone = Named && Named->Word == TEXT("State") && !FindState(EditedMachine, Named->Name);
+				bLosesTemplates |= Statement && !bGone && CallsAny(*Statement, Templates);
+			}
+		}
+		if (bLosesTemplates)
 		{
 			Refuse(TEXT("DAB8004"), Fresh.Span, FString::Printf(TEXT("%s was rewritten from the Blueprint; template calls in its changed states are written out."), *Location));
 		}

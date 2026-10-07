@@ -13,6 +13,7 @@
 #include "AnimGraphNode_Slot.h"
 #include "AnimGraphNode_StateMachineBase.h"
 #include "AnimGraphNode_StateResult.h"
+#include "AnimGraphNode_TransitionResult.h"
 #include "AnimStateNode.h"
 #include "AnimStateTransitionNode.h"
 #include "Driver/DabDriver.h"
@@ -241,6 +242,20 @@ namespace UE::DreamAnim::Tests::WriteBackTests
 		return Changed;
 	}
 
+	/** A line with runs of spaces made one, so a table's padding does not matter. */
+	FString Squash(const FString& Line)
+	{
+		FString Out;
+		for (const TCHAR Character : Line.TrimStartAndEnd())
+		{
+			if (!(Character == TEXT(' ') && Out.EndsWith(TEXT(" "))))
+			{
+				Out.AppendChar(Character);
+			}
+		}
+		return Out;
+	}
+
 	UAnimSequenceBase* LoadSequence(const TCHAR* Name)
 	{
 		return LoadObject<UAnimSequenceBase>(nullptr, *FString::Printf(TEXT("/ALS/ALS/Animations/Base/%s.%s"), Name, Name));
@@ -346,6 +361,38 @@ namespace UE::DreamAnim::Tests::WriteBackTests
 			}
 		}
 
+		// A transition's condition: the row says it.
+		if (UAnimBlueprint* Blueprint = Generate(*this, TEXT("Condition")))
+		{
+			UAnimStateTransitionNode* Transition = FindTransition(*Blueprint, TEXT("Crouch"), TEXT("Idle"));
+			UAnimGraphNode_TransitionResult* Result = Transition ? FindInGraph<UAnimGraphNode_TransitionResult>(Transition->BoundGraph) : nullptr;
+			UEdGraphPin* CanEnter = Result ? Result->FindPin(TEXT("bCanEnterTransition"), EGPD_Input) : nullptr;
+			if (TestNotNull(TEXT("Crouch -> Idle's rule"), CanEnter))
+			{
+				CanEnter->BreakAllPinLinks();
+				GetDefault<UEdGraphSchema_K2>()->TrySetDefaultValue(*CanEnter, TEXT("true"));
+				const FDabWriteBackResult Written = WriteBack(*Blueprint);
+				ExpectWritten(*this, TEXT("Condition"), Written);
+				const TArray<FString> Changed = ChangedLines(Written.Text);
+				TestTrue(TEXT("the row has the new condition"), Changed.ContainsByPredicate([](const FString& Line)
+				{
+					return Squash(Line) == TEXT("Crouch -> Idle : true;");
+				}));
+			}
+		}
+
+		// A class setting: added to Settings, which is written on one line.
+		if (UAnimBlueprint* Blueprint = Generate(*this, TEXT("Setting")))
+		{
+			Blueprint->Modify();
+			Blueprint->bEnableLinkedAnimLayerInstanceSharing = true;
+			const FDabWriteBackResult Result = WriteBack(*Blueprint);
+			ExpectWritten(*this, TEXT("Setting"), Result);
+			const TArray<FString> Changed = ChangedLines(Result.Text);
+			TestTrue(TEXT("Settings has the new setting and keeps the old ones"), Changed.Num() == 2
+				&& Changed[0].StartsWith(TEXT("Settings = { Parent = AnimInstance; Skeleton = SK_Als;")) && Changed[0].Contains(TEXT("bEnableLinkedAnimLayerInstanceSharing = true;")));
+		}
+
 		// A state's setting: in the state's header.
 		if (UAnimBlueprint* Blueprint = Generate(*this, TEXT("StateSetting")))
 		{
@@ -430,6 +477,28 @@ namespace UE::DreamAnim::Tests::WriteBackTests
 				ExpectWritten(*this, TEXT("RemoveTransition"), Result);
 				TestFalse(TEXT("the row is gone"), Result.Text.Contains(TEXT("!Props.bCrouching")));
 				TestTrue(TEXT("the other row stays"), Result.Text.Contains(TEXT("Props.bCrouching")));
+			}
+		}
+
+		// A state deleted, with its transitions.
+		if (UAnimBlueprint* Blueprint = Generate(*this, TEXT("RemoveState")))
+		{
+			UAnimStateNode* Crouch = FindState(*Blueprint, TEXT("Crouch"));
+			if (TestNotNull(TEXT("Crouch"), Crouch))
+			{
+				for (UAnimStateTransitionNode* Transition : { FindTransition(*Blueprint, TEXT("Idle"), TEXT("Crouch")), FindTransition(*Blueprint, TEXT("Crouch"), TEXT("Idle")) })
+				{
+					if (Transition)
+					{
+						FBlueprintEditorUtils::RemoveNode(Blueprint, Transition, true);
+					}
+				}
+				FBlueprintEditorUtils::RemoveNode(Blueprint, Crouch, true);
+				const FDabWriteBackResult Result = WriteBack(*Blueprint);
+				ExpectWritten(*this, TEXT("RemoveState"), Result);
+				TestFalse(TEXT("the state is gone"), Result.Text.Contains(TEXT("State Crouch")));
+				TestFalse(TEXT("its transitions are gone"), Result.Text.Contains(TEXT("bCrouching;")) || Result.Text.Contains(TEXT("-> Crouch")));
+				TestTrue(TEXT("the comment on the other state stays"), Result.Text.Contains(TEXT("// Standing still.")));
 			}
 		}
 
