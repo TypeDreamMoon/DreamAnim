@@ -1406,7 +1406,9 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		const int32* Index = VariableIndex.Find(Name);
 		if (!Index || !Model.Variables.IsValidIndex(*Index))
 		{
-			Sink.Error(TEXT("DAB5003"), Expr.Span, FString::Printf(TEXT("There is no tuning value `%s`."), *Name),
+			// At the name, as where Props.X is bound.
+			const FDabMemberExpr& Member = static_cast<const FDabMemberExpr&>(SkipParens(Expr));
+			Sink.Error(TEXT("DAB5003"), Member.MemberSpan.IsEmpty() ? Member.Span : Member.MemberSpan, FString::Printf(TEXT("There is no tuning value `%s`."), *Name),
 				TEXT("Declare it in Properties = { float Name = 0; }."));
 			return nullptr;
 		}
