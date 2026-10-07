@@ -1,0 +1,16 @@
+// A struct field that the struct does not have.
+AnimBlueprint(Name="Validate/UnknownStructField", Root="Game")
+{
+    Settings = { Parent = AnimInstance; Skeleton = SK_Als; }
+
+    Graph = {
+        Output = TwoWayBlend(
+            AlphaBoolBlend = (BlendOptions = Linear),
+            Alpha          = 0.5,
+            A              = SequencePlayer(Sequence = A_Als_Idle),
+            B              = SequenceEvaluator(Sequence = A_Als_Stand_Pose, ExplicitFrame = 0)
+        );
+    }
+}
+
+// EXPECT DAB4007 (8,31)

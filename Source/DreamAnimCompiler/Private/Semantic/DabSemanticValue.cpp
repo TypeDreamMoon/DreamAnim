@@ -1782,6 +1782,8 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		{
 			FString Name;
 			const FDabExpr* Value = nullptr;
+			/** The field's name as written, or its value when it is positional: where a mistake about the field is reported. */
+			FDabSpan Span;
 		};
 		TArray<FWrittenField> Written;
 		if (const FDabTupleExpr* Tuple = Expr.As<FDabTupleExpr>())
@@ -1790,7 +1792,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 			{
 				if (Item && Item->Value)
 				{
-					Written.Add({Item->IsNamed() ? Item->Name : FString(), Item->Value.Get()});
+					Written.Add({Item->IsNamed() ? Item->Name : FString(), Item->Value.Get(), Item->IsNamed() ? Item->NameSpan : Item->Value->Span});
 				}
 			}
 		}
@@ -1802,7 +1804,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 				const FDabAssignStmt* Assign = Statement ? Statement->As<FDabAssignStmt>() : nullptr;
 				if (Assign && Assign->Value)
 				{
-					Written.Add({Assign->Name, Assign->Value.Get()});
+					Written.Add({Assign->Name, Assign->Value.Get(), Assign->NameSpan});
 				}
 				else if (Statement && !Statement->Is<FDabRegionStmt>())
 				{
@@ -1863,7 +1865,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 				}
 				if (!Field)
 				{
-					Sink.Error(TEXT("DAB4007"), Item.Value->Span, FString::Printf(TEXT("%s: %s has no field `%s`."), *What, *Struct.GetName(), *Item.Name));
+					Sink.Error(TEXT("DAB4007"), Item.Span, FString::Printf(TEXT("%s: %s has no field `%s`."), *What, *Struct.GetName(), *Item.Name));
 					continue;
 				}
 				if (IsSkippedStructField(*Field))
@@ -1874,7 +1876,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 			}
 			if (Values.Contains(Field))
 			{
-				Sink.Error(TEXT("DAB4011"), Item.Value->Span, FString::Printf(TEXT("%s: the field `%s` is given twice."), *What, *Field->GetName()));
+				Sink.Error(TEXT("DAB4011"), Item.Span, FString::Printf(TEXT("%s: the field `%s` is given twice."), *What, *Field->GetName()));
 				continue;
 			}
 			Values.Add(Field, Item.Value);
