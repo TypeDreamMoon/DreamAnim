@@ -1,6 +1,11 @@
 ControlRig(Name="X")
 {
-    Function `Scale Module Controls`(Array<RigElementKey> Controls, double `Local Scale` = 0, double `Global Scale` = 1) [ Public; Category = "Modules"; Keywords = "Standard Functions Library Module Modular"; Description = "Scales the shape of each control it is given." ]
+    Function `Scale Module Controls`(
+        Array<RigElementKey> Controls,
+        double `Local Scale` = 0,
+        double `Global Scale` = 1
+    )
+        [ Public; Category = "Modules"; Keywords = "Standard Functions Library Module Modular"; Description = "Scales the shape of each control it is given." ]
     {
         for (Control in Controls)
         {

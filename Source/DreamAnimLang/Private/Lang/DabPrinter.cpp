@@ -411,6 +411,8 @@ namespace UE::DreamAnim::Lang
 			/** ` [ ... ]` with its leading space, or nothing. */
 			FString MetaSuffix(const FDabMeta* Meta) { return Meta ? FString(TEXT(" ")) + FlatMeta(*Meta) : FString(); }
 			FString NamedBlockHead(const FDabNamedBlockStmt& NamedBlock);
+			/** The head with its parameters one per line (and its outputs, when they do not fit either), for a head too wide for one line. */
+			FString NamedBlockHeadBroken(const FDabNamedBlockStmt& NamedBlock, int32 Level);
 			/** `Type Name = Default` for each parameter or output (`Name = Default` for a template's). */
 			TArray<FString> GetParamTexts(const TArray<TUniquePtr<FDabParam>>& Params);
 
@@ -629,6 +631,62 @@ namespace UE::DreamAnim::Lang
 				}
 			}
 			Head += MetaSuffix(NamedBlock.Meta.Get());
+			return Head;
+		}
+
+		FString FDabLayoutPrinter::NamedBlockHeadBroken(const FDabNamedBlockStmt& NamedBlock, int32 Level)
+		{
+			FString Head = NamedBlock.Word;
+			if (!NamedBlock.Name.IsEmpty())
+			{
+				Head += TEXT(" ");
+				Head += QuoteDabName(NamedBlock.Name, false);
+			}
+			const bool bIsFunction = NamedBlock.Word.Equals(TEXT("Function"), ESearchCase::CaseSensitive);
+			const FScopedFlag ParamScope(bInCode, bInCode || bIsFunction);
+			auto BrokenList = [this, Level](const TArray<TUniquePtr<FDabParam>>& Params)
+			{
+				const TArray<FString> Parts = GetParamTexts(Params);
+				FString Text = TEXT("(");
+				for (int32 Index = 0; Index < Parts.Num(); ++Index)
+				{
+					Text += TEXT("\n");
+					Text += MakeIndent(Level + 1);
+					Text += Parts[Index];
+					if (Index + 1 < Parts.Num())
+					{
+						Text += TEXT(",");
+					}
+				}
+				Text += TEXT("\n");
+				Text += MakeIndent(Level);
+				Text += TEXT(")");
+				return Text;
+			};
+			if (NamedBlock.bHasParams)
+			{
+				Head += NamedBlock.Params.IsEmpty() ? FString(TEXT("()")) : BrokenList(NamedBlock.Params);
+			}
+			if (NamedBlock.bHasOutputs)
+			{
+				const FString Flat = TEXT(" -> (") + FString::Join(GetParamTexts(NamedBlock.Outputs), TEXT(", ")) + TEXT(")");
+				const int32 LastLine = Level * IndentWidth + 1;
+				Head += LastLine + Flat.Len() <= Options.MaxWidth ? Flat : TEXT(" -> ") + BrokenList(NamedBlock.Outputs);
+			}
+			// Metadata that does not fit after the closing bracket goes on a line of its own, one level in.
+			const FString Meta = MetaSuffix(NamedBlock.Meta.Get());
+			int32 LastBreak = INDEX_NONE;
+			const int32 LastLength = Head.FindLastChar(TEXT('\n'), LastBreak) ? Head.Len() - LastBreak - 1 : Level * IndentWidth + Head.Len();
+			if (!Meta.IsEmpty() && LastLength + Meta.Len() > Options.MaxWidth)
+			{
+				Head += TEXT("\n");
+				Head += MakeIndent(Level + 1);
+				Head += Meta.TrimStart();
+			}
+			else
+			{
+				Head += Meta;
+			}
 			return Head;
 		}
 
@@ -1274,8 +1332,16 @@ namespace UE::DreamAnim::Lang
 			{
 				const FDabNamedBlockStmt& NamedBlock = static_cast<const FDabNamedBlockStmt&>(Stmt);
 				FString Text = NamedBlockHead(NamedBlock);
+				// A function head too wide for its line takes its parameters one per line.
+				if (BaseColumn + Text.Len() > Options.MaxWidth && ((NamedBlock.bHasParams && !NamedBlock.Params.IsEmpty()) || NamedBlock.bHasOutputs))
+				{
+					Text = NamedBlockHeadBroken(NamedBlock, Level);
+				}
+				int32 LastLineStart = INDEX_NONE;
+				Text.FindLastChar(TEXT('\n'), LastLineStart);
+				const int32 HeadEndColumn = LastLineStart == INDEX_NONE ? BaseColumn + Text.Len() : Text.Len() - LastLineStart - 1;
 				if (NamedBlock.Body && IsOneLineBlock(*NamedBlock.Body)
-					&& BaseColumn + Text.Len() + 1 + Flat(*NamedBlock.Body).Len() <= Options.MaxWidth)
+					&& HeadEndColumn + 1 + Flat(*NamedBlock.Body).Len() <= Options.MaxWidth)
 				{
 					Text += TEXT(" ");
 					Text += Flat(*NamedBlock.Body);
@@ -1300,7 +1366,7 @@ namespace UE::DreamAnim::Lang
 					const bool bIsFunction = NamedBlock.Word.Equals(TEXT("Function"), ESearchCase::CaseSensitive);
 					const FScopedFlag ValueScope(bInCode, bInCode || bIsFunction);
 					Text += TEXT(" = ");
-					const int32 ValueColumn = BaseColumn + Text.Len();
+					const int32 ValueColumn = HeadEndColumn + 3;
 					Text += FormatStatementValue(*NamedBlock.Value, Level, ValueColumn, 1);
 					Text += TEXT(";");
 				}
