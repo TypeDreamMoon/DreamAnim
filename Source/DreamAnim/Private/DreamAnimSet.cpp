@@ -14,6 +14,11 @@ bool UDreamAnimSet::SyncSlots(FName Blueprint, const TArray<TPair<FName, FName>>
 {
 	FDreamAnimSetGroup* Group = Groups.FindByPredicate([Blueprint](const FDreamAnimSetGroup& Candidate) { return Candidate.Blueprint == Blueprint; });
 	bool bChanged = false;
+	if (!Group && DeclaredSlots.IsEmpty())
+	{
+		// A Blueprint that never declared a slot has nothing to keep here.
+		return false;
+	}
 	if (!Group)
 	{
 		Group = &Groups.AddDefaulted_GetRef();

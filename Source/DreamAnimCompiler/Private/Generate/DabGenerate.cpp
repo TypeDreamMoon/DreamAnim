@@ -670,7 +670,7 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 	/** The default animation set, when its slots had to change to match the model's. */
 	static UDreamAnimSet* DabGenSyncAnimSet(FDabGenContext& Ctx)
 	{
-		if (Ctx.Model.DefaultAnimSet.IsEmpty() || Ctx.Model.AssetSlots.IsEmpty())
+		if (Ctx.Model.DefaultAnimSet.IsEmpty())
 		{
 			return nullptr;
 		}
