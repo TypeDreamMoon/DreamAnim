@@ -255,7 +255,7 @@ namespace UE::DreamAnim::Compiler
 			Model.AssetSlots.Add({ Entry.Slot, Entry.Type });
 		}
 		Model.AssetSlots.Sort([](const FDabModelAssetSlot& A, const FDabModelAssetSlot& B) { return A.Name < B.Name; });
-		if (!Model.AssetSlots.IsEmpty() && !AnimSetPath.IsEmpty())
+		if (!Lifter.Lifted.IsEmpty() && !AnimSetPath.IsEmpty())
 		{
 			Model.DefaultAnimSet = AnimSetPath;
 		}

@@ -30,7 +30,7 @@ namespace UE::DreamAnim::Compiler
 	 * name another asset or an existing slot holds gets `_2`, `_3`. Values only a constant fits (settings of
 	 * the editor node, transition options, class settings and defaults, tuning value defaults) keep their
 	 * asset, and so does a pin or parameter that does not take what the slot's getter returns. The slots are
-	 * added to Model.AssetSlots and, when there are any and AnimSetPath is given, Model.DefaultAnimSet becomes
+	 * added to Model.AssetSlots and, when new slots were lifted and AnimSetPath is given, Model.DefaultAnimSet becomes
 	 * AnimSetPath. Returns the new slots, sorted by name.
 	 */
 	DREAMANIMCOMPILER_API TArray<FDabLiftedAsset> LiftDabAnimationAssets(Model::FDabModel& Model, const FString& AnimSetPath);

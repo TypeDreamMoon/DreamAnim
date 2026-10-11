@@ -25,18 +25,56 @@ namespace UE::DreamAnim::Compiler::DriverPrivate
 	bool MoveDabAnimationsToSet(const UAnimBlueprint& Blueprint, Model::FDabModel& Model, const FDabAnimSetMigration& Migration,
 		Lang::FDabDiagnosticSink& Sink, TArray<FDabLiftedAsset>& OutLifted)
 	{
-		UDreamAnimSet* Set = LoadOrCreateDabAnimSet(Migration.AnimSetPath, Sink);
-		if (!Set)
+		const FString TargetPath = ToDabObjectPath(Migration.AnimSetPath);
+		const FString PreviousSet = Model.DefaultAnimSet;
+		const TArray<Model::FDabModelAssetSlot> PreviousSlots = Model.AssetSlots;
+		OutLifted = LiftDabAnimationAssets(Model, TargetPath);
+		// Repeated migration is a no-op, including no creation of an unused target set.
+		if (OutLifted.IsEmpty())
 		{
+			return true;
+		}
+		if (!FPackageName::IsValidLongPackageName(FPackageName::ObjectPathToPackageName(TargetPath))
+			|| FPackageName::ObjectPathToObjectName(TargetPath).IsEmpty())
+		{
+			Sink.Error(TEXT("DAB8102"), Lang::FDabSpan(), FString::Printf(TEXT("%s is not a valid animation set path"), *Migration.AnimSetPath));
 			return false;
 		}
-		OutLifted = LiftDabAnimationAssets(Model, Set->GetPathName());
+		if (UObject* Existing = LoadObject<UObject>(nullptr, *TargetPath, nullptr, LOAD_NoWarn | LOAD_Quiet); Existing && !Existing->IsA<UDreamAnimSet>())
+		{
+			Sink.Error(TEXT("DAB8102"), Lang::FDabSpan(), FString::Printf(TEXT("%s is not an animation set"), *TargetPath));
+			return false;
+		}
+		TArray<FDabLiftedAsset> AssetsToFill = OutLifted;
+		// A partially migrated Blueprint can still contain direct references. Preserve its existing selections
+		// when moving those remaining references into another set.
+		if (!PreviousSlots.IsEmpty() && !PreviousSet.IsEmpty() && !PreviousSet.Equals(TargetPath, ESearchCase::IgnoreCase))
+		{
+			const UDreamAnimSet* OldSet = LoadObject<UDreamAnimSet>(nullptr, *PreviousSet, nullptr, LOAD_NoWarn | LOAD_Quiet);
+			if (!OldSet)
+			{
+				Sink.Error(TEXT("DAB8102"), Lang::FDabSpan(), TEXT("The previous animation set cannot be read; its slot selections cannot be migrated safely."));
+				return false;
+			}
+			for (const Model::FDabModelAssetSlot& Slot : PreviousSlots)
+			{
+				if (const UAnimationAsset* Asset = OldSet->Find(Blueprint.GetFName(), FName(*Slot.Name)))
+				{
+					AssetsToFill.Add({ Slot.Name, Slot.Type, Asset->GetPathName() });
+				}
+			}
+		}
 		if (Model.AssetSlots.IsEmpty())
 		{
 			return true;
 		}
+		UDreamAnimSet* Set = LoadOrCreateDabAnimSet(TargetPath, Sink);
+		if (!Set)
+		{
+			return false;
+		}
 		TArray<FString> Kept;
-		const bool bChanged = FillDabAnimSet(*Set, Blueprint.GetFName(), Model, OutLifted, &Kept);
+		const bool bChanged = FillDabAnimSet(*Set, Blueprint.GetFName(), Model, AssetsToFill, &Kept);
 		for (const FString& Slot : Kept)
 		{
 			Sink.Warning(TEXT("DAB8103"), Lang::FDabSpan(), FString::Printf(TEXT("%s already holds another animation in %s's slot %s; it is kept"),
