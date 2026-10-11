@@ -50,7 +50,7 @@ namespace UE::DreamAnim::Compiler::ExtractPrivate
 			return !Node
 				|| Node->IsA<UEdGraphNode_Comment>()
 				|| Node->IsA<UK2Node_Knot>()
-				|| !Node->IsNodeEnabled()
+				|| Node->GetDesiredEnabledState() == ENodeEnabledState::Disabled
 				|| Node->IsAutomaticallyPlacedGhostNode();
 		}
 
@@ -118,13 +118,40 @@ namespace UE::DreamAnim::Compiler::ExtractPrivate
 		const UEdGraphNode* FollowExec(FDabLowering& Lowering, const UEdGraphPin* Pin)
 		{
 			const UEdGraphPin* Current = Pin;
+			TSet<const UEdGraphNode*> Seen;
 			while (const UEdGraphPin* Target = GetLinkedSource(Current))
 			{
 				const UEdGraphNode* Node = Target->GetOwningNodeUnchecked();
+				if (Seen.Contains(Node))
+				{
+					Lowering.Fail(Node, TEXT("an execution cycle cannot be written as a call chain"));
+					return nullptr;
+				}
+				Seen.Add(Node);
 				if (const UK2Node_Knot* Knot = Cast<UK2Node_Knot>(Node))
 				{
 					Lowering.Visited.Add(Knot);
 					Current = Knot->GetOutputPin();
+					continue;
+				}
+				if (Node && Node->GetDesiredEnabledState() == ENodeEnabledState::Disabled)
+				{
+					// The compiler passes execution through a disabled node only when it has one execution input and
+					// one output. A disabled branch or sequence ends the chain, and whatever hangs after it never runs.
+					Lowering.Visited.Add(Node);
+					Current = Node->GetPassThroughPin(Target);
+					if (!Current)
+					{
+						const bool bLeadsOn = Node->Pins.ContainsByPredicate([](const UEdGraphPin* Pin)
+						{
+							return Pin && Pin->Direction == EGPD_Output && UEdGraphSchema_K2::IsExecPin(*Pin) && !Pin->LinkedTo.IsEmpty();
+						});
+						if (bLeadsOn)
+						{
+							Lowering.Fail(Node, TEXT("a disabled node with several execution pins cuts off what follows it; delete it or enable it"));
+						}
+						return nullptr;
+					}
 					continue;
 				}
 				return Node;
@@ -634,6 +661,13 @@ namespace UE::DreamAnim::Compiler::ExtractPrivate
 	{
 		Lowering.Visited.Add(&Node);
 
+		// The engine marks calls to development-only functions itself, and the generator's nodes get the same mark;
+		// only a call the user restricted to development builds has no equivalent in the text.
+		if (Node.GetDesiredEnabledState() == ENodeEnabledState::DevelopmentOnly && Node.HasUserSetTheEnabledState())
+		{
+			Lowering.Fail(&Node, TEXT("a development-only call cannot be represented as an unconditional call"));
+			return TOptional<FDabModelCall>();
+		}
 		const UFunction* Function = Node.GetTargetFunction();
 		if (Function && Function->HasAnyFunctionFlags(FUNC_Static))
 		{
@@ -773,8 +807,15 @@ namespace UE::DreamAnim::Compiler::ExtractPrivate
 			Notify.Name = EventName.RightChop(NotifyPrefix.Len());
 
 			const UEdGraphNode* Next = FollowExec(Lowering, GetK2Schema().FindExecutionPin(*Event, EGPD_Output));
+			TSet<const UEdGraphNode*> Chain;
 			while (Next)
 			{
+				if (Chain.Contains(Next))
+				{
+					Lowering.Fail(Next, TEXT("an execution cycle cannot be written as a call chain"));
+					break;
+				}
+				Chain.Add(Next);
 				Lowering.Visited.Add(Next);
 				const UK2Node_CallFunction* Call = Cast<UK2Node_CallFunction>(Next);
 				if (!Call || Call->IsNodePure())
