@@ -160,6 +160,49 @@ bool FDabTimeGetterNodeBindingTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDabSharedRuleSourceStateTest, "DreamAnim.Generate.SharedRuleSourceState",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+/**
+ * `StateWeight()` in a shared rule reads each transition's own source state: the machine walks A -> B -> C
+ * as it does with the rule written inline, and those transitions get rules of their own. A rule that names
+ * its state stays shared.
+ */
+bool FDabSharedRuleSourceStateTest::RunTest(const FString& Parameters)
+{
+	using namespace UE::DreamAnim::Tests::MachineGetterPrivate;
+
+	const FString Body = TEXT(
+		"    Graph = { Output = M; }\n"
+		"    StateMachine M [ MaxTransitionsPerFrame = 1 ] {\n"
+		"        Entry = B; State A { Pose = LocalRefPose(); } State B { Pose = LocalRefPose(); } State C { Pose = LocalRefPose(); }\n"
+		"        Rules = { Ready = RULE; }\n"
+		"        Transitions = { A -> B : CONDITION [ Blend = 0 ]; B -> C : CONDITION [ Blend = 0 ]; } }");
+	const FString SourceRelative = Body.Replace(TEXT("RULE"), TEXT("StateWeight() >= 0.99"), ESearchCase::CaseSensitive);
+	UAnimBlueprint* Shared = Build(*this, MakeSource(TEXT("AB_Shared"), SourceRelative.Replace(TEXT("CONDITION"), TEXT("Ready"), ESearchCase::CaseSensitive)));
+	UAnimBlueprint* Inline = Build(*this, MakeSource(TEXT("AB_Inline"), SourceRelative.Replace(TEXT("CONDITION"), TEXT("Ready && true"), ESearchCase::CaseSensitive)));
+	UAnimBlueprint* Named = Build(*this, MakeSource(TEXT("AB_Named"), Body.Replace(TEXT("RULE"), TEXT("StateWeight(B) >= 0.99"), ESearchCase::CaseSensitive).Replace(TEXT("CONDITION"), TEXT("Ready"), ESearchCase::CaseSensitive)));
+	if (!Shared || !Inline || !Named)
+	{
+		return false;
+	}
+	const FName SharedState = RunMachine(*this, *Shared);
+	const FName InlineState = RunMachine(*this, *Inline);
+	AddInfo(FString::Printf(TEXT("After ten frames: shared rule in %s, inline rule in %s"), *SharedState.ToString(), *InlineState.ToString()));
+	TestEqual(TEXT("the inline rule reaches C"), InlineState, FName(TEXT("C")));
+	TestEqual(TEXT("the shared rule reaches C too"), SharedState, FName(TEXT("C")));
+	Decompile(*this, *Shared);
+
+	TArray<UAnimStateTransitionNode*> Transitions;
+	FBlueprintEditorUtils::GetAllNodesOfClass(Named, Transitions);
+	TestEqual(TEXT("two transitions"), Transitions.Num(), 2);
+	for (const UAnimStateTransitionNode* Transition : Transitions)
+	{
+		TestTrue(TEXT("a rule that names its state stays shared"), Transition->bSharedRules);
+	}
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDabStateNameScopesTest, "DreamAnim.Generate.StateNameScopes",
 	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
 

@@ -2307,6 +2307,27 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		}
 	}
 
+	/** Resolve implicit source-state getters per transition before deciding whether a rule can be shared. */
+	static bool BindSourceState(FDabNode& Node, const FString& State)
+	{
+		bool bBound = false;
+		if (FDabCallExpr* Call = Node.As<FDabCallExpr>())
+		{
+			const FDabNameExpr* Name = Call->Callee ? Call->Callee->As<FDabNameExpr>() : nullptr;
+			if (Name && Call->Args.IsEmpty() && (Name->Name == TEXT("StateWeight") || Name->Name == TEXT("TimeRemaining") || Name->Name == TEXT("TimeRemainingRatio")))
+			{
+				FDabArgumentPtr Arg = MakeUnique<FDabArgument>();
+				TUniquePtr<FDabNameExpr> StateName = MakeUnique<FDabNameExpr>();
+				StateName->Name = State;
+				Arg->Value = MoveTemp(StateName);
+				Call->Args.Add(MoveTemp(Arg));
+				bBound = true;
+			}
+		}
+		ForEachChild(Node, [&bBound, &State](const FDabNode& Child) { bBound |= BindSourceState(const_cast<FDabNode&>(Child), State); });
+		return bBound;
+	}
+
 	void FSemantic::ReadTransitions(const FDabBlockExpr& Block, const FString& MachineName, const TMap<FString, int32>& Members, FRuleSet& Rules,
 		FDabModelStateMachine& Machine)
 	{
@@ -2369,6 +2390,11 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 				{
 					Transition.Condition = Resolve(Condition, &Rules);
 				}
+			}
+			if (Transition.Condition && BindSourceState(*Transition.Condition, Transition.From))
+			{
+				// The same named expression now refers to a different state for each source transition.
+				Transition.SharedRuleName.Reset();
 			}
 			ReadTransitionOptions(Row->Meta.Get(), Transition, What);
 			Machine.Transitions.Add(MoveTemp(Transition));

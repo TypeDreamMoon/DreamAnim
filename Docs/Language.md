@@ -714,7 +714,8 @@ Rules = {
 A rule is a named condition for the machine's transitions and conduits.
 
 - A transition whose condition is a rule's name and nothing else uses the engine's shared rule of that
-  name. All such transitions share one rule graph.
+  name. All such transitions share one rule graph, except rules using `StateWeight()`, `TimeRemaining()`
+  or `TimeRemainingRatio()` without a state: these are bound separately to each transition's source state.
 - A rule name inside a larger condition is replaced by the rule's expression.
 - Rules may use other rules. A rule that uses itself is DAB6013.
 - Inside `StateWeight(...)`, `TimeRemaining(...)`, `TimeRemainingRatio(...)` and `MachineWeight(...)` a name is a state or machine, never a rule:
