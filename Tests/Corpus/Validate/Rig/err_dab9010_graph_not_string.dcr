@@ -1,0 +1,7 @@
+// A Graph that is not a string.
+ControlRig(Name="Validate/GraphNotString", Root="Game")
+{
+    Event Forward [ Graph = 3 ] { }
+}
+
+// EXPECT DAB9010 (4,21)

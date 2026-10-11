@@ -1,0 +1,12 @@
+// A function of a library in Uses and a node of the engine with the same name.
+ControlRig(Name="Validate/AmbiguousName", Root="Game")
+{
+    Settings = { Uses = [ StandardFunctionLibrary ]; }
+
+    Event Forward
+    {
+        TwistBones(`Bones to Twist` = [ Bone(a) ]);
+    }
+}
+
+// EXPECT DAB9002 (8,9)

@@ -1,0 +1,30 @@
+// A rig that checks clean: variables, a function, a let, branches, a loop, a literal with an expression in it.
+ControlRig(Name="Validate/Basic", Root="Game")
+{
+    Variables = {
+        double Speed = 1;
+        Array<double> Weights = [ 0, 0.5, 1 ];
+        RigElementKey Target [ Public ];
+    }
+
+    Function Scale(double Value, double Factor = 2) -> (double Result) = Value * Factor;
+
+    Event Forward
+    {
+        let Doubled = Scale(Speed);
+        Speed = Doubled + Doubled;
+        if (Speed > 10)
+        {
+            Speed = 10;
+        }
+        else
+        {
+            Speed = Speed + 1;
+        }
+        for (Weight, Index in Weights)
+        {
+            Speed = Speed + Weight;
+        }
+        SetTransform(Item = Target, Value = (Translation = (Z = Speed)));
+    }
+}

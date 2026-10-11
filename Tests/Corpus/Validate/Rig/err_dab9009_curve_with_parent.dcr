@@ -1,0 +1,10 @@
+// A curve has no parent.
+ControlRig(Name="Validate/CurveWithParent", Root="Game")
+{
+    Hierarchy = {
+        Bone root_bone;
+        Curve blend { Parent = Bone(root_bone); }
+    }
+}
+
+// EXPECT DAB9009 (6,15)

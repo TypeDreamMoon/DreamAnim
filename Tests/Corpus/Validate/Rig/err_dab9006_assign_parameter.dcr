@@ -1,0 +1,10 @@
+// An assignment to a function's parameter.
+ControlRig(Name="Validate/AssignParameter", Root="Game")
+{
+    Function Bump(double Amount)
+    {
+        Amount = 1;
+    }
+}
+
+// EXPECT DAB9006 (6,9)

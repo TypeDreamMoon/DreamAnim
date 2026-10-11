@@ -1,0 +1,19 @@
+// A pure function written as code: a let that both outputs read.
+ControlRig(Name="Validate/PureCode", Root="Game")
+{
+    Variables = {
+        double Speed = 1;
+    }
+
+    Function Split(double Value) -> (double Low, double High) [ Pure ]
+    {
+        let Half = Value * 0.5;
+        return (Low = Half - 1, High = Half + 1);
+    }
+
+    Event Forward
+    {
+        let Parts = Split(Speed);
+        Speed = Parts.Low + Parts.High;
+    }
+}

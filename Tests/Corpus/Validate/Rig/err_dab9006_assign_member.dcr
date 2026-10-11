@@ -1,0 +1,12 @@
+// An assignment to one member of a variable.
+ControlRig(Name="Validate/AssignMember", Root="Game")
+{
+    Variables = { Vector Position; }
+
+    Event Forward
+    {
+        Position.X = 1;
+    }
+}
+
+// EXPECT DAB9006 (8,9)

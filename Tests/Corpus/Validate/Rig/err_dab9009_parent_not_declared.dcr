@@ -1,0 +1,9 @@
+// A parent that is not declared before its child.
+ControlRig(Name="Validate/ParentNotDeclared", Root="Game")
+{
+    Hierarchy = {
+        Bone child { Parent = Bone(missing); }
+    }
+}
+
+// EXPECT DAB9009 (5,14)

@@ -1,0 +1,7 @@
+// A setting a ControlRig does not have.
+ControlRig(Name="Validate/UnknownSetting", Root="Game")
+{
+    Settings = { PreviewMeshh = None; }
+}
+
+// EXPECT DAB9001 (4,18)

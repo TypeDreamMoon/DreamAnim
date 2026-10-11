@@ -102,14 +102,14 @@ ControlRig(Name="Modules58/Hinge", Root="Plugin.ControlRigModules")
         #Region "Finalize"
         `Scale Module Controls`(
             Controls       = [ SpawnControl ],
-            `Local Scale`  = `Module Settings`.ControlSize,
-            `Global Scale` = GetModuleMetadata(Name = "Control Size", NameSpace = Root, Default = 1)
+            `Local Scale`  = `Module Settings`.`Control Size`,
+            `Global Scale` = GetModuleMetadata(Name = "Control Size", NameSpace = Root, Default = 1).Value
         );
         `Color Module Controls`(
             Controls    = [ SpawnControl ],
-            LeftColor   = `Module Settings`.LeftColor,
-            RightColor  = `Module Settings`.RightColor,
-            CenterColor = `Module Settings`.CenterColor
+            LeftColor   = `Module Settings`.`Left Color`,
+            RightColor  = `Module Settings`.`Right Color`,
+            CenterColor = `Module Settings`.`Center Color`
         );
         #EndRegion
     }

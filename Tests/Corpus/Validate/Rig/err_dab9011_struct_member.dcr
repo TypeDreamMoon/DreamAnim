@@ -1,0 +1,12 @@
+// A struct literal that names a member the struct does not have.
+ControlRig(Name="Validate/StructMember", Root="Game")
+{
+    Variables = { Vector Position; }
+
+    Event Forward
+    {
+        Position = (X = 1, Q = 2);
+    }
+}
+
+// EXPECT DAB9011 (8,20)

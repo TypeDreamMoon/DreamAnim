@@ -1,0 +1,12 @@
+// `[ Pure ]` on a function written as a value, which is pure already.
+ControlRig(Name="Validate/PureValue", Root="Game")
+{
+    Function Offset(double Value) -> (double Result) [ Pure ] = Value + 1;
+
+    Event Forward
+    {
+        let X = Offset(1);
+    }
+}
+
+// EXPECT DAB9013 (4,14)

@@ -1,0 +1,15 @@
+// An Inline function called twice.
+ControlRig(Name="Validate/InlineTwice", Root="Game")
+{
+    Variables = { double Speed; }
+
+    Function Twice(double Value) -> (double Result) [ Inline ] = Value + Value;
+
+    Event Forward
+    {
+        Speed = Twice(Speed);
+        Speed = Twice(Speed);
+    }
+}
+
+// EXPECT DAB9008 (11,17)

@@ -1,0 +1,18 @@
+// A rig that checks clean: an Inline function, a region, detached code.
+ControlRig(Name="Validate/InlineDetached", Root="Game")
+{
+    Variables = { double Speed; }
+
+    Function Twice(double Value) -> (double Result) [ Inline ] = Value + Value;
+
+    Event Forward
+    {
+        #Region "Speed"
+        Speed = Twice(Speed);
+        Detached
+        {
+            Speed = 0;
+        }
+        #EndRegion
+    }
+}

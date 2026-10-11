@@ -1,0 +1,10 @@
+// The same bone twice.
+ControlRig(Name="Validate/DuplicateElement", Root="Game")
+{
+    Hierarchy = {
+        Bone pelvis;
+        Bone pelvis;
+    }
+}
+
+// EXPECT DAB9009 (6,14)

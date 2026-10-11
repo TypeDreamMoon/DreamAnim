@@ -1,0 +1,8 @@
+// The same event twice in one graph.
+ControlRig(Name="Validate/DuplicateEvent", Root="Game")
+{
+    Event Forward { }
+    Event Forward { }
+}
+
+// EXPECT DAB9010 (5,11)

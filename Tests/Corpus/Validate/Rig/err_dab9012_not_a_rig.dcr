@@ -1,0 +1,7 @@
+// `Uses` names an asset that is no Control Rig.
+ControlRig(Name="Validate/NotARig", Root="Game")
+{
+    Settings = { Uses = [ Path(Engine, "BasicShapes/Cube") ]; }
+}
+
+// EXPECT DAB9012 (4,27)

@@ -1,0 +1,10 @@
+// A call that only computes a value, written as a statement.
+ControlRig(Name="Validate/PureStatement", Root="Game")
+{
+    Event Forward
+    {
+        GetTransform(Bone(root));
+    }
+}
+
+// EXPECT DAB9005 (6,9)

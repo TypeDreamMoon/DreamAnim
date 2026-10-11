@@ -1,0 +1,12 @@
+// A value of the wrong type.
+ControlRig(Name="Validate/TypeMismatch", Root="Game")
+{
+    Variables = { double Speed; bool Enabled; }
+
+    Event Forward
+    {
+        Speed = Enabled;
+    }
+}
+
+// EXPECT DAB9004 (8,17)

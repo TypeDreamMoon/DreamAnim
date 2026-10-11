@@ -1,0 +1,10 @@
+// A call to a name that is no unit, dispatch, template or function.
+ControlRig(Name="Validate/UnknownFunction", Root="Game")
+{
+    Event Forward
+    {
+        NoSuchNode(1);
+    }
+}
+
+// EXPECT DAB9001 (6,9)

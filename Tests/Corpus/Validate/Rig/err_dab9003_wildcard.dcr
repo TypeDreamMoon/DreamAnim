@@ -1,0 +1,10 @@
+// A node whose types nothing settles: the numbers could be any type.
+ControlRig(Name="Validate/Wildcard", Root="Game")
+{
+    Event Forward
+    {
+        let Pick = true ? 1 : 2;
+    }
+}
+
+// EXPECT DAB9003 (6,20)

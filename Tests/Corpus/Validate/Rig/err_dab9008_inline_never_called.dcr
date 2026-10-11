@@ -1,0 +1,7 @@
+// An Inline function nothing calls.
+ControlRig(Name="Validate/InlineNever", Root="Game")
+{
+    Function Spare(double Value) -> (double Result) [ Inline ] = Value;
+}
+
+// EXPECT DAB9008 (4,14)

@@ -1,0 +1,10 @@
+// A call that names an input the node does not have.
+ControlRig(Name="Validate/UnknownPin", Root="Game")
+{
+    Event Forward
+    {
+        let T = GetTransform(Itemm = Bone(root));
+    }
+}
+
+// EXPECT DAB9001 (6,30)

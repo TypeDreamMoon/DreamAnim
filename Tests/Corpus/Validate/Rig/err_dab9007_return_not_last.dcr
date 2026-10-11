@@ -1,0 +1,13 @@
+// A return that is not the last statement of the function.
+ControlRig(Name="Validate/ReturnNotLast", Root="Game")
+{
+    Variables = { double Speed; }
+
+    Function Early(double Limit) -> (double Result)
+    {
+        return (Result = Limit);
+        Speed = 0;
+    }
+}
+
+// EXPECT DAB9007 (8,9)
