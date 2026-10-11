@@ -186,7 +186,8 @@ namespace UE::DreamAnim::Compiler
 		TArray<FString> Roots;
 		const auto AddRoot = [&Roots](const FString& BaseDir)
 		{
-			const FString Root = DriverPrivate::NormalizeDabPath(FPaths::Combine(BaseDir, TEXT("DAnim")));
+			// Engine-provided directories are relative to the executable, not to the project.
+			const FString Root = DriverPrivate::NormalizeDabPath(FPaths::Combine(FPaths::ConvertRelativePathToFull(BaseDir), TEXT("DAnim")));
 			if (IFileManager::Get().DirectoryExists(*Root))
 			{
 				Roots.AddUnique(Root);

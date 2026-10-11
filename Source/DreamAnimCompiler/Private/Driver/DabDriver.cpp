@@ -361,7 +361,7 @@ namespace UE::DreamAnim::Compiler
 	FString GetDefaultDecompilePath(const UAnimBlueprint& Blueprint)
 	{
 		const FString PackageName = Blueprint.GetPackage()->GetName();
-		return DriverPrivate::NormalizeDabPath(FPaths::Combine(FPaths::ProjectDir(), TEXT("DAnim"),
+		return DriverPrivate::NormalizeDabPath(FPaths::Combine(FPaths::ConvertRelativePathToFull(FPaths::ProjectDir()), TEXT("DAnim"),
 			DriverPrivate::GetDabDecompileRelativePath(PackageName) + DriverPrivate::GetDabDecompileExtension(Blueprint)));
 	}
 
