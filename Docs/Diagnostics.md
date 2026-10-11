@@ -64,6 +64,7 @@ The lexer turns text into tokens. These errors point at the character where read
 | DAB1004 | error | A malformed number. | Write numbers as `12`, `0.5`, `.5`, `1e-3` or `2.5E+4`, without a suffix. |
 | DAB1005 | error | An unknown directive. The directives are `#include`, `#Region` and `#EndRegion`. | Fix the spelling; the hint suggests the right one when only the case differs. |
 | DAB1006 | error | An unknown escape in a string. | Use `\"`, `\\`, `\n`, `\t` or `\r`. Write a backslash as `\\`. |
+| DAB1007 | error | A name in backticks that is empty or not closed on its line. | Write the whole name between two backticks on one line: `` `Module Settings` ``. A name cannot be empty or contain a backtick. |
 
 ## DAB2xxx: syntax
 
@@ -71,10 +72,10 @@ The parser checks the shape of the file. The grammar is in [Grammar.md](Grammar.
 
 | Code | Severity | Meaning | How to fix |
 |---|---|---|---|
-| DAB2001 | error | Expected one thing, found another. The message names what was expected: `;`, `)`, a name after `State`, `{`, `=` or `;` after a named block, ... | Add or remove what the message names. A missing `;` at the end of a statement is the common case. Only a `Template` takes parameters. |
-| DAB2002 | error | The file has no document. | Write `AnimBlueprint(Name="...", Root="...") { ... }`, `AnimLayerInterface(...)` or `AnimTemplates(...)`. |
+| DAB2001 | error | Expected one thing, found another. The message names what was expected: `;`, `)`, a name after `State`, `{`, `=` or `;` after a named block, ... | Add or remove what the message names. A missing `;` at the end of a statement is the common case. Only a `Template` (and, in a `ControlRig`, a `Function`) takes parameters. |
+| DAB2002 | error | The file has no document. | Write `AnimBlueprint(Name="...", Root="...") { ... }`, `AnimLayerInterface(...)`, `AnimTemplates(...)` or `ControlRig(...)`. |
 | DAB2003 | error | The file already has a document; a file holds exactly one. | Move the second document to a file of its own. |
-| DAB2004 | error | An unknown document kind. | Use `AnimBlueprint`, `AnimLayerInterface` or `AnimTemplates`. |
+| DAB2004 | error | An unknown document kind. | Use `AnimBlueprint`, `AnimLayerInterface`, `AnimTemplates` or `ControlRig`. |
 | DAB2005 | error | The header has no `Name`, has an argument other than `Name` and `Root`, has a positional argument, or a value that is not a string. | Write `AnimBlueprint(Name="Folder/Asset", Root="Game")`. |
 | DAB2006 | error | An expression was expected. | Give the missing value. |
 | DAB2007 | error | A bracket, brace or parenthesis is not closed before the end of the file. The message points at the opening one. | Add the matching closer. |
@@ -84,7 +85,11 @@ The parser checks the shape of the file. The grammar is in [Grammar.md](Grammar.
 | DAB2011 | error | The same argument name twice in one argument list. | Remove one. |
 | DAB2012 | error | A positional argument after a named one. | Put positional arguments first, or name this one. |
 | DAB2013 | error | Malformed metadata. | Write `[ Key = Value; Flag ]`, entries separated by `;` or `,`. |
-| DAB2014 | error | A template parameter declared twice, or a parameter without a default after one with a default. | Rename the duplicate. Put parameters with defaults last. |
+| DAB2014 | error | A template parameter declared twice, or a parameter without a default after one with a default. A function's parameter or output declared twice. | Rename the duplicate. Put a template's parameters with defaults last. |
+| DAB2015 | error | Metadata after a code statement: a `[` followed by `Key =`, `Key;` or `Key,` in the code of an `Event`, `Function` or `Detached` block. Inside code a `[` after an expression is an index. | Move the metadata to the `Event` or `Function`, or to the variable's declaration. |
+| DAB2016 | error | An `else` with no `if` before it. | An `else` follows the `}` of an `if` or of an `else if`. Remove it or add the `if`. |
+| DAB2017 | error | A malformed `for` header: no name before `in`, more than four names, or no `in` after the names. | Write `for (Element, Index, Count, Ratio in Items) { ... }`: one to four names, then `in`. |
+| DAB2018 | error | A `return` whose value is not a tuple of named items. | Write `return (Name = value, ...);` with the name of each output, or `return;`. |
 
 ## DAB31xx: templates
 

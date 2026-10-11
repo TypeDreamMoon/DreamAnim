@@ -23,7 +23,27 @@ namespace UE::DreamAnim::Lang
 		 * one. Nodes made afresh have no span in it and print canonically. Canonical printing leaves it null.
 		 */
 		const FString* KeepBrokenIn = nullptr;
+		/**
+		 * PrintDabExpr and PrintDabStmt only: the node sits inside a code block, so a name that is a code word
+		 * is written in backticks. A code statement always prints that way; PrintDab works it out itself.
+		 */
+		bool bInCode = false;
 	};
+
+	/**
+	 * Whether Name reads back as one identifier token: a letter or `_`, then letters, digits and `_`, with any
+	 * Unicode letter counting. The rule is the lexer's; it lives there (DabLexer.cpp) so the two cannot differ.
+	 */
+	DREAMANIMLANG_API bool IsDabPlainIdentifier(const FString& Name);
+
+	/** The words a code block reads by position: let, local, if, else, for, in, return and Detached. */
+	DREAMANIMLANG_API bool IsDabCodeWord(const FString& Name);
+
+	/**
+	 * Name as it is written in source: itself when it is a plain identifier, otherwise between backticks
+	 * (`Module Settings`). With bInCode a code word is written in backticks too. An empty name stays empty.
+	 */
+	DREAMANIMLANG_API FString QuoteDabName(const FString& Name, bool bInCode = false);
 
 	/**
 	 * The canonical text of a file: includes, then the document, with the file's trivia (comments,
@@ -75,9 +95,16 @@ namespace UE::DreamAnim::Lang
 	 * Leaf spellings: `Number <lexeme>`, `String "<escaped>"`, `Bool true`, `Name <id>`, `Member <id>`
 	 * (child: the object), `Arg` / `Arg <name>` / `Arg "<string name>"`, `Unary !`, `Binary &&`,
 	 * `Assign <name>` (`Assign "<name>"` for a string key), `Decl <type> <name>`, `Region "<label>"`,
-	 * `EndRegion`, `MetaEntry <key>`, `Param <name>`. Containers: `List`, `Tuple`, `Block`, `Stack`,
-	 * `Call`, `Conditional`, `Paren`, `Meta`. A NamedBlock line is `NamedBlock <Word> <Name>`, followed
-	 * by ` (<p1>, <p2>)` when it has parameters.
+	 * `EndRegion`, `MetaEntry <key>`, `Param <name>` (`Param <type> <name>` when it has a type). Containers:
+	 * `List`, `Tuple`, `Block`, `Stack`, `Call`, `Conditional`, `Paren`, `Meta`. A NamedBlock line is
+	 * `NamedBlock <Word> <Name>`, followed by ` (<p1>, <p2>)` when it has parameters and ` -> (<o1>)` when
+	 * it has outputs; a block without a name (`Detached`) leaves the name out. A name that is not a plain
+	 * identifier is shown in backticks.
+	 *
+	 * Code (.dcr): `Index` (child: the object, then the index), `Code` (a block of statements), `Let <name>`,
+	 * `Typed <type> <name>`, `Local <type> <name>`, `Set` (children: target, value), `ExprStmt`, `If`
+	 * (children: condition, the block, then an `If` for an `else if` or a second `Code` for an `else`),
+	 * `For <n1>, <n2>` (children: the array, the block), `Return`, `Detached`.
 	 */
 	DREAMANIMLANG_API FString DumpDabTree(const FDabFile& File);
 }

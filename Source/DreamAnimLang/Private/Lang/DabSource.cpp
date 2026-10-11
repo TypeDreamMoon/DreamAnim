@@ -27,6 +27,10 @@ namespace UE::DreamAnim::Lang
 		{
 			return EDabFileKind::Templates;
 		}
+		if (Extension.Equals(TEXT("dcr"), ESearchCase::IgnoreCase))
+		{
+			return EDabFileKind::ControlRig;
+		}
 		return EDabFileKind::Unknown;
 	}
 
@@ -40,6 +44,8 @@ namespace UE::DreamAnim::Lang
 			return TEXT("AnimLayerInterface");
 		case EDabFileKind::Templates:
 			return TEXT("Templates");
+		case EDabFileKind::ControlRig:
+			return TEXT("ControlRig");
 		case EDabFileKind::Unknown:
 		default:
 			return TEXT("Unknown");

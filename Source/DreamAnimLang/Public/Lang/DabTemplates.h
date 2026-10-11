@@ -69,6 +69,9 @@ namespace UE::DreamAnim::Lang
 	 *   entry per expansion, keyed by the root of the expanded expression.
 	 * - Template definitions themselves are left in the tree, unexpanded. Expansion does not look
 	 *   inside them.
+	 * - In a ControlRig document the calls inside the code of an Event, Function or Detached block, and
+	 *   inside the defaults of a function's parameters, expand like any other; the origins are recorded
+	 *   the same way.
 	 *
 	 * Returns false when any error was reported.
 	 */

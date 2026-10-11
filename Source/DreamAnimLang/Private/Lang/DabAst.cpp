@@ -45,9 +45,22 @@ namespace UE::DreamAnim::Lang
 		{
 			TUniquePtr<FDabParam> Result = MakeUnique<FDabParam>();
 			Result->Span = Param.Span;
+			Result->TypeName = Param.TypeName;
+			Result->TypeSpan = Param.TypeSpan;
 			Result->Name = Param.Name;
 			Result->NameSpan = Param.NameSpan;
 			Result->Default = DabAstPrivate::CloneOptionalExpr(Param.Default);
+			return Result;
+		}
+
+		static TArray<TUniquePtr<FDabParam>> CloneParams(const TArray<TUniquePtr<FDabParam>>& Params)
+		{
+			TArray<TUniquePtr<FDabParam>> Result;
+			Result.Reserve(Params.Num());
+			for (const TUniquePtr<FDabParam>& Param : Params)
+			{
+				Result.Add(Param ? CloneParam(*Param) : TUniquePtr<FDabParam>());
+			}
 			return Result;
 		}
 
@@ -60,6 +73,35 @@ namespace UE::DreamAnim::Lang
 			{
 				Result->Statements.Add(Statement ? CloneStmt(*Statement) : FDabStmtPtr());
 			}
+			return Result;
+		}
+
+		static TUniquePtr<FDabCodeBlock> CloneCodeBlock(const FDabCodeBlock& Block)
+		{
+			TUniquePtr<FDabCodeBlock> Result = MakeUnique<FDabCodeBlock>();
+			Result->Span = Block.Span;
+			Result->Statements.Reserve(Block.Statements.Num());
+			for (const FDabStmtPtr& Statement : Block.Statements)
+			{
+				Result->Statements.Add(Statement ? CloneStmt(*Statement) : FDabStmtPtr());
+			}
+			return Result;
+		}
+
+		static TUniquePtr<FDabCodeBlock> CloneOptionalCodeBlock(const TUniquePtr<FDabCodeBlock>& Block)
+		{
+			return Block ? CloneCodeBlock(*Block) : TUniquePtr<FDabCodeBlock>();
+		}
+
+		static TUniquePtr<FDabIfStmt> CloneIf(const FDabIfStmt& If)
+		{
+			TUniquePtr<FDabIfStmt> Result = MakeUnique<FDabIfStmt>();
+			Result->Span = If.Span;
+			Result->Condition = CloneOptionalExpr(If.Condition);
+			Result->Then = CloneOptionalCodeBlock(If.Then);
+			Result->ElseIf = If.ElseIf ? CloneIf(*If.ElseIf) : TUniquePtr<FDabIfStmt>();
+			Result->Else = CloneOptionalCodeBlock(If.Else);
+			Result->ElseSpan = If.ElseSpan;
 			return Result;
 		}
 
@@ -103,15 +145,24 @@ namespace UE::DreamAnim::Lang
 		case EDabNodeKind::BinaryExpr:      return TEXT("BinaryExpr");
 		case EDabNodeKind::ConditionalExpr: return TEXT("ConditionalExpr");
 		case EDabNodeKind::ParenExpr:       return TEXT("ParenExpr");
+		case EDabNodeKind::IndexExpr:       return TEXT("IndexExpr");
 		case EDabNodeKind::AssignStmt:      return TEXT("AssignStmt");
 		case EDabNodeKind::DeclStmt:        return TEXT("DeclStmt");
 		case EDabNodeKind::TransitionStmt:  return TEXT("TransitionStmt");
 		case EDabNodeKind::NamedBlockStmt:  return TEXT("NamedBlockStmt");
 		case EDabNodeKind::RegionStmt:      return TEXT("RegionStmt");
+		case EDabNodeKind::LetStmt:         return TEXT("LetStmt");
+		case EDabNodeKind::SetStmt:         return TEXT("SetStmt");
+		case EDabNodeKind::ExprStmt:        return TEXT("ExprStmt");
+		case EDabNodeKind::IfStmt:          return TEXT("IfStmt");
+		case EDabNodeKind::ForStmt:         return TEXT("ForStmt");
+		case EDabNodeKind::ReturnStmt:      return TEXT("ReturnStmt");
+		case EDabNodeKind::DetachedStmt:    return TEXT("DetachedStmt");
 		case EDabNodeKind::Argument:        return TEXT("Argument");
 		case EDabNodeKind::MetaEntry:       return TEXT("MetaEntry");
 		case EDabNodeKind::Meta:            return TEXT("Meta");
 		case EDabNodeKind::Param:           return TEXT("Param");
+		case EDabNodeKind::CodeBlock:       return TEXT("CodeBlock");
 		case EDabNodeKind::Include:         return TEXT("Include");
 		case EDabNodeKind::Document:        return TEXT("Document");
 		}
@@ -125,6 +176,7 @@ namespace UE::DreamAnim::Lang
 		case EDabDocumentKind::AnimBlueprint:      return TEXT("AnimBlueprint");
 		case EDabDocumentKind::AnimLayerInterface: return TEXT("AnimLayerInterface");
 		case EDabDocumentKind::AnimTemplates:      return TEXT("AnimTemplates");
+		case EDabDocumentKind::ControlRig:         return TEXT("ControlRig");
 		case EDabDocumentKind::Unknown:            return TEXT("Unknown");
 		}
 		return TEXT("Unknown");
@@ -156,6 +208,7 @@ namespace UE::DreamAnim::Lang
 		case EDabBinaryOp::Subtract:     return TEXT("-");
 		case EDabBinaryOp::Multiply:     return TEXT("*");
 		case EDabBinaryOp::Divide:       return TEXT("/");
+		case EDabBinaryOp::Modulo:       return TEXT("%");
 		}
 		return TEXT("");
 	}
@@ -175,7 +228,8 @@ namespace UE::DreamAnim::Lang
 		case EDabBinaryOp::Add:
 		case EDabBinaryOp::Subtract:     return 5;
 		case EDabBinaryOp::Multiply:
-		case EDabBinaryOp::Divide:       return 6;
+		case EDabBinaryOp::Divide:
+		case EDabBinaryOp::Modulo:       return 6;
 		}
 		return 0;
 	}
@@ -350,6 +404,15 @@ namespace UE::DreamAnim::Lang
 			Result->Inner = DabAstPrivate::CloneOptionalExpr(Source.Inner);
 			return Result;
 		}
+		case EDabNodeKind::IndexExpr:
+		{
+			const FDabIndexExpr& Source = static_cast<const FDabIndexExpr&>(Expr);
+			TUniquePtr<FDabIndexExpr> Result = MakeUnique<FDabIndexExpr>();
+			Result->Span = Source.Span;
+			Result->Object = DabAstPrivate::CloneOptionalExpr(Source.Object);
+			Result->Index = DabAstPrivate::CloneOptionalExpr(Source.Index);
+			return Result;
+		}
 		default:
 			break;
 		}
@@ -411,16 +474,15 @@ namespace UE::DreamAnim::Lang
 			Result->Name = Source.Name;
 			Result->NameSpan = Source.NameSpan;
 			Result->bHasParams = Source.bHasParams;
-			Result->Params.Reserve(Source.Params.Num());
-			for (const TUniquePtr<FDabParam>& Param : Source.Params)
-			{
-				Result->Params.Add(Param ? DabAstPrivate::CloneParam(*Param) : TUniquePtr<FDabParam>());
-			}
+			Result->Params = DabAstPrivate::CloneParams(Source.Params);
+			Result->bHasOutputs = Source.bHasOutputs;
+			Result->Outputs = DabAstPrivate::CloneParams(Source.Outputs);
 			Result->Meta = DabAstPrivate::CloneOptionalMeta(Source.Meta);
 			if (Source.Body)
 			{
 				Result->Body = DabAstPrivate::CloneBlock(*Source.Body);
 			}
+			Result->Code = DabAstPrivate::CloneOptionalCodeBlock(Source.Code);
 			Result->Value = DabAstPrivate::CloneOptionalExpr(Source.Value);
 			return Result;
 		}
@@ -431,6 +493,65 @@ namespace UE::DreamAnim::Lang
 			Result->Span = Source.Span;
 			Result->bEnd = Source.bEnd;
 			Result->Label = Source.Label;
+			return Result;
+		}
+		case EDabNodeKind::LetStmt:
+		{
+			const FDabLetStmt& Source = static_cast<const FDabLetStmt&>(Stmt);
+			TUniquePtr<FDabLetStmt> Result = MakeUnique<FDabLetStmt>();
+			Result->Span = Source.Span;
+			Result->LetKind = Source.LetKind;
+			Result->TypeName = Source.TypeName;
+			Result->TypeSpan = Source.TypeSpan;
+			Result->Name = Source.Name;
+			Result->NameSpan = Source.NameSpan;
+			Result->Value = DabAstPrivate::CloneOptionalExpr(Source.Value);
+			return Result;
+		}
+		case EDabNodeKind::SetStmt:
+		{
+			const FDabSetStmt& Source = static_cast<const FDabSetStmt&>(Stmt);
+			TUniquePtr<FDabSetStmt> Result = MakeUnique<FDabSetStmt>();
+			Result->Span = Source.Span;
+			Result->Target = DabAstPrivate::CloneOptionalExpr(Source.Target);
+			Result->Value = DabAstPrivate::CloneOptionalExpr(Source.Value);
+			return Result;
+		}
+		case EDabNodeKind::ExprStmt:
+		{
+			const FDabExprStmt& Source = static_cast<const FDabExprStmt&>(Stmt);
+			TUniquePtr<FDabExprStmt> Result = MakeUnique<FDabExprStmt>();
+			Result->Span = Source.Span;
+			Result->Expr = DabAstPrivate::CloneOptionalExpr(Source.Expr);
+			return Result;
+		}
+		case EDabNodeKind::IfStmt:
+			return DabAstPrivate::CloneIf(static_cast<const FDabIfStmt&>(Stmt));
+		case EDabNodeKind::ForStmt:
+		{
+			const FDabForStmt& Source = static_cast<const FDabForStmt&>(Stmt);
+			TUniquePtr<FDabForStmt> Result = MakeUnique<FDabForStmt>();
+			Result->Span = Source.Span;
+			Result->Names = Source.Names;
+			Result->NameSpans = Source.NameSpans;
+			Result->Iterable = DabAstPrivate::CloneOptionalExpr(Source.Iterable);
+			Result->Body = DabAstPrivate::CloneOptionalCodeBlock(Source.Body);
+			return Result;
+		}
+		case EDabNodeKind::ReturnStmt:
+		{
+			const FDabReturnStmt& Source = static_cast<const FDabReturnStmt&>(Stmt);
+			TUniquePtr<FDabReturnStmt> Result = MakeUnique<FDabReturnStmt>();
+			Result->Span = Source.Span;
+			Result->Value = DabAstPrivate::CloneOptionalExpr(Source.Value);
+			return Result;
+		}
+		case EDabNodeKind::DetachedStmt:
+		{
+			const FDabDetachedStmt& Source = static_cast<const FDabDetachedStmt&>(Stmt);
+			TUniquePtr<FDabDetachedStmt> Result = MakeUnique<FDabDetachedStmt>();
+			Result->Span = Source.Span;
+			Result->Body = DabAstPrivate::CloneOptionalCodeBlock(Source.Body);
 			return Result;
 		}
 		default:
@@ -548,6 +669,13 @@ namespace UE::DreamAnim::Lang
 		case EDabNodeKind::ParenExpr:
 			VisitIfSet(static_cast<const FDabParenExpr&>(Node).Inner.Get());
 			break;
+		case EDabNodeKind::IndexExpr:
+		{
+			const FDabIndexExpr& Index = static_cast<const FDabIndexExpr&>(Node);
+			VisitIfSet(Index.Object.Get());
+			VisitIfSet(Index.Index.Get());
+			break;
+		}
 		case EDabNodeKind::AssignStmt:
 		{
 			const FDabAssignStmt& Assign = static_cast<const FDabAssignStmt&>(Node);
@@ -576,11 +704,57 @@ namespace UE::DreamAnim::Lang
 			{
 				VisitIfSet(Param.Get());
 			}
+			for (const TUniquePtr<FDabParam>& Output : NamedBlock.Outputs)
+			{
+				VisitIfSet(Output.Get());
+			}
 			VisitIfSet(NamedBlock.Meta.Get());
 			VisitIfSet(NamedBlock.Body.Get());
+			VisitIfSet(NamedBlock.Code.Get());
 			VisitIfSet(NamedBlock.Value.Get());
 			break;
 		}
+		case EDabNodeKind::CodeBlock:
+			for (const FDabStmtPtr& Statement : static_cast<const FDabCodeBlock&>(Node).Statements)
+			{
+				VisitIfSet(Statement.Get());
+			}
+			break;
+		case EDabNodeKind::LetStmt:
+			VisitIfSet(static_cast<const FDabLetStmt&>(Node).Value.Get());
+			break;
+		case EDabNodeKind::SetStmt:
+		{
+			const FDabSetStmt& Set = static_cast<const FDabSetStmt&>(Node);
+			VisitIfSet(Set.Target.Get());
+			VisitIfSet(Set.Value.Get());
+			break;
+		}
+		case EDabNodeKind::ExprStmt:
+			VisitIfSet(static_cast<const FDabExprStmt&>(Node).Expr.Get());
+			break;
+		case EDabNodeKind::IfStmt:
+		{
+			const FDabIfStmt& If = static_cast<const FDabIfStmt&>(Node);
+			VisitIfSet(If.Condition.Get());
+			VisitIfSet(If.Then.Get());
+			VisitIfSet(If.ElseIf.Get());
+			VisitIfSet(If.Else.Get());
+			break;
+		}
+		case EDabNodeKind::ForStmt:
+		{
+			const FDabForStmt& For = static_cast<const FDabForStmt&>(Node);
+			VisitIfSet(For.Iterable.Get());
+			VisitIfSet(For.Body.Get());
+			break;
+		}
+		case EDabNodeKind::ReturnStmt:
+			VisitIfSet(static_cast<const FDabReturnStmt&>(Node).Value.Get());
+			break;
+		case EDabNodeKind::DetachedStmt:
+			VisitIfSet(static_cast<const FDabDetachedStmt&>(Node).Body.Get());
+			break;
 		case EDabNodeKind::Argument:
 			VisitIfSet(static_cast<const FDabArgument&>(Node).Value.Get());
 			break;

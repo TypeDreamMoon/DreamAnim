@@ -32,7 +32,7 @@ namespace UE::DreamAnim::Lang
 		Arrow,
 
 		// -- operators
-		Plus, Minus, Star, Slash, Bang,
+		Plus, Minus, Star, Slash, Percent, Bang,
 		AmpersandAmpersand, PipePipe,
 		Less, Greater, LessEqual, GreaterEqual, EqualEqual, BangEqual,
 
@@ -58,6 +58,8 @@ namespace UE::DreamAnim::Lang
 		bool bAtLineStart = false;
 		/** Number of line breaks between the previous token (or comment) and this one. */
 		int32 NewlinesBefore = 0;
+		/** An Identifier written between backticks; Text is what is between them, spaces and all. */
+		bool bQuoted = false;
 
 		bool Is(EDabTokenKind InKind) const { return Kind == InKind; }
 		bool IsIdentifier(const TCHAR* Name) const { return Kind == EDabTokenKind::Identifier && Text.Equals(Name, ESearchCase::CaseSensitive); }

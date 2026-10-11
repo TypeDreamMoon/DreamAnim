@@ -10,6 +10,14 @@
 // the next `;` at its own depth, or stops before its `}`; a broken argument or list item skips to the
 // next `,` of its list. Every loop makes progress on every iteration.
 //
+// Control Rig documents. The kind word `ControlRig` switches on a few things that no other document has:
+// more block words (`Event`, `Function`, `Detached` with a body of code; `Bone`, `Null`, `Control`,
+// `Curve`, `Connector`, `Socket` with an ordinary body), generic types in declarations
+// (`Array<RigElementKey> Chain`), and code blocks. Statements of code are told apart by their first
+// token, by position only and only when it is not written in backticks; inside a code block a `[` after
+// an expression is an index. Code statements take no metadata, so the trivia of a code statement is
+// recorded exactly like the trivia of a statement of a block.
+//
 // Trivia. When asked to keep it, the lexer emits comments and the constructor moves them out of the
 // token stream, remembering for every token how many comments precede it. Comments are then claimed
 // strictly in source order:
@@ -204,7 +212,7 @@ namespace UE::DreamAnim::Lang
 				{
 					const FDabSpan Span = JunkBeforeDocument.Num() > 0 ? JunkBeforeDocument[0].Key : Source.MakeSpan(0, 0);
 					Sink.Error(TEXT("DAB2002"), Span,
-						TEXT("The file has no document; expected AnimBlueprint(...), AnimLayerInterface(...) or AnimTemplates(...) followed by '{ ... }'."),
+						TEXT("The file has no document; expected AnimBlueprint(...), AnimLayerInterface(...), AnimTemplates(...) or ControlRig(...) followed by '{ ... }'."),
 						TEXT("A .dab file holds AnimBlueprint(Name=\"...\", Root=\"...\") { ... }."));
 				}
 				else if (bKeepTrivia && File->Document->Body)
@@ -248,9 +256,16 @@ namespace UE::DreamAnim::Lang
 			// calls with a same-named function of another file in UE::DreamAnim::Lang.
 			// ------------------------------------------------------------------------------------
 
-			static bool IsBlockWord(const FDabToken& Token)
+			/** A word written in backticks is a name, never a word the parser reads by position. */
+			static bool IsWord(const FDabToken& Token, const TCHAR* Word)
 			{
-				if (!Token.Is(EDabTokenKind::Identifier))
+				return Token.Is(EDabTokenKind::Identifier) && !Token.bQuoted && Token.Text.Equals(Word, ESearchCase::CaseSensitive);
+			}
+
+			/** The block words; a Control Rig document has more of them. */
+			bool IsBlockWord(const FDabToken& Token) const
+			{
+				if (!Token.Is(EDabTokenKind::Identifier) || Token.bQuoted)
 				{
 					return false;
 				}
@@ -265,7 +280,29 @@ namespace UE::DreamAnim::Lang
 						return true;
 					}
 				}
+				if (!bControlRig)
+				{
+					return false;
+				}
+				static const TCHAR* const RigBlockWords[] =
+				{
+					TEXT("Event"), TEXT("Function"), TEXT("Detached"),
+					TEXT("Bone"), TEXT("Null"), TEXT("Control"), TEXT("Curve"), TEXT("Connector"), TEXT("Socket"),
+				};
+				for (const TCHAR* Word : RigBlockWords)
+				{
+					if (Token.Text.Equals(Word, ESearchCase::CaseSensitive))
+					{
+						return true;
+					}
+				}
 				return false;
+			}
+
+			/** The block words whose body is code. */
+			static bool IsCodeBlockWord(const FDabToken& Word)
+			{
+				return IsWord(Word, TEXT("Event")) || IsWord(Word, TEXT("Function")) || IsWord(Word, TEXT("Detached"));
 			}
 
 			static bool IsDirective(const FDabToken& Token, const TCHAR* Word)
@@ -297,6 +334,10 @@ namespace UE::DreamAnim::Lang
 				{
 					return EDabDocumentKind::AnimTemplates;
 				}
+				if (Name.Equals(TEXT("ControlRig"), ESearchCase::CaseSensitive))
+				{
+					return EDabDocumentKind::ControlRig;
+				}
 				return EDabDocumentKind::Unknown;
 			}
 
@@ -317,6 +358,7 @@ namespace UE::DreamAnim::Lang
 				case EDabTokenKind::Minus: OutOp = EDabBinaryOp::Subtract; OutPrecedence = 5; return true;
 				case EDabTokenKind::Star: OutOp = EDabBinaryOp::Multiply; OutPrecedence = 6; return true;
 				case EDabTokenKind::Slash: OutOp = EDabBinaryOp::Divide; OutPrecedence = 6; return true;
+				case EDabTokenKind::Percent: OutOp = EDabBinaryOp::Modulo; OutPrecedence = 6; return true;
 				default: return false;
 				}
 			}
@@ -441,6 +483,17 @@ namespace UE::DreamAnim::Lang
 				return FString::Printf(TEXT("Expected %s, found %s."), *What, *Describe(Current()));
 			}
 
+			/** A name in backticks whose closing backtick is missing: it ran to the end of its line (the lexer reported DAB1007). */
+			bool IsUnterminatedName(const FDabToken& Token) const
+			{
+				if (!Token.Is(EDabTokenKind::Identifier) || !Token.bQuoted)
+				{
+					return false;
+				}
+				const FString Written = Source.Slice(Token.Span);
+				return Written.Len() < 2 || Written[Written.Len() - 1] != TEXT('`');
+			}
+
 			bool IsUnterminatedString(const FDabToken& Token) const
 			{
 				if (!Token.Is(EDabTokenKind::String))
@@ -463,7 +516,7 @@ namespace UE::DreamAnim::Lang
 
 			/**
 			 * Whether an error about the current token says anything new. False for a character the lexer
-			 * already reported, right after an unclosed string, and for every end-of-file error after the
+			 * already reported, right after an unclosed string or name, and for every end-of-file error after the
 			 * first; the first one, while a bracket is open, becomes DAB2007 on that bracket.
 			 */
 			bool ShouldReportAtCurrent()
@@ -473,7 +526,7 @@ namespace UE::DreamAnim::Lang
 				{
 					return false;
 				}
-				if (Index > 0 && IsUnterminatedString(Previous()))
+				if (Index > 0 && (IsUnterminatedString(Previous()) || IsUnterminatedName(Previous())))
 				{
 					return false;
 				}
@@ -528,6 +581,34 @@ namespace UE::DreamAnim::Lang
 
 				FBracketScope(const FBracketScope&) = delete;
 				FBracketScope& operator=(const FBracketScope&) = delete;
+			};
+
+			/** Keeps CodeDepth up while a code block (or the value of a function) is being parsed. */
+			struct FCodeScope
+			{
+				FDabParser& Owner;
+				const bool bActive;
+
+				explicit FCodeScope(FDabParser& InOwner, const bool bInActive = true)
+					: Owner(InOwner)
+					, bActive(bInActive)
+				{
+					if (bActive)
+					{
+						++Owner.CodeDepth;
+					}
+				}
+
+				~FCodeScope()
+				{
+					if (bActive)
+					{
+						--Owner.CodeDepth;
+					}
+				}
+
+				FCodeScope(const FCodeScope&) = delete;
+				FCodeScope& operator=(const FCodeScope&) = delete;
 			};
 
 			// ------------------------------------------------------------------------------------
@@ -669,6 +750,25 @@ namespace UE::DreamAnim::Lang
 				while (Depth > 0 && !AtEnd());
 			}
 
+			/** At a `[`: through the matching `]`, or up to a `}` or the end of the file when it is never closed. */
+			void SkipBracketGroup()
+			{
+				int32 Depth = 0;
+				do
+				{
+					const EDabTokenKind Kind = Advance().Kind;
+					if (Kind == EDabTokenKind::LeftBracket)
+					{
+						++Depth;
+					}
+					else if (Kind == EDabTokenKind::RightBracket)
+					{
+						--Depth;
+					}
+				}
+				while (Depth > 0 && !AtEnd() && !Check(EDabTokenKind::RightBrace));
+			}
+
 			/** An unknown directive was reported by the lexer; drop it and whatever else is on its line. */
 			void SkipUnknownDirective()
 			{
@@ -705,7 +805,7 @@ namespace UE::DreamAnim::Lang
 			bool IsDocumentStart(const bool bAcceptAnyName) const
 			{
 				const FDabToken& Token = Current();
-				if (!Token.Is(EDabTokenKind::Identifier))
+				if (!Token.Is(EDabTokenKind::Identifier) || Token.bQuoted)
 				{
 					return false;
 				}
@@ -928,11 +1028,12 @@ namespace UE::DreamAnim::Lang
 				Document->KindName = KindToken.Text;
 				Document->KindSpan = KindToken.Span;
 				Document->DocumentKind = GetDocumentKind(KindToken.Text);
+				bControlRig = Document->DocumentKind == EDabDocumentKind::ControlRig;
 
 				if (Document->DocumentKind == EDabDocumentKind::Unknown)
 				{
 					Sink.Error(TEXT("DAB2004"), KindToken.Span,
-						FString::Printf(TEXT("Unknown document kind '%s'; expected AnimBlueprint, AnimLayerInterface or AnimTemplates."), *KindToken.Text));
+						FString::Printf(TEXT("Unknown document kind '%s'; expected AnimBlueprint, AnimLayerInterface, AnimTemplates or ControlRig."), *KindToken.Text));
 				}
 
 				if (Check(EDabTokenKind::LeftParen))
@@ -1037,8 +1138,57 @@ namespace UE::DreamAnim::Lang
 				{
 					return true;
 				}
-				return First.Is(EDabTokenKind::Identifier)
-					&& (Second.Is(EDabTokenKind::Identifier) || Second.Is(EDabTokenKind::Arrow));
+				if (First.Is(EDabTokenKind::Identifier) && (Second.Is(EDabTokenKind::Identifier) || Second.Is(EDabTokenKind::Arrow)))
+				{
+					return true;
+				}
+				// `Array<RigElementKey> Chain`: a generic type followed by the name it declares.
+				return bControlRig && IsGenericDeclarationAt(Ahead);
+			}
+
+			/**
+			 * At Ahead: a type name, with its `<...>` arguments when it is a generic type of a Control Rig
+			 * document, as far as a lookahead can tell. Returns the index of the token after it, or INDEX_NONE
+			 * (as an offset from the current token) when no type starts there.
+			 */
+			int32 ScanTypeEnd(const int32 Ahead, const int32 Depth = 0) const
+			{
+				if (!Peek(Ahead).Is(EDabTokenKind::Identifier) || Depth > MaxTypeDepth)
+				{
+					return INDEX_NONE;
+				}
+				int32 At = Ahead + 1;
+				if (bControlRig && Peek(At).Is(EDabTokenKind::Less))
+				{
+					++At;
+					while (true)
+					{
+						const int32 InnerEnd = ScanTypeEnd(At, Depth + 1);
+						if (InnerEnd == INDEX_NONE)
+						{
+							return INDEX_NONE;
+						}
+						At = InnerEnd;
+						if (!Peek(At).Is(EDabTokenKind::Comma))
+						{
+							break;
+						}
+						++At;
+					}
+					if (!Peek(At).Is(EDabTokenKind::Greater))
+					{
+						return INDEX_NONE;
+					}
+					++At;
+				}
+				return At;
+			}
+
+			/** `Ident < ... > Ident` at Ahead: a declaration of a generic type. A plain `Ident Ident` is not asked here. */
+			bool IsGenericDeclarationAt(const int32 Ahead) const
+			{
+				const int32 TypeEnd = ScanTypeEnd(Ahead);
+				return TypeEnd != INDEX_NONE && TypeEnd > Ahead + 1 && Peek(TypeEnd).Is(EDabTokenKind::Identifier);
 			}
 
 			/** At a `{`: the lookahead table of Grammar.md, "Telling a block from a stack". */
@@ -1054,6 +1204,37 @@ namespace UE::DreamAnim::Lang
 					return ParseBlockExpr();
 				}
 				return ParseStackExpr();
+			}
+
+			/** Pairs `#EndRegion` with the `#Region` before it in the same block; one without a partner is a warning. */
+			void NoteRegion(const FDabStmt& Statement, TArray<const FDabRegionStmt*>& OpenRegions)
+			{
+				const FDabRegionStmt* Region = Statement.As<FDabRegionStmt>();
+				if (!Region)
+				{
+					return;
+				}
+				if (!Region->bEnd)
+				{
+					OpenRegions.Add(Region);
+				}
+				else if (OpenRegions.Num() > 0)
+				{
+					OpenRegions.Pop();
+				}
+				else
+				{
+					Sink.Warning(TEXT("DAB2008"), Region->Span, TEXT("'#EndRegion' has no matching '#Region' in this block."));
+				}
+			}
+
+			void WarnUnclosedRegions(const TArray<const FDabRegionStmt*>& OpenRegions)
+			{
+				for (const FDabRegionStmt* Region : OpenRegions)
+				{
+					Sink.Warning(TEXT("DAB2008"), Region->Span,
+						FString::Printf(TEXT("'#Region \"%s\"' has no matching '#EndRegion' in this block."), *Region->Label));
+				}
 			}
 
 			/** At a `{` that opens a block. Returns the block even when the file ends inside it. */
@@ -1082,21 +1263,7 @@ namespace UE::DreamAnim::Lang
 
 					if (Statement)
 					{
-						if (const FDabRegionStmt* Region = Statement->As<FDabRegionStmt>())
-						{
-							if (!Region->bEnd)
-							{
-								OpenRegions.Add(Region);
-							}
-							else if (OpenRegions.Num() > 0)
-							{
-								OpenRegions.Pop();
-							}
-							else
-							{
-								Sink.Warning(TEXT("DAB2008"), Region->Span, TEXT("'#EndRegion' has no matching '#Region' in this block."));
-							}
-						}
+						NoteRegion(*Statement, OpenRegions);
 						Block->Statements.Add(MoveTemp(Statement));
 					}
 
@@ -1106,11 +1273,7 @@ namespace UE::DreamAnim::Lang
 					}
 				}
 
-				for (const FDabRegionStmt* Region : OpenRegions)
-				{
-					Sink.Warning(TEXT("DAB2008"), Region->Span,
-						FString::Printf(TEXT("'#Region \"%s\"' has no matching '#EndRegion' in this block."), *Region->Label));
-				}
+				WarnUnclosedRegions(OpenRegions);
 
 				if (Check(EDabTokenKind::RightBrace))
 				{
@@ -1253,6 +1416,19 @@ namespace UE::DreamAnim::Lang
 					if (Second.Is(EDabTokenKind::Identifier))
 					{
 						return IsBlockWord(First) ? ParseNamedBlock(Out) : ParseDecl(Out);
+					}
+					if (bControlRig)
+					{
+						// `Detached { ... }` and `Detached [ ... ] { ... }`: the one block word that takes no name.
+						if (IsWord(First, TEXT("Detached")) && (Second.Is(EDabTokenKind::LeftBrace) || Second.Is(EDabTokenKind::LeftBracket)))
+						{
+							return ParseNamedBlock(Out);
+						}
+						// `Array<RigElementKey> Chain [ Public ];`
+						if (IsGenericDeclarationAt(0))
+						{
+							return ParseDecl(Out);
+						}
 					}
 					if (IsBlockWord(First))
 					{
@@ -1418,10 +1594,12 @@ namespace UE::DreamAnim::Lang
 				const int32 Start = Index;
 				TUniquePtr<FDabDeclStmt> Decl = MakeUnique<FDabDeclStmt>();
 
-				const FDabToken& Type = Advance();
+				// The caller has seen a name after the type, so this cannot fail on the way to it.
+				if (!ParseTypeName(Decl->TypeName, Decl->TypeSpan, false))
+				{
+					return EStmtResult::Failed;
+				}
 				const FDabToken& Name = Advance();
-				Decl->TypeName = Type.Text;
-				Decl->TypeSpan = Type.Span;
 				Decl->Name = Name.Text;
 				Decl->NameSpan = Name.Span;
 
@@ -1513,18 +1691,26 @@ namespace UE::DreamAnim::Lang
 				return EStmtResult::Parsed;
 			}
 
-			/** `Word Name [(Params)] [Meta]` then `{ ... } [;]`, `= Expr ;` or `;`. */
+			/**
+			 * `Word Name [(Params)] [-> (Outputs)] [Meta]` then `{ ... } [;]`, `= Expr ;` or `;`. A Function takes
+			 * typed parameters and outputs, a Template plain parameters; a Detached block takes no name.
+			 */
 			EStmtResult ParseNamedBlock(FDabStmtPtr& Out)
 			{
 				const int32 Start = Index;
 				TUniquePtr<FDabNamedBlockStmt> Named = MakeUnique<FDabNamedBlockStmt>();
 
 				const FDabToken& Word = Advance();
-				const FDabToken& Name = Advance();
 				Named->Word = Word.Text;
 				Named->WordSpan = Word.Span;
-				Named->Name = Name.Text;
-				Named->NameSpan = Name.Span;
+				// The callers have seen a name after the word, except for `Detached` followed by `{` or `[`.
+				if (Check(EDabTokenKind::Identifier))
+				{
+					const FDabToken& Name = Advance();
+					Named->Name = Name.Text;
+					Named->NameSpan = Name.Span;
+				}
+				const bool bIsFunction = bControlRig && IsWord(Word, TEXT("Function"));
 
 				if (Check(EDabTokenKind::LeftParen))
 				{
@@ -1536,13 +1722,40 @@ namespace UE::DreamAnim::Lang
 							return EStmtResult::Failed;
 						}
 					}
+					else if (bIsFunction)
+					{
+						Named->bHasParams = true;
+						if (!ParseTypedParams(Named->Params, true, TEXT("parameter")))
+						{
+							return EStmtResult::Failed;
+						}
+					}
 					else
 					{
 						// Reported, then stepped over, so the rest of the block still parses as written.
 						Sink.Error(TEXT("DAB2001"), Current().Span,
 							Expected(FString::Printf(TEXT("'{', '=' or ';' after '%s %s'"), *Named->Word, *Named->Name)),
-							TEXT("Only a Template takes parameters."));
+							bControlRig ? TEXT("Only a Template or a Function takes parameters.") : TEXT("Only a Template takes parameters."));
 						SkipBalancedParens();
+					}
+				}
+
+				if (bIsFunction && Check(EDabTokenKind::Arrow))
+				{
+					Advance(); // ->
+					if (!Check(EDabTokenKind::LeftParen))
+					{
+						if (ShouldReportAtCurrent())
+						{
+							Sink.Error(TEXT("DAB2001"), Current().Span, Expected(TEXT("'(' and the outputs after '->'")),
+								TEXT("Write the outputs as -> (Type Name, ...)."));
+						}
+						return EStmtResult::Failed;
+					}
+					Named->bHasOutputs = true;
+					if (!ParseTypedParams(Named->Outputs, false, TEXT("output")))
+					{
+						return EStmtResult::Failed;
 					}
 				}
 
@@ -1557,13 +1770,24 @@ namespace UE::DreamAnim::Lang
 
 				if (Check(EDabTokenKind::LeftBrace))
 				{
-					// The body is a block whatever its first entry looks like.
-					Named->Body = ParseBlockExpr();
+					// The body is a block whatever its first entry looks like; for Event, Function and Detached it is code.
+					if (bControlRig && IsCodeBlockWord(Word))
+					{
+						Named->Code = ParseCodeBlock();
+					}
+					else
+					{
+						Named->Body = ParseBlockExpr();
+					}
 					Match(EDabTokenKind::Semicolon);
 				}
 				else if (Match(EDabTokenKind::Assign))
 				{
-					Named->Value = ParseExpression();
+					{
+						// The value of a function is code too: `[` after an expression is an index there.
+						const FCodeScope ValueScope(*this, bIsFunction);
+						Named->Value = ParseExpression();
+					}
 					if (!Named->Value)
 					{
 						return EStmtResult::Failed;
@@ -1672,6 +1896,148 @@ namespace UE::DreamAnim::Lang
 				}
 			}
 
+			/**
+			 * At the `(` of a function: `Type Name [= Default] { , Type Name [= Default] }` then `)`. The outputs
+			 * (`-> (Type Name, ...)`) take no defaults. What is "parameter" or "output", for the messages.
+			 */
+			bool ParseTypedParams(TArray<TUniquePtr<FDabParam>>& OutParams, const bool bAllowDefaults, const TCHAR* What)
+			{
+				const FDabToken& Open = Advance();
+				FBracketScope Scope(*this, Open, TEXT("("), TEXT(")"));
+
+				if (Match(EDabTokenKind::RightParen))
+				{
+					return true;
+				}
+
+				while (true)
+				{
+					const int32 ParamStart = Index;
+					TUniquePtr<FDabParam> Param = MakeUnique<FDabParam>();
+					if (!ParseTypeName(Param->TypeName, Param->TypeSpan, false))
+					{
+						return false;
+					}
+					if (!Check(EDabTokenKind::Identifier))
+					{
+						if (ShouldReportAtCurrent())
+						{
+							Sink.Error(TEXT("DAB2001"), Current().Span,
+								Expected(FString::Printf(TEXT("the name of the %s after its type '%s'"), What, *Param->TypeName)));
+						}
+						return false;
+					}
+					const FDabToken& NameToken = Advance();
+					Param->Name = NameToken.Text;
+					Param->NameSpan = NameToken.Span;
+
+					if (bAllowDefaults && Match(EDabTokenKind::Assign))
+					{
+						Param->Default = ParseExpression();
+						if (!Param->Default)
+						{
+							return false;
+						}
+					}
+					Param->Span = SpanFrom(ParamStart);
+
+					for (const TUniquePtr<FDabParam>& Earlier : OutParams)
+					{
+						if (Earlier->Name.Equals(Param->Name, ESearchCase::CaseSensitive))
+						{
+							Sink.Error(TEXT("DAB2014"), Param->NameSpan,
+								FString::Printf(TEXT("The %s '%s' is declared twice."), What, *Param->Name));
+							break;
+						}
+					}
+
+					const FString ParamName = Param->Name;
+					OutParams.Add(MoveTemp(Param));
+
+					if (Match(EDabTokenKind::Comma))
+					{
+						continue;
+					}
+					if (Match(EDabTokenKind::RightParen))
+					{
+						return true;
+					}
+					if (ShouldReportAtCurrent())
+					{
+						Sink.Error(TEXT("DAB2001"), Current().Span,
+							Expected(FString::Printf(TEXT("',' or ')' after the %s '%s'"), What, *ParamName)));
+					}
+					return false;
+				}
+			}
+
+			/**
+			 * At an identifier: a type name. In a Control Rig document it may have type arguments (`Array<double>`,
+			 * nested too), and the text keeps them without spaces. A part written in backticks keeps its backticks
+			 * inside a generic type, so the text can be printed as it is. False, after reporting, when no type starts here.
+			 */
+			bool ParseTypeName(FString& OutText, FDabSpan& OutSpan, const bool bNested, const int32 Depth = 0)
+			{
+				const int32 Start = Index;
+				if (!Check(EDabTokenKind::Identifier))
+				{
+					if (ShouldReportAtCurrent())
+					{
+						Sink.Error(TEXT("DAB2001"), Current().Span, Expected(TEXT("a type name")));
+					}
+					return false;
+				}
+
+				const FDabToken& Head = Advance();
+				const bool bGeneric = bControlRig && Check(EDabTokenKind::Less);
+				OutText = (Head.bQuoted && (bNested || bGeneric)) ? FString::Printf(TEXT("`%s`"), *Head.Text) : Head.Text;
+				if (!bGeneric)
+				{
+					OutSpan = Head.Span;
+					return true;
+				}
+
+				if (Depth >= MaxTypeDepth)
+				{
+					if (ShouldReportAtCurrent())
+					{
+						Sink.Error(TEXT("DAB2001"), Current().Span, Expected(TEXT("a type with fewer type arguments inside each other")));
+					}
+					return false;
+				}
+
+				Advance(); // <
+				OutText += TEXT("<");
+				while (true)
+				{
+					FString Inner;
+					FDabSpan InnerSpan;
+					if (!ParseTypeName(Inner, InnerSpan, true, Depth + 1))
+					{
+						return false;
+					}
+					OutText += Inner;
+					if (!Match(EDabTokenKind::Comma))
+					{
+						break;
+					}
+					OutText += TEXT(",");
+				}
+
+				if (!Check(EDabTokenKind::Greater))
+				{
+					if (ShouldReportAtCurrent())
+					{
+						Sink.Error(TEXT("DAB2001"), Current().Span, Expected(FString::Printf(TEXT("'>' to close the type '%s'"), *OutText)));
+					}
+					return false;
+				}
+				Advance(); // >
+				OutText += TEXT(">");
+				OutSpan = SpanFrom(Start);
+				return true;
+			}
+
 			/** At a `[` after a value: `Key [= Expr]` entries separated by `;` or `,`, a trailing one allowed. */
 			TUniquePtr<FDabMeta> ParseMeta()
 			{
@@ -1750,6 +2116,537 @@ namespace UE::DreamAnim::Lang
 				Advance(); // ]
 				Meta->Span = SpanFrom(Start);
 				return Meta;
+			}
+
+			// ------------------------------------------------------------------------------------
+			// Code blocks (Control Rig documents)
+			// ------------------------------------------------------------------------------------
+
+			/** At a `{` that opens code. Returns the block even when the file ends inside it. */
+			TUniquePtr<FDabCodeBlock> ParseCodeBlock()
+			{
+				const int32 Start = Index;
+				const FDabToken& Open = Advance();
+				FBracketScope Scope(*this, Open, TEXT("{"), TEXT("}"));
+				const FCodeScope CodeScope(*this);
+
+				TUniquePtr<FDabCodeBlock> Block = MakeUnique<FDabCodeBlock>();
+				TArray<int32> Carry;
+				TArray<const FDabRegionStmt*> OpenRegions;
+
+				while (!Check(EDabTokenKind::RightBrace) && !AtEnd())
+				{
+					const int32 StatementStart = Index;
+					FAnchorStart Anchor = BeginAnchor(Carry);
+
+					FDabStmtPtr Statement;
+					if (ParseCodeStatement(Statement) == EStmtResult::Failed)
+					{
+						SkipToStatementBoundary();
+					}
+
+					EndAnchor(MoveTemp(Anchor), Statement.Get(), Carry);
+
+					if (Statement)
+					{
+						NoteRegion(*Statement, OpenRegions);
+						Block->Statements.Add(MoveTemp(Statement));
+					}
+
+					if (Index == StatementStart && !AtEnd() && !Check(EDabTokenKind::RightBrace))
+					{
+						Advance();
+					}
+				}
+
+				WarnUnclosedRegions(OpenRegions);
+
+				if (Check(EDabTokenKind::RightBrace))
+				{
+					ClaimInner(Open.Span.Offset, Carry);
+					Advance();
+				}
+				else
+				{
+					ReportUnclosedAtEnd();
+					ReleaseCarry(Carry);
+				}
+
+				Block->Span = SpanFrom(Start);
+				return Block;
+			}
+
+			/**
+			 * One statement of code. The words `let`, `local`, `if`, `else`, `for`, `return` and `Detached` start a
+			 * statement of their own kind wherever they begin one, unless they are written in backticks; `Type Name`
+			 * (a type, perhaps generic) starts a typed let; anything else is an expression, an assignment when a `=` follows.
+			 */
+			EStmtResult ParseCodeStatement(FDabStmtPtr& Out)
+			{
+				const FDabToken& First = Current();
+
+				if (First.Is(EDabTokenKind::Directive))
+				{
+					return ParseDirectiveStatement(Out);
+				}
+				if (IsWord(First, TEXT("let")))
+				{
+					return ParseLet(Out, EDabLetKind::Let);
+				}
+				if (IsWord(First, TEXT("local")))
+				{
+					return ParseLet(Out, EDabLetKind::Local);
+				}
+				if (IsWord(First, TEXT("if")))
+				{
+					return ParseIf(Out);
+				}
+				if (IsWord(First, TEXT("else")))
+				{
+					return ParseStrayElse();
+				}
+				if (IsWord(First, TEXT("for")))
+				{
+					return ParseFor(Out);
+				}
+				if (IsWord(First, TEXT("return")))
+				{
+					return ParseReturn(Out);
+				}
+				if (IsWord(First, TEXT("Detached")))
+				{
+					return ParseDetached(Out);
+				}
+
+				const int32 TypeEnd = ScanTypeEnd(0);
+				if (TypeEnd != INDEX_NONE && Peek(TypeEnd).Is(EDabTokenKind::Identifier))
+				{
+					return ParseTypedLet(Out);
+				}
+				return ParseSimpleCodeStatement(Out);
+			}
+
+			/** `let Name = Expr;` or `local Type Name [= Expr];`, at the word. */
+			EStmtResult ParseLet(FDabStmtPtr& Out, const EDabLetKind Kind)
+			{
+				const int32 Start = Index;
+				const FDabToken& Keyword = Advance();
+				TUniquePtr<FDabLetStmt> Let = MakeUnique<FDabLetStmt>();
+				Let->LetKind = Kind;
+
+				if (Kind == EDabLetKind::Local && !ParseTypeName(Let->TypeName, Let->TypeSpan, false))
+				{
+					return EStmtResult::Failed;
+				}
+				if (!Check(EDabTokenKind::Identifier))
+				{
+					if (ShouldReportAtCurrent())
+					{
+						Sink.Error(TEXT("DAB2001"), Current().Span,
+							Expected(Kind == EDabLetKind::Local
+								? FString::Printf(TEXT("a name after the type '%s'"), *Let->TypeName)
+								: FString::Printf(TEXT("a name after '%s'"), *Keyword.Text)));
+					}
+					return EStmtResult::Failed;
+				}
+				const FDabToken& Name = Advance();
+				Let->Name = Name.Text;
+				Let->NameSpan = Name.Span;
+
+				if (Match(EDabTokenKind::Assign))
+				{
+					Let->Value = ParseExpression();
+					if (!Let->Value)
+					{
+						return EStmtResult::Failed;
+					}
+				}
+				else if (Kind == EDabLetKind::Let)
+				{
+					if (ShouldReportAtCurrent())
+					{
+						Sink.Error(TEXT("DAB2001"), Current().Span, Expected(FString::Printf(TEXT("'=' after 'let %s'"), *Let->Name)),
+							TEXT("Write let Name = value;."));
+					}
+					return EStmtResult::Failed;
+				}
+
+				if (!Match(EDabTokenKind::Semicolon))
+				{
+					ReportMissingSemicolon(FString::Printf(TEXT("';' after the declaration of '%s'"), *Let->Name));
+				}
+
+				Let->Span = SpanFrom(Start);
+				Out = MoveTemp(Let);
+				return EStmtResult::Parsed;
+			}
+
+			/** `Type Name = Expr;`: a let whose type is written. */
+			EStmtResult ParseTypedLet(FDabStmtPtr& Out)
+			{
+				const int32 Start = Index;
+				TUniquePtr<FDabLetStmt> Let = MakeUnique<FDabLetStmt>();
+				Let->LetKind = EDabLetKind::Typed;
+
+				if (!ParseTypeName(Let->TypeName, Let->TypeSpan, false))
+				{
+					return EStmtResult::Failed;
+				}
+				const FDabToken& Name = Advance();
+				Let->Name = Name.Text;
+				Let->NameSpan = Name.Span;
+
+				if (!Match(EDabTokenKind::Assign))
+				{
+					if (ShouldReportAtCurrent())
+					{
+						Sink.Error(TEXT("DAB2001"), Current().Span, Expected(FString::Printf(TEXT("'=' after '%s %s'"), *Let->TypeName, *Let->Name)),
+							TEXT("Write let Name = value; to name a value, or local Type Name; to declare a variable."));
+					}
+					return EStmtResult::Failed;
+				}
+				Let->Value = ParseExpression();
+				if (!Let->Value)
+				{
+					return EStmtResult::Failed;
+				}
+
+				if (!Match(EDabTokenKind::Semicolon))
+				{
+					ReportMissingSemicolon(FString::Printf(TEXT("';' after the declaration of '%s'"), *Let->Name));
+				}
+
+				Let->Span = SpanFrom(Start);
+				Out = MoveTemp(Let);
+				return EStmtResult::Parsed;
+			}
+
+			/** `Target = Expr;` or `Expr;`. */
+			EStmtResult ParseSimpleCodeStatement(FDabStmtPtr& Out)
+			{
+				const int32 Start = Index;
+				if (!CanStartExpression(Current()))
+				{
+					if (ShouldReportAtCurrent())
+					{
+						Sink.Error(TEXT("DAB2001"), Current().Span, Expected(TEXT("a statement")));
+					}
+					return EStmtResult::Failed;
+				}
+
+				FDabExprPtr Expr = ParseExpression();
+				if (!Expr)
+				{
+					return EStmtResult::Failed;
+				}
+
+				if (Match(EDabTokenKind::Assign))
+				{
+					TUniquePtr<FDabSetStmt> Set = MakeUnique<FDabSetStmt>();
+					Set->Target = MoveTemp(Expr);
+					Set->Value = ParseExpression();
+					if (!Set->Value)
+					{
+						return EStmtResult::Failed;
+					}
+					if (!Match(EDabTokenKind::Semicolon))
+					{
+						ReportMissingSemicolon(TEXT("';' after the assignment"));
+					}
+					Set->Span = SpanFrom(Start);
+					Out = MoveTemp(Set);
+					return EStmtResult::Parsed;
+				}
+
+				TUniquePtr<FDabExprStmt> ExprStmt = MakeUnique<FDabExprStmt>();
+				ExprStmt->Expr = MoveTemp(Expr);
+				if (!Match(EDabTokenKind::Semicolon))
+				{
+					ReportMissingSemicolon(TEXT("';' after the statement"));
+				}
+				ExprStmt->Span = SpanFrom(Start);
+				Out = MoveTemp(ExprStmt);
+				return EStmtResult::Parsed;
+			}
+
+			EStmtResult ParseIf(FDabStmtPtr& Out)
+			{
+				TUniquePtr<FDabIfStmt> If;
+				if (!ParseIfChain(If))
+				{
+					return EStmtResult::Failed;
+				}
+				Out = MoveTemp(If);
+				return EStmtResult::Parsed;
+			}
+
+			/** At `if`: the condition, the block, and the `else if` / `else` after it. False, after reporting, when it cannot go on. */
+			bool ParseIfChain(TUniquePtr<FDabIfStmt>& OutIf)
+			{
+				const int32 Start = Index;
+				Advance(); // if
+				TUniquePtr<FDabIfStmt> If = MakeUnique<FDabIfStmt>();
+
+				if (!Check(EDabTokenKind::LeftParen))
+				{
+					if (ShouldReportAtCurrent())
+					{
+						Sink.Error(TEXT("DAB2001"), Current().Span, Expected(TEXT("'(' after 'if'")), TEXT("Write if (condition) { ... }."));
+					}
+					return false;
+				}
+				{
+					const FDabToken& Open = Advance();
+					FBracketScope Scope(*this, Open, TEXT("("), TEXT(")"));
+					If->Condition = ParseExpression();
+					if (!If->Condition)
+					{
+						return false;
+					}
+					if (!Check(EDabTokenKind::RightParen))
+					{
+						if (ShouldReportAtCurrent())
+						{
+							Sink.Error(TEXT("DAB2001"), Current().Span, Expected(TEXT("')' after the condition")));
+						}
+						return false;
+					}
+					Advance(); // )
+				}
+
+				if (!Check(EDabTokenKind::LeftBrace))
+				{
+					if (ShouldReportAtCurrent())
+					{
+						Sink.Error(TEXT("DAB2001"), Current().Span, Expected(TEXT("'{' to open the body of the 'if'")));
+					}
+					return false;
+				}
+				If->Then = ParseCodeBlock();
+
+				if (IsWord(Current(), TEXT("else")))
+				{
+					If->ElseSpan = Advance().Span;
+					if (IsWord(Current(), TEXT("if")))
+					{
+						if (!ParseIfChain(If->ElseIf))
+						{
+							return false;
+						}
+					}
+					else if (Check(EDabTokenKind::LeftBrace))
+					{
+						If->Else = ParseCodeBlock();
+					}
+					else
+					{
+						if (ShouldReportAtCurrent())
+						{
+							Sink.Error(TEXT("DAB2001"), Current().Span, Expected(TEXT("'if' or '{' after 'else'")));
+						}
+						return false;
+					}
+				}
+
+				If->Span = SpanFrom(Start);
+				OutIf = MoveTemp(If);
+				return true;
+			}
+
+			/** An `else` that follows no `if`: DAB2016. The branch it opens is parsed and dropped so it does not report again. */
+			EStmtResult ParseStrayElse()
+			{
+				const FDabToken& Else = Advance();
+				Sink.Error(TEXT("DAB2016"), Else.Span, TEXT("'else' has no 'if' before it."),
+					TEXT("An 'else' follows the '}' of an 'if' or of an 'else if'."));
+
+				if (IsWord(Current(), TEXT("if")))
+				{
+					TUniquePtr<FDabIfStmt> Ignored;
+					ParseIfChain(Ignored);
+				}
+				else if (Check(EDabTokenKind::LeftBrace))
+				{
+					ParseCodeBlock();
+				}
+				return EStmtResult::Skipped;
+			}
+
+			/** `for (Name [, Name [, Name [, Name]]] in Expr) { ... }`. */
+			EStmtResult ParseFor(FDabStmtPtr& Out)
+			{
+				const int32 Start = Index;
+				Advance(); // for
+				TUniquePtr<FDabForStmt> For = MakeUnique<FDabForStmt>();
+
+				if (!Check(EDabTokenKind::LeftParen))
+				{
+					if (ShouldReportAtCurrent())
+					{
+						Sink.Error(TEXT("DAB2001"), Current().Span, Expected(TEXT("'(' after 'for'")),
+							TEXT("Write for (Element in Items) { ... }."));
+					}
+					return EStmtResult::Failed;
+				}
+
+				{
+					const FDabToken& Open = Advance();
+					FBracketScope Scope(*this, Open, TEXT("("), TEXT(")"));
+
+					while (true)
+					{
+						if (!Check(EDabTokenKind::Identifier) || IsWord(Current(), TEXT("in")))
+						{
+							if (ShouldReportAtCurrent())
+							{
+								Sink.Error(TEXT("DAB2017"), Current().Span,
+									Expected(For->Names.Num() == 0 ? FString(TEXT("a name for each element of the loop")) : FString(TEXT("a name after ','"))),
+									TEXT("Write for (Element, Index, Count, Ratio in Items): one to four names, then 'in'."));
+							}
+							return EStmtResult::Failed;
+						}
+						const FDabToken& Name = Advance();
+						For->Names.Add(Name.Text);
+						For->NameSpans.Add(Name.Span);
+						if (!Match(EDabTokenKind::Comma))
+						{
+							break;
+						}
+					}
+
+					if (For->Names.Num() > 4)
+					{
+						Sink.Error(TEXT("DAB2017"), For->NameSpans[4], TEXT("A for loop binds at most four names: Element, Index, Count and Ratio."));
+					}
+
+					if (!IsWord(Current(), TEXT("in")))
+					{
+						if (ShouldReportAtCurrent())
+						{
+							Sink.Error(TEXT("DAB2017"), Current().Span, Expected(TEXT("'in' after the names of the loop")),
+								TEXT("Write for (Element in Items) { ... }."));
+						}
+						return EStmtResult::Failed;
+					}
+					Advance(); // in
+
+					For->Iterable = ParseExpression();
+					if (!For->Iterable)
+					{
+						return EStmtResult::Failed;
+					}
+					if (!Check(EDabTokenKind::RightParen))
+					{
+						if (ShouldReportAtCurrent())
+						{
+							Sink.Error(TEXT("DAB2001"), Current().Span, Expected(TEXT("')' after the array to loop over")));
+						}
+						return EStmtResult::Failed;
+					}
+					Advance(); // )
+				}
+
+				if (!Check(EDabTokenKind::LeftBrace))
+				{
+					if (ShouldReportAtCurrent())
+					{
+						Sink.Error(TEXT("DAB2001"), Current().Span, Expected(TEXT("'{' to open the body of the 'for'")));
+					}
+					return EStmtResult::Failed;
+				}
+				For->Body = ParseCodeBlock();
+
+				For->Span = SpanFrom(Start);
+				Out = MoveTemp(For);
+				return EStmtResult::Parsed;
+			}
+
+			/** `return;` or `return (Name = Expr, ...);`. */
+			EStmtResult ParseReturn(FDabStmtPtr& Out)
+			{
+				const int32 Start = Index;
+				Advance(); // return
+				TUniquePtr<FDabReturnStmt> Return = MakeUnique<FDabReturnStmt>();
+
+				if (Check(EDabTokenKind::LeftParen))
+				{
+					Return->Value = ParseParenOrTuple();
+					if (!Return->Value)
+					{
+						return EStmtResult::Failed;
+					}
+					CheckReturnValues(*Return->Value);
+				}
+				else if (!Check(EDabTokenKind::Semicolon))
+				{
+					if (ShouldReportAtCurrent())
+					{
+						Sink.Error(TEXT("DAB2001"), Current().Span, Expected(TEXT("'(' or ';' after 'return'")),
+							TEXT("Write return (Name = value, ...); to give the outputs, or return; for none."));
+					}
+					return EStmtResult::Failed;
+				}
+
+				if (!Match(EDabTokenKind::Semicolon))
+				{
+					ReportMissingSemicolon(TEXT("';' after 'return'"));
+				}
+
+				Return->Span = SpanFrom(Start);
+				Out = MoveTemp(Return);
+				return EStmtResult::Parsed;
+			}
+
+			/** DAB2018: a return gives its outputs by name, so what follows `return` is a tuple of named items. */
+			void CheckReturnValues(const FDabExpr& Value)
+			{
+				const TCHAR* const Hint = TEXT("Write return (Name = value, ...); with the name of each output.");
+				const FDabTupleExpr* Tuple = Value.As<FDabTupleExpr>();
+				if (!Tuple)
+				{
+					Sink.Error(TEXT("DAB2018"), Value.Span, TEXT("A return gives each output by name."), Hint);
+					return;
+				}
+				for (const FDabArgumentPtr& Item : Tuple->Items)
+				{
+					if (Item && !Item->IsNamed())
+					{
+						Sink.Error(TEXT("DAB2018"), Item->Span, TEXT("A return gives each output by name."), Hint);
+					}
+				}
+			}
+
+			/** `Detached { ... }` in code. */
+			EStmtResult ParseDetached(FDabStmtPtr& Out)
+			{
+				const int32 Start = Index;
+				Advance(); // Detached
+				if (!Check(EDabTokenKind::LeftBrace))
+				{
+					if (ShouldReportAtCurrent())
+					{
+						Sink.Error(TEXT("DAB2001"), Current().Span, Expected(TEXT("'{' after 'Detached'")));
+					}
+					return EStmtResult::Failed;
+				}
+
+				TUniquePtr<FDabDetachedStmt> Detached = MakeUnique<FDabDetachedStmt>();
+				Detached->Body = ParseCodeBlock();
+				Detached->Span = SpanFrom(Start);
+				Out = MoveTemp(Detached);
+				return EStmtResult::Parsed;
+			}
+
+			/** At a `[` in code: `[ Key = ...`, `[ Key;` and `[ Key,` can only be metadata; `[ Key ]` is an index like any other. */
+			bool LooksLikeMetadataAtBracket() const
+			{
+				const FDabToken& Key = Peek(1);
+				if (!Key.Is(EDabTokenKind::Identifier) && !Key.Is(EDabTokenKind::String))
+				{
+					return false;
+				}
+				const FDabToken& After = Peek(2);
+				return After.Is(EDabTokenKind::Assign) || After.Is(EDabTokenKind::Semicolon) || After.Is(EDabTokenKind::Comma);
 			}
 
 			// ------------------------------------------------------------------------------------
@@ -2047,7 +2944,10 @@ namespace UE::DreamAnim::Lang
 				return MoveTemp(Node);
 			}
 
-			/** `Primary { . Ident | ( Args ) }`. A `[` is never postfix: after a value it opens metadata. */
+			/**
+			 * `Primary { . Ident | ( Args ) | [ Expr ] }`. A `[` is postfix only inside code; anywhere else, after a
+			 * value, it opens metadata.
+			 */
 			FDabExprPtr ParsePostfix()
 			{
 				const int32 Start = Index;
@@ -2092,6 +2992,39 @@ namespace UE::DreamAnim::Lang
 						Call->Span = SpanFrom(Start);
 						Expr = MoveTemp(Call);
 					}
+					else if (CodeDepth > 0 && Check(EDabTokenKind::LeftBracket))
+					{
+						if (LooksLikeMetadataAtBracket())
+						{
+							// Code statements take no metadata. Reported once, the bracket skipped, and the statement goes on.
+							Sink.Error(TEXT("DAB2015"), Current().Span,
+								TEXT("A code statement takes no metadata; a '[' after an expression is an index here."),
+								TEXT("Put the metadata on the Event or Function, or on the variable's declaration."));
+							SkipBracketGroup();
+							continue;
+						}
+
+						const FDabToken& Open = Advance();
+						FBracketScope Scope(*this, Open, TEXT("["), TEXT("]"));
+						TUniquePtr<FDabIndexExpr> Node = MakeUnique<FDabIndexExpr>();
+						Node->Object = MoveTemp(Expr);
+						Node->Index = ParseExpression();
+						if (!Node->Index)
+						{
+							return nullptr;
+						}
+						if (!Check(EDabTokenKind::RightBracket))
+						{
+							if (ShouldReportAtCurrent())
+							{
+								Sink.Error(TEXT("DAB2001"), Current().Span, Expected(TEXT("']' after the index")));
+							}
+							return nullptr;
+						}
+						Advance(); // ]
+						Node->Span = SpanFrom(Start);
+						Expr = MoveTemp(Node);
+					}
 					else
 					{
 						break;
@@ -2126,7 +3059,8 @@ namespace UE::DreamAnim::Lang
 				}
 				case EDabTokenKind::Identifier:
 				{
-					if (Token.IsIdentifier(TEXT("true")) || Token.IsIdentifier(TEXT("false")))
+					// In backticks `true` is a name like any other.
+					if (!Token.bQuoted && (Token.IsIdentifier(TEXT("true")) || Token.IsIdentifier(TEXT("false"))))
 					{
 						TUniquePtr<FDabLiteralExpr> Literal = MakeUnique<FDabLiteralExpr>();
 						Literal->LiteralKind = EDabLiteralKind::Bool;
@@ -2249,6 +3183,19 @@ namespace UE::DreamAnim::Lang
 				}
 			}
 
+			void WalkCodeBlock(FDabFile& File, const FDabCodeBlock& Block)
+			{
+				TakeInnerTrivia(File, &Block, Block.Span.Offset);
+				for (const FDabStmtPtr& Statement : Block.Statements)
+				{
+					if (Statement)
+					{
+						TakeAnchorTrivia(File, Statement.Get());
+						WalkStmt(File, *Statement);
+					}
+				}
+			}
+
 			void WalkMeta(FDabFile& File, const FDabMeta* Meta)
 			{
 				if (!Meta)
@@ -2293,12 +3240,74 @@ namespace UE::DreamAnim::Lang
 					{
 						WalkExpr(File, Param->Default.Get());
 					}
+					for (const TUniquePtr<FDabParam>& Output : Named.Outputs)
+					{
+						WalkExpr(File, Output->Default.Get());
+					}
 					WalkMeta(File, Named.Meta.Get());
 					if (Named.Body)
 					{
 						WalkBlock(File, *Named.Body);
 					}
+					if (Named.Code)
+					{
+						WalkCodeBlock(File, *Named.Code);
+					}
 					WalkExpr(File, Named.Value.Get());
+					break;
+				}
+				case EDabNodeKind::LetStmt:
+					WalkExpr(File, static_cast<const FDabLetStmt&>(Statement).Value.Get());
+					break;
+				case EDabNodeKind::SetStmt:
+				{
+					const FDabSetStmt& Set = static_cast<const FDabSetStmt&>(Statement);
+					WalkExpr(File, Set.Target.Get());
+					WalkExpr(File, Set.Value.Get());
+					break;
+				}
+				case EDabNodeKind::ExprStmt:
+					WalkExpr(File, static_cast<const FDabExprStmt&>(Statement).Expr.Get());
+					break;
+				case EDabNodeKind::IfStmt:
+				{
+					// An `else if` is the chain's own node, not a child of the block: it has no trivia slot of its own.
+					const FDabIfStmt& If = static_cast<const FDabIfStmt&>(Statement);
+					WalkExpr(File, If.Condition.Get());
+					if (If.Then)
+					{
+						WalkCodeBlock(File, *If.Then);
+					}
+					if (If.ElseIf)
+					{
+						WalkStmt(File, *If.ElseIf);
+					}
+					if (If.Else)
+					{
+						WalkCodeBlock(File, *If.Else);
+					}
+					break;
+				}
+				case EDabNodeKind::ForStmt:
+				{
+					const FDabForStmt& For = static_cast<const FDabForStmt&>(Statement);
+					WalkExpr(File, For.Iterable.Get());
+					if (For.Body)
+					{
+						WalkCodeBlock(File, *For.Body);
+					}
+					break;
+				}
+				case EDabNodeKind::ReturnStmt:
+					WalkExpr(File, static_cast<const FDabReturnStmt&>(Statement).Value.Get());
+					break;
+				case EDabNodeKind::DetachedStmt:
+				{
+					const FDabDetachedStmt& Detached = static_cast<const FDabDetachedStmt&>(Statement);
+					if (Detached.Body)
+					{
+						WalkCodeBlock(File, *Detached.Body);
+					}
 					break;
 				}
 				default:
@@ -2386,6 +3395,13 @@ namespace UE::DreamAnim::Lang
 				case EDabNodeKind::ParenExpr:
 					WalkExpr(File, static_cast<const FDabParenExpr*>(Expr)->Inner.Get());
 					break;
+				case EDabNodeKind::IndexExpr:
+				{
+					const FDabIndexExpr* IndexExpr = static_cast<const FDabIndexExpr*>(Expr);
+					WalkExpr(File, IndexExpr->Object.Get());
+					WalkExpr(File, IndexExpr->Index.Get());
+					break;
+				}
 				default:
 					break;
 				}
@@ -2402,6 +3418,12 @@ namespace UE::DreamAnim::Lang
 			int32 Index = 0;
 
 			bool bKeepTrivia = false;
+			/** The document being parsed is a ControlRig: more block words, generic types and code blocks. */
+			bool bControlRig = false;
+			/** Above zero while code is being parsed: a `[` after an expression is an index. */
+			int32 CodeDepth = 0;
+			/** How deep type arguments may nest (`Array<Array<double>>` is two). */
+			static constexpr int32 MaxTypeDepth = 16;
 			/** Set once the end of the file has been reported (or another diagnostic already explains it). */
 			bool bEndReported = false;
 			TArray<FOpenBracket> OpenBrackets;

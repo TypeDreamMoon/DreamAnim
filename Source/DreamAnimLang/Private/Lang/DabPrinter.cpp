@@ -20,6 +20,11 @@
 //     statement that the padding pushes onto several lines leaves the run and the runs are laid out
 //     again, so a statement is either aligned on one line or printed on its own terms.
 //
+//   * Code blocks (.dcr) always break: `{` on its own line, one statement per line. Inside them a name
+//     that is a code word (`in`, `return`, ...) is written in backticks, as is any name that is not a
+//     plain identifier anywhere; a run of single-line `let` statements or of single-line assignments
+//     lines its `=` up like a run of assignments in a block.
+//
 // Text is built with `\n` and converted to FDabPrintOptions::LineEnd at the very end, so the width
 // arithmetic can read a column off the last `\n`. The printer is total: a null child (what a broken
 // parse leaves) prints as nothing rather than crashing.
@@ -63,11 +68,38 @@ namespace UE::DreamAnim::Lang
 			return FString(TEXT("\"")) + EscapeString(Value) + TEXT("\"");
 		}
 
-		/** An assignment key, argument name or metadata key: quoted when it was written as a string. */
-		static FString GetKeyText(const FString& Name, bool bIsString)
+		/** An assignment key, argument name or metadata key: a string when it was written as one, else a name. */
+		static FString GetKeyText(const FString& Name, bool bIsString, bool bInCode = false)
 		{
-			return bIsString ? QuoteString(Name) : Name;
+			return bIsString ? QuoteString(Name) : QuoteDabName(Name, bInCode);
 		}
+
+		/**
+		 * A declared type as written. A generic type (`Array<RigElementKey>`) already carries the backticks of
+		 * its quoted parts; a single name is quoted here when it is not a plain identifier.
+		 */
+		static FString GetTypeText(const FString& TypeName)
+		{
+			int32 AngleIndex = INDEX_NONE;
+			if (TypeName.FindChar(TEXT('<'), AngleIndex))
+			{
+				return TypeName;
+			}
+			return QuoteDabName(TypeName, false);
+		}
+
+		/** Sets a flag for the length of a scope and puts the old value back. */
+		struct FScopedFlag
+		{
+			bool& Flag;
+			const bool bSaved;
+
+			FScopedFlag(bool& InFlag, bool bValue) : Flag(InFlag), bSaved(InFlag) { Flag = bValue; }
+			~FScopedFlag() { Flag = bSaved; }
+
+			FScopedFlag(const FScopedFlag&) = delete;
+			FScopedFlag& operator=(const FScopedFlag&) = delete;
+		};
 
 		static FString MakeSpaces(int32 Count)
 		{
@@ -149,7 +181,26 @@ namespace UE::DreamAnim::Lang
 
 		static bool IsAlignableKind(EDabNodeKind Kind)
 		{
-			return Kind == EDabNodeKind::AssignStmt || Kind == EDabNodeKind::DeclStmt || Kind == EDabNodeKind::TransitionStmt;
+			return Kind == EDabNodeKind::AssignStmt || Kind == EDabNodeKind::DeclStmt || Kind == EDabNodeKind::TransitionStmt
+				|| Kind == EDabNodeKind::LetStmt || Kind == EDabNodeKind::SetStmt;
+		}
+
+		/** The statements that only exist inside code blocks. */
+		static bool IsCodeStatementKind(EDabNodeKind Kind)
+		{
+			switch (Kind)
+			{
+			case EDabNodeKind::LetStmt:
+			case EDabNodeKind::SetStmt:
+			case EDabNodeKind::ExprStmt:
+			case EDabNodeKind::IfStmt:
+			case EDabNodeKind::ForStmt:
+			case EDabNodeKind::ReturnStmt:
+			case EDabNodeKind::DetachedStmt:
+				return true;
+			default:
+				return false;
+			}
 		}
 
 		// ------------------------------------------------------------------------------------------
@@ -237,6 +288,7 @@ namespace UE::DreamAnim::Lang
 				: Options(InOptions)
 				, TriviaFile(InTriviaFile)
 				, IndentWidth(FMath::Max(InOptions.IndentWidth, 0))
+				, bInCode(InOptions.bInCode)
 			{
 			}
 
@@ -340,6 +392,12 @@ namespace UE::DreamAnim::Lang
 			/** A bracketed node that spans lines in Options.KeepBrokenIn. */
 			bool WasBroken(const FDabNode& Node) const;
 
+			// -- names
+
+			/** A name as written here: in backticks when it is not a plain identifier or, inside code, is a code word. */
+			FString NameText(const FString& Name) const { return QuoteDabName(Name, bInCode); }
+			FString KeyText(const FString& Name, bool bIsString) const { return GetKeyText(Name, bIsString, bInCode); }
+
 			// -- one-line forms
 
 			FString Flat(const FDabExpr& Expr);
@@ -353,6 +411,8 @@ namespace UE::DreamAnim::Lang
 			/** ` [ ... ]` with its leading space, or nothing. */
 			FString MetaSuffix(const FDabMeta* Meta) { return Meta ? FString(TEXT(" ")) + FlatMeta(*Meta) : FString(); }
 			FString NamedBlockHead(const FDabNamedBlockStmt& NamedBlock);
+			/** `Type Name = Default` for each parameter or output (`Name = Default` for a template's). */
+			TArray<FString> GetParamTexts(const TArray<TUniquePtr<FDabParam>>& Params);
 
 			// -- broken forms
 
@@ -362,6 +422,12 @@ namespace UE::DreamAnim::Lang
 			FString FormatBrokenList(const FDabListExpr& List, int32 Level);
 			FString FormatBrokenStack(const FDabStackExpr& Stack, int32 Level);
 			FString FormatBrokenBlock(const FDabBlockExpr& Block, int32 Level);
+			/** A code block: `{`, one statement per line one level deeper, `}` at Level. Its first line carries no indent. */
+			FString FormatCodeBlock(const FDabCodeBlock& Block, int32 Level);
+			/** `if (...)` and its block, then the `else if` / `else` that follow; bAfterElse prints `else if (...)`. */
+			FString FormatIf(const FDabIfStmt& If, int32 Level, bool bAfterElse);
+			/** `let Name`, `Type Name` or `local Type Name`: what stands before the `=` of a let. */
+			FString GetLetHead(const FDabLetStmt& Let) const;
 			/** A block of one plain statement with no comments: it may print on one line (`State Stop { Pose = StopStates; }`). */
 			bool IsOneLineBlock(const FDabBlockExpr& Block);
 			/** The value of an assignment or of `Word Name = Value;`: a block or stack there is always broken. */
@@ -381,6 +447,8 @@ namespace UE::DreamAnim::Lang
 			/** Where trivia comes from; null when printing without it. */
 			const FDabFile* TriviaFile = nullptr;
 			int32 IndentWidth = 4;
+			/** Printing inside a code block: a code word used as a name goes in backticks. */
+			bool bInCode = false;
 			TMap<const FDabNode*, bool> BreakCache;
 			TMap<const FDabExpr*, FString> FlatCache;
 		};
@@ -412,6 +480,12 @@ namespace UE::DreamAnim::Lang
 			}
 
 			bool bBreak = Node.Is<FDabRegionStmt>() || HasInnerComments(&Node) || WasBroken(Node);
+			if (!bBreak)
+			{
+				// Code never fits on a line, so a block holding a named block with code breaks too.
+				const FDabNamedBlockStmt* NamedBlock = Node.As<FDabNamedBlockStmt>();
+				bBreak = NamedBlock && NamedBlock->Code.IsValid();
+			}
 			if (!bBreak)
 			{
 				ForEachChild(Node, [this, &bBreak](const FDabNode& Child)
@@ -459,7 +533,7 @@ namespace UE::DreamAnim::Lang
 				return FlatOrEmpty(Argument.Value.Get());
 			}
 			const TCHAR* Separator = bHeaderStyle ? TEXT("=") : TEXT(" = ");
-			return GetKeyText(Argument.Name, Argument.bNameIsString) + Separator + FlatOrEmpty(Argument.Value.Get());
+			return KeyText(Argument.Name, Argument.bNameIsString) + Separator + FlatOrEmpty(Argument.Value.Get());
 		}
 
 		FString FDabLayoutPrinter::FlatArguments(const TArray<FDabArgumentPtr>& Arguments, bool bHeaderStyle)
@@ -486,7 +560,7 @@ namespace UE::DreamAnim::Lang
 				{
 					continue;
 				}
-				FString Part = GetKeyText(Entry->Key, Entry->bKeyIsString);
+				FString Part = KeyText(Entry->Key, Entry->bKeyIsString);
 				if (Entry->Value)
 				{
 					Part += TEXT(" = ");
@@ -501,29 +575,58 @@ namespace UE::DreamAnim::Lang
 			return FString(TEXT("[ ")) + FString::Join(Parts, TEXT("; ")) + TEXT(" ]");
 		}
 
+		TArray<FString> FDabLayoutPrinter::GetParamTexts(const TArray<TUniquePtr<FDabParam>>& Params)
+		{
+			TArray<FString> Parts;
+			Parts.Reserve(Params.Num());
+			for (const TUniquePtr<FDabParam>& Param : Params)
+			{
+				if (!Param)
+				{
+					continue;
+				}
+				FString Part;
+				if (!Param->TypeName.IsEmpty())
+				{
+					Part = GetTypeText(Param->TypeName) + TEXT(" ");
+				}
+				Part += NameText(Param->Name);
+				if (Param->Default)
+				{
+					Part += TEXT(" = ");
+					Part += Flat(*Param->Default);
+				}
+				Parts.Add(MoveTemp(Part));
+			}
+			return Parts;
+		}
+
 		FString FDabLayoutPrinter::NamedBlockHead(const FDabNamedBlockStmt& NamedBlock)
 		{
-			FString Head = NamedBlock.Word + TEXT(" ") + NamedBlock.Name;
-			if (NamedBlock.bHasParams)
+			// A block's name is never a code word; a Detached block has none.
+			FString Head = NamedBlock.Word;
+			if (!NamedBlock.Name.IsEmpty())
 			{
-				TArray<FString> Parts;
-				for (const TUniquePtr<FDabParam>& Param : NamedBlock.Params)
+				Head += TEXT(" ");
+				Head += QuoteDabName(NamedBlock.Name, false);
+			}
+
+			{
+				// A function's parameters and outputs are read inside its code, so they are written the way code writes names.
+				const bool bIsFunction = NamedBlock.Word.Equals(TEXT("Function"), ESearchCase::CaseSensitive);
+				const FScopedFlag ParamScope(bInCode, bInCode || bIsFunction);
+				if (NamedBlock.bHasParams)
 				{
-					if (!Param)
-					{
-						continue;
-					}
-					FString Part = Param->Name;
-					if (Param->Default)
-					{
-						Part += TEXT(" = ");
-						Part += Flat(*Param->Default);
-					}
-					Parts.Add(MoveTemp(Part));
+					Head += TEXT("(");
+					Head += FString::Join(GetParamTexts(NamedBlock.Params), TEXT(", "));
+					Head += TEXT(")");
 				}
-				Head += TEXT("(");
-				Head += FString::Join(Parts, TEXT(", "));
-				Head += TEXT(")");
+				if (NamedBlock.bHasOutputs)
+				{
+					Head += TEXT(" -> (");
+					Head += FString::Join(GetParamTexts(NamedBlock.Outputs), TEXT(", "));
+					Head += TEXT(")");
+				}
 			}
 			Head += MetaSuffix(NamedBlock.Meta.Get());
 			return Head;
@@ -537,7 +640,7 @@ namespace UE::DreamAnim::Lang
 			{
 				const FDabAssignStmt& Assign = static_cast<const FDabAssignStmt&>(Stmt);
 				const bool bBlockValue = Assign.Value && Assign.Value->Is<FDabBlockExpr>();
-				FString Text = GetKeyText(Assign.Name, Assign.bNameIsString) + TEXT(" = ") + FlatOrEmpty(Assign.Value.Get());
+				FString Text = KeyText(Assign.Name, Assign.bNameIsString) + TEXT(" = ") + FlatOrEmpty(Assign.Value.Get());
 				Text += MetaSuffix(Assign.Meta.Get());
 				if (!bBlockValue)
 				{
@@ -548,7 +651,7 @@ namespace UE::DreamAnim::Lang
 			case EDabNodeKind::DeclStmt:
 			{
 				const FDabDeclStmt& Decl = static_cast<const FDabDeclStmt&>(Stmt);
-				FString Text = Decl.TypeName + TEXT(" ") + Decl.Name;
+				FString Text = GetTypeText(Decl.TypeName) + TEXT(" ") + NameText(Decl.Name);
 				if (Decl.Value)
 				{
 					Text += TEXT(" = ");
@@ -561,7 +664,7 @@ namespace UE::DreamAnim::Lang
 			case EDabNodeKind::TransitionStmt:
 			{
 				const FDabTransitionStmt& Transition = static_cast<const FDabTransitionStmt&>(Stmt);
-				FString Text = Transition.From + TEXT(" -> ") + Transition.To + TEXT(" : ") + FlatOrEmpty(Transition.Condition.Get());
+				FString Text = NameText(Transition.From) + TEXT(" -> ") + NameText(Transition.To) + TEXT(" : ") + FlatOrEmpty(Transition.Condition.Get());
 				Text += MetaSuffix(Transition.Meta.Get());
 				Text += TEXT(";");
 				return Text;
@@ -602,11 +705,25 @@ namespace UE::DreamAnim::Lang
 			case EDabNodeKind::LiteralExpr:
 				return GetLiteralText(static_cast<const FDabLiteralExpr&>(Expr));
 			case EDabNodeKind::NameExpr:
-				return static_cast<const FDabNameExpr&>(Expr).Name;
+			{
+				const FString& Name = static_cast<const FDabNameExpr&>(Expr).Name;
+				// A name spelled `true` or `false` can only have been written in backticks; without them it would read as a bool.
+				if (Name.Equals(TEXT("true"), ESearchCase::CaseSensitive) || Name.Equals(TEXT("false"), ESearchCase::CaseSensitive))
+				{
+					return FString(TEXT("`")) + Name + TEXT("`");
+				}
+				return NameText(Name);
+			}
 			case EDabNodeKind::MemberExpr:
 			{
 				const FDabMemberExpr& Member = static_cast<const FDabMemberExpr&>(Expr);
-				return FlatOperand(Member.Object.Get(), NeedsPostfixParens(Member.Object.Get())) + TEXT(".") + Member.Member;
+				return FlatOperand(Member.Object.Get(), NeedsPostfixParens(Member.Object.Get())) + TEXT(".") + NameText(Member.Member);
+			}
+			case EDabNodeKind::IndexExpr:
+			{
+				const FDabIndexExpr& Index = static_cast<const FDabIndexExpr&>(Expr);
+				return FlatOperand(Index.Object.Get(), NeedsPostfixParens(Index.Object.Get()))
+					+ TEXT("[") + FlatOrEmpty(Index.Index.Get()) + TEXT("]");
 			}
 			case EDabNodeKind::CallExpr:
 			{
@@ -752,10 +869,21 @@ namespace UE::DreamAnim::Lang
 			case EDabNodeKind::MemberExpr:
 			{
 				const FDabMemberExpr& Member = static_cast<const FDabMemberExpr&>(Expr);
+				const FString MemberText = NameText(Member.Member);
 				FString Text = FormatOperand(Member.Object.Get(), NeedsPostfixParens(Member.Object.Get()), Level, Column,
-					SuffixWidth + 1 + Member.Member.Len());
+					SuffixWidth + 1 + MemberText.Len());
 				Text += TEXT(".");
-				Text += Member.Member;
+				Text += MemberText;
+				return Text;
+			}
+			case EDabNodeKind::IndexExpr:
+			{
+				// The index stays on the line of the bracket; it is a short expression in practice.
+				const FDabIndexExpr& Index = static_cast<const FDabIndexExpr&>(Expr);
+				const FString IndexText = FString(TEXT("[")) + FlatOrEmpty(Index.Index.Get()) + TEXT("]");
+				FString Text = FormatOperand(Index.Object.Get(), NeedsPostfixParens(Index.Object.Get()), Level, Column,
+					SuffixWidth + IndexText.Len());
+				Text += IndexText;
 				return Text;
 			}
 			case EDabNodeKind::UnaryExpr:
@@ -827,7 +955,7 @@ namespace UE::DreamAnim::Lang
 					LastIndex = Index;
 					if (Argument->IsNamed())
 					{
-						NameWidth = FMath::Max(NameWidth, GetKeyText(Argument->Name, Argument->bNameIsString).Len());
+						NameWidth = FMath::Max(NameWidth, KeyText(Argument->Name, Argument->bNameIsString).Len());
 					}
 				}
 			}
@@ -852,7 +980,7 @@ namespace UE::DreamAnim::Lang
 				FString Line = MakeIndent(ItemLevel);
 				if (Argument->IsNamed())
 				{
-					const FString Name = GetKeyText(Argument->Name, Argument->bNameIsString);
+					const FString Name = KeyText(Argument->Name, Argument->bNameIsString);
 					Line += bHeaderStyle ? Name + TEXT("=") : PadRight(Name, NameWidth) + TEXT(" = ");
 				}
 				const bool bLast = Index == LastIndex;
@@ -979,6 +1107,63 @@ namespace UE::DreamAnim::Lang
 			return Text;
 		}
 
+		FString FDabLayoutPrinter::FormatCodeBlock(const FDabCodeBlock& Block, int32 Level)
+		{
+			const FScopedFlag CodeScope(bInCode, true);
+			FString Text = TEXT("{\n");
+			AppendStatements(Text, Block.Statements, Level + 1);
+			AppendInnerComments(Text, Level + 1, &Block);
+			Text += MakeIndent(Level);
+			Text += TEXT("}");
+			return Text;
+		}
+
+		FString FDabLayoutPrinter::FormatIf(const FDabIfStmt& If, int32 Level, bool bAfterElse)
+		{
+			FString Text = bAfterElse ? FString(TEXT("else if (")) : FString(TEXT("if ("));
+			if (If.Condition)
+			{
+				Text += FormatExpr(*If.Condition, Level, GetIndentColumn(Level) + Text.Len(), 1);
+			}
+			Text += TEXT(")");
+			if (If.Then)
+			{
+				Text += TEXT("\n");
+				Text += MakeIndent(Level);
+				Text += FormatCodeBlock(*If.Then, Level);
+			}
+			if (If.ElseIf)
+			{
+				Text += TEXT("\n");
+				Text += MakeIndent(Level);
+				Text += FormatIf(*If.ElseIf, Level, true);
+			}
+			else if (If.Else)
+			{
+				Text += TEXT("\n");
+				Text += MakeIndent(Level);
+				Text += TEXT("else\n");
+				Text += MakeIndent(Level);
+				Text += FormatCodeBlock(*If.Else, Level);
+			}
+			return Text;
+		}
+
+		FString FDabLayoutPrinter::GetLetHead(const FDabLetStmt& Let) const
+		{
+			const FString Name = NameText(Let.Name);
+			switch (Let.LetKind)
+			{
+			case EDabLetKind::Typed:
+				return GetTypeText(Let.TypeName) + TEXT(" ") + Name;
+			case EDabLetKind::Local:
+				return FString(TEXT("local ")) + GetTypeText(Let.TypeName) + TEXT(" ") + Name;
+			case EDabLetKind::Let:
+			default:
+				return FString(TEXT("let ")) + Name;
+			}
+		}
+
 		FString FDabLayoutPrinter::FormatStatementValue(const FDabExpr& Value, int32 Level, int32 Column, int32 SuffixWidth)
 		{
 			if (const FDabBlockExpr* Block = Value.As<FDabBlockExpr>())
@@ -1016,6 +1201,8 @@ namespace UE::DreamAnim::Lang
 		FString FDabLayoutPrinter::FormatStatement(const FDabStmt& Stmt, int32 Level, const FDabAlign& Align)
 		{
 			const int32 BaseColumn = GetIndentColumn(Level);
+			// A statement of code is printed as code even when it is asked for on its own.
+			const FScopedFlag CodeScope(bInCode, bInCode || IsCodeStatementKind(Stmt.Kind));
 
 			switch (Stmt.Kind)
 			{
@@ -1027,7 +1214,7 @@ namespace UE::DreamAnim::Lang
 				const bool bBlockValue = Assign.Value && Assign.Value->Is<FDabBlockExpr>();
 				const int32 TerminatorWidth = bBlockValue ? 0 : 1;
 
-				FString Text = PadRight(GetKeyText(Assign.Name, Assign.bNameIsString), Align.KeyWidth) + TEXT(" = ");
+				FString Text = PadRight(KeyText(Assign.Name, Assign.bNameIsString), Align.KeyWidth) + TEXT(" = ");
 				if (Assign.Value)
 				{
 					const int32 ValueColumn = BaseColumn + Text.Len();
@@ -1045,17 +1232,17 @@ namespace UE::DreamAnim::Lang
 				const FDabDeclStmt& Decl = static_cast<const FDabDeclStmt&>(Stmt);
 				const FString MetaText = MetaSuffix(Decl.Meta.Get());
 
-				FString Text = PadRight(Decl.TypeName, Align.TypeWidth) + TEXT(" ");
+				FString Text = PadRight(GetTypeText(Decl.TypeName), Align.TypeWidth) + TEXT(" ");
 				if (Decl.Value)
 				{
-					Text += PadRight(Decl.Name, Align.NameWidth);
+					Text += PadRight(NameText(Decl.Name), Align.NameWidth);
 					Text += TEXT(" = ");
 					const int32 ValueColumn = BaseColumn + Text.Len();
 					Text += FormatExpr(*Decl.Value, Level, ValueColumn, MetaText.Len() + 1);
 				}
 				else
 				{
-					Text += Decl.Name;
+					Text += NameText(Decl.Name);
 				}
 				Text += MetaText;
 				Text += TEXT(";");
@@ -1066,7 +1253,7 @@ namespace UE::DreamAnim::Lang
 				const FDabTransitionStmt& Transition = static_cast<const FDabTransitionStmt&>(Stmt);
 				const FString MetaText = MetaSuffix(Transition.Meta.Get());
 
-				FString Text = PadRight(Transition.From, Align.FromWidth) + TEXT(" -> ") + PadRight(Transition.To, Align.ToWidth) + TEXT(" : ");
+				FString Text = PadRight(NameText(Transition.From), Align.FromWidth) + TEXT(" -> ") + PadRight(NameText(Transition.To), Align.ToWidth) + TEXT(" : ");
 				if (Transition.Condition)
 				{
 					// The padding that lines the `[` up follows the condition on its line, so it counts toward its fit.
@@ -1100,8 +1287,18 @@ namespace UE::DreamAnim::Lang
 					Text += MakeIndent(Level);
 					Text += FormatBrokenBlock(*NamedBlock.Body, Level);
 				}
+				else if (NamedBlock.Code)
+				{
+					// Allman, like every block: the `{` of a body of code is on its own line at the head's indent.
+					Text += TEXT("\n");
+					Text += MakeIndent(Level);
+					Text += FormatCodeBlock(*NamedBlock.Code, Level);
+				}
 				else if (NamedBlock.Value)
 				{
+					// The value of a function is code as well: its names are written the way code writes them.
+					const bool bIsFunction = NamedBlock.Word.Equals(TEXT("Function"), ESearchCase::CaseSensitive);
+					const FScopedFlag ValueScope(bInCode, bInCode || bIsFunction);
 					Text += TEXT(" = ");
 					const int32 ValueColumn = BaseColumn + Text.Len();
 					Text += FormatStatementValue(*NamedBlock.Value, Level, ValueColumn, 1);
@@ -1115,6 +1312,91 @@ namespace UE::DreamAnim::Lang
 			}
 			case EDabNodeKind::RegionStmt:
 				return GetRegionText(static_cast<const FDabRegionStmt&>(Stmt));
+			case EDabNodeKind::LetStmt:
+			{
+				const FDabLetStmt& Let = static_cast<const FDabLetStmt&>(Stmt);
+				FString Text = GetLetHead(Let);
+				if (Let.Value)
+				{
+					Text = PadRight(Text, Align.KeyWidth) + TEXT(" = ");
+					const int32 ValueColumn = BaseColumn + Text.Len();
+					Text += FormatExpr(*Let.Value, Level, ValueColumn, 1);
+				}
+				Text += TEXT(";");
+				return Text;
+			}
+			case EDabNodeKind::SetStmt:
+			{
+				const FDabSetStmt& Set = static_cast<const FDabSetStmt&>(Stmt);
+				FString Text = PadRight(FlatOrEmpty(Set.Target.Get()), Align.KeyWidth) + TEXT(" = ");
+				if (Set.Value)
+				{
+					const int32 ValueColumn = BaseColumn + Text.Len();
+					Text += FormatExpr(*Set.Value, Level, ValueColumn, 1);
+				}
+				Text += TEXT(";");
+				return Text;
+			}
+			case EDabNodeKind::ExprStmt:
+			{
+				const FDabExprStmt& ExprStmt = static_cast<const FDabExprStmt&>(Stmt);
+				FString Text;
+				if (ExprStmt.Expr)
+				{
+					Text += FormatExpr(*ExprStmt.Expr, Level, BaseColumn, 1);
+				}
+				Text += TEXT(";");
+				return Text;
+			}
+			case EDabNodeKind::IfStmt:
+				return FormatIf(static_cast<const FDabIfStmt&>(Stmt), Level, false);
+			case EDabNodeKind::ForStmt:
+			{
+				const FDabForStmt& For = static_cast<const FDabForStmt&>(Stmt);
+				TArray<FString> Names;
+				Names.Reserve(For.Names.Num());
+				for (const FString& Name : For.Names)
+				{
+					Names.Add(NameText(Name));
+				}
+				FString Text = FString(TEXT("for (")) + FString::Join(Names, TEXT(", ")) + TEXT(" in ");
+				if (For.Iterable)
+				{
+					Text += FormatExpr(*For.Iterable, Level, BaseColumn + Text.Len(), 1);
+				}
+				Text += TEXT(")");
+				if (For.Body)
+				{
+					Text += TEXT("\n");
+					Text += MakeIndent(Level);
+					Text += FormatCodeBlock(*For.Body, Level);
+				}
+				return Text;
+			}
+			case EDabNodeKind::ReturnStmt:
+			{
+				const FDabReturnStmt& Return = static_cast<const FDabReturnStmt&>(Stmt);
+				FString Text = TEXT("return");
+				if (Return.Value)
+				{
+					Text += TEXT(" ");
+					Text += FormatExpr(*Return.Value, Level, BaseColumn + Text.Len(), 1);
+				}
+				Text += TEXT(";");
+				return Text;
+			}
+			case EDabNodeKind::DetachedStmt:
+			{
+				const FDabDetachedStmt& Detached = static_cast<const FDabDetachedStmt&>(Stmt);
+				FString Text = TEXT("Detached");
+				if (Detached.Body)
+				{
+					Text += TEXT("\n");
+					Text += MakeIndent(Level);
+					Text += FormatCodeBlock(*Detached.Body, Level);
+				}
+				return Text;
+			}
 			default:
 				return FString();
 			}
@@ -1128,20 +1410,32 @@ namespace UE::DreamAnim::Lang
 				const FDabStmt* Stmt = Statements[Index].Get();
 				if (const FDabAssignStmt* Assign = Stmt->As<FDabAssignStmt>())
 				{
-					Align.KeyWidth = FMath::Max(Align.KeyWidth, GetKeyText(Assign->Name, Assign->bNameIsString).Len());
+					Align.KeyWidth = FMath::Max(Align.KeyWidth, KeyText(Assign->Name, Assign->bNameIsString).Len());
 				}
 				else if (const FDabDeclStmt* Decl = Stmt->As<FDabDeclStmt>())
 				{
-					Align.TypeWidth = FMath::Max(Align.TypeWidth, Decl->TypeName.Len());
+					Align.TypeWidth = FMath::Max(Align.TypeWidth, GetTypeText(Decl->TypeName).Len());
 					if (Decl->Value)
 					{
-						Align.NameWidth = FMath::Max(Align.NameWidth, Decl->Name.Len());
+						Align.NameWidth = FMath::Max(Align.NameWidth, NameText(Decl->Name).Len());
 					}
+				}
+				else if (const FDabLetStmt* Let = Stmt->As<FDabLetStmt>())
+				{
+					// A local without a value has no `=` to line up.
+					if (Let->Value)
+					{
+						Align.KeyWidth = FMath::Max(Align.KeyWidth, GetLetHead(*Let).Len());
+					}
+				}
+				else if (const FDabSetStmt* Set = Stmt->As<FDabSetStmt>())
+				{
+					Align.KeyWidth = FMath::Max(Align.KeyWidth, FlatOrEmpty(Set->Target.Get()).Len());
 				}
 				else if (const FDabTransitionStmt* Transition = Stmt->As<FDabTransitionStmt>())
 				{
-					Align.FromWidth = FMath::Max(Align.FromWidth, Transition->From.Len());
-					Align.ToWidth = FMath::Max(Align.ToWidth, Transition->To.Len());
+					Align.FromWidth = FMath::Max(Align.FromWidth, NameText(Transition->From).Len());
+					Align.ToWidth = FMath::Max(Align.ToWidth, NameText(Transition->To).Len());
 					// Only the lines that have a `[` decide where it goes.
 					if (Transition->Meta)
 					{
@@ -1323,6 +1617,27 @@ namespace UE::DreamAnim::Lang
 		// Tree dump
 		// ------------------------------------------------------------------------------------------
 
+		/** `Name`, or `Type Name` for a parameter that has a type. */
+		static FString GetParamName(const FDabParam& Param)
+		{
+			const FString Name = QuoteDabName(Param.Name);
+			return Param.TypeName.IsEmpty() ? Name : GetTypeText(Param.TypeName) + TEXT(" ") + Name;
+		}
+
+		static TArray<FString> GetParamNames(const TArray<TUniquePtr<FDabParam>>& Params)
+		{
+			TArray<FString> Names;
+			Names.Reserve(Params.Num());
+			for (const TUniquePtr<FDabParam>& Param : Params)
+			{
+				if (Param)
+				{
+					Names.Add(GetParamName(*Param));
+				}
+			}
+			return Names;
+		}
+
 		static FString DescribeNode(const FDabNode& Node)
 		{
 			switch (Node.Kind)
@@ -1338,9 +1653,11 @@ namespace UE::DreamAnim::Lang
 				}
 			}
 			case EDabNodeKind::NameExpr:
-				return FString(TEXT("Name ")) + static_cast<const FDabNameExpr&>(Node).Name;
+				return FString(TEXT("Name ")) + QuoteDabName(static_cast<const FDabNameExpr&>(Node).Name);
 			case EDabNodeKind::MemberExpr:
-				return FString(TEXT("Member ")) + static_cast<const FDabMemberExpr&>(Node).Member;
+				return FString(TEXT("Member ")) + QuoteDabName(static_cast<const FDabMemberExpr&>(Node).Member);
+			case EDabNodeKind::IndexExpr:       return TEXT("Index");
+			case EDabNodeKind::CodeBlock:       return TEXT("Code");
 			case EDabNodeKind::CallExpr:        return TEXT("Call");
 			case EDabNodeKind::ListExpr:        return TEXT("List");
 			case EDabNodeKind::TupleExpr:       return TEXT("Tuple");
@@ -1361,34 +1678,62 @@ namespace UE::DreamAnim::Lang
 			case EDabNodeKind::DeclStmt:
 			{
 				const FDabDeclStmt& Decl = static_cast<const FDabDeclStmt&>(Node);
-				return FString(TEXT("Decl ")) + Decl.TypeName + TEXT(" ") + Decl.Name;
+				return FString(TEXT("Decl ")) + GetTypeText(Decl.TypeName) + TEXT(" ") + QuoteDabName(Decl.Name);
 			}
 			case EDabNodeKind::TransitionStmt:
 			{
 				const FDabTransitionStmt& Transition = static_cast<const FDabTransitionStmt&>(Node);
-				return FString(TEXT("Transition ")) + Transition.From + TEXT(" -> ") + Transition.To;
+				return FString(TEXT("Transition ")) + QuoteDabName(Transition.From) + TEXT(" -> ") + QuoteDabName(Transition.To);
 			}
 			case EDabNodeKind::NamedBlockStmt:
 			{
 				const FDabNamedBlockStmt& NamedBlock = static_cast<const FDabNamedBlockStmt&>(Node);
-				FString Text = FString(TEXT("NamedBlock ")) + NamedBlock.Word + TEXT(" ") + NamedBlock.Name;
+				FString Text = FString(TEXT("NamedBlock ")) + NamedBlock.Word;
+				// A Detached block has no name.
+				if (!NamedBlock.Name.IsEmpty())
+				{
+					Text += TEXT(" ");
+					Text += QuoteDabName(NamedBlock.Name);
+				}
 				// `Template X()` and `Template X` are different trees, so an empty list still shows.
 				if (NamedBlock.bHasParams)
 				{
-					TArray<FString> Names;
-					for (const TUniquePtr<FDabParam>& Param : NamedBlock.Params)
-					{
-						if (Param)
-						{
-							Names.Add(Param->Name);
-						}
-					}
 					Text += TEXT(" (");
-					Text += FString::Join(Names, TEXT(", "));
+					Text += FString::Join(GetParamNames(NamedBlock.Params), TEXT(", "));
+					Text += TEXT(")");
+				}
+				if (NamedBlock.bHasOutputs)
+				{
+					Text += TEXT(" -> (");
+					Text += FString::Join(GetParamNames(NamedBlock.Outputs), TEXT(", "));
 					Text += TEXT(")");
 				}
 				return Text;
 			}
+			case EDabNodeKind::LetStmt:
+			{
+				const FDabLetStmt& Let = static_cast<const FDabLetStmt&>(Node);
+				switch (Let.LetKind)
+				{
+				case EDabLetKind::Typed: return FString(TEXT("Typed ")) + GetTypeText(Let.TypeName) + TEXT(" ") + QuoteDabName(Let.Name);
+				case EDabLetKind::Local: return FString(TEXT("Local ")) + GetTypeText(Let.TypeName) + TEXT(" ") + QuoteDabName(Let.Name);
+				default:                 return FString(TEXT("Let ")) + QuoteDabName(Let.Name);
+				}
+			}
+			case EDabNodeKind::SetStmt:         return TEXT("Set");
+			case EDabNodeKind::ExprStmt:        return TEXT("ExprStmt");
+			case EDabNodeKind::IfStmt:          return TEXT("If");
+			case EDabNodeKind::ForStmt:
+			{
+				TArray<FString> Names;
+				for (const FString& Name : static_cast<const FDabForStmt&>(Node).Names)
+				{
+					Names.Add(QuoteDabName(Name));
+				}
+				return FString(TEXT("For ")) + FString::Join(Names, TEXT(", "));
+			}
+			case EDabNodeKind::ReturnStmt:      return TEXT("Return");
+			case EDabNodeKind::DetachedStmt:    return TEXT("Detached");
 			case EDabNodeKind::RegionStmt:
 			{
 				const FDabRegionStmt& Region = static_cast<const FDabRegionStmt&>(Node);
@@ -1405,7 +1750,7 @@ namespace UE::DreamAnim::Lang
 				return FString(TEXT("MetaEntry ")) + GetKeyText(Entry.Key, Entry.bKeyIsString);
 			}
 			case EDabNodeKind::Param:
-				return FString(TEXT("Param ")) + static_cast<const FDabParam&>(Node).Name;
+				return FString(TEXT("Param ")) + GetParamName(static_cast<const FDabParam&>(Node));
 			case EDabNodeKind::Include:
 				return FString(TEXT("Include ")) + QuoteString(static_cast<const FDabInclude&>(Node).Path);
 			case EDabNodeKind::Document:
@@ -1424,6 +1769,31 @@ namespace UE::DreamAnim::Lang
 				DumpNode(Child, Depth + 1, Out);
 			});
 		}
+	}
+
+	bool IsDabCodeWord(const FString& Name)
+	{
+		static const TCHAR* const CodeWords[] =
+		{
+			TEXT("let"), TEXT("local"), TEXT("if"), TEXT("else"), TEXT("for"), TEXT("in"), TEXT("return"), TEXT("Detached"),
+		};
+		for (const TCHAR* Word : CodeWords)
+		{
+			if (Name.Equals(Word, ESearchCase::CaseSensitive))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	FString QuoteDabName(const FString& Name, bool bInCode)
+	{
+		if (Name.IsEmpty() || (IsDabPlainIdentifier(Name) && !(bInCode && IsDabCodeWord(Name))))
+		{
+			return Name;
+		}
+		return FString(TEXT("`")) + Name + TEXT("`");
 	}
 
 	FString PrintDab(const FDabFile& File, const FDabPrintOptions& Options)

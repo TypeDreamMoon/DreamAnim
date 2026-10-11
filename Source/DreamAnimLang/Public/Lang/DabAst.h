@@ -29,6 +29,7 @@ namespace UE::DreamAnim::Lang
 		BinaryExpr,
 		ConditionalExpr,
 		ParenExpr,
+		IndexExpr,
 
 		// statements
 		AssignStmt,
@@ -36,12 +37,21 @@ namespace UE::DreamAnim::Lang
 		TransitionStmt,
 		NamedBlockStmt,
 		RegionStmt,
+		// statements of code blocks (.dcr)
+		LetStmt,
+		SetStmt,
+		ExprStmt,
+		IfStmt,
+		ForStmt,
+		ReturnStmt,
+		DetachedStmt,
 
 		// pieces
 		Argument,
 		MetaEntry,
 		Meta,
 		Param,
+		CodeBlock,
 
 		// file level
 		Include,
@@ -201,10 +211,10 @@ namespace UE::DreamAnim::Lang
 		Equal, NotEqual,
 		Less, LessEqual, Greater, GreaterEqual,
 		Add, Subtract,
-		Multiply, Divide,
+		Multiply, Divide, Modulo,
 	};
 	DREAMANIMLANG_API const TCHAR* GetDabBinaryOpSpelling(EDabBinaryOp Op);
-	/** Higher binds tighter: Or 1, And 2, equality 3, comparison 4, additive 5, multiplicative 6. */
+	/** Higher binds tighter: Or 1, And 2, equality 3, comparison 4, additive 5, multiplicative (and modulo) 6. */
 	DREAMANIMLANG_API int32 GetDabBinaryOpPrecedence(EDabBinaryOp Op);
 
 	struct FDabBinaryExpr final : FDabExpr
@@ -235,6 +245,16 @@ namespace UE::DreamAnim::Lang
 		FDabParenExpr() : FDabExpr(StaticKind) {}
 
 		FDabExprPtr Inner;
+	};
+
+	/** `Items[i]`. Only inside code blocks: elsewhere a `[` after an expression opens metadata. */
+	struct FDabIndexExpr final : FDabExpr
+	{
+		static constexpr EDabNodeKind StaticKind = EDabNodeKind::IndexExpr;
+		FDabIndexExpr() : FDabExpr(StaticKind) {}
+
+		FDabExprPtr Object;
+		FDabExprPtr Index;
 	};
 
 	// ------------------------------------------------------------------------------------------
@@ -320,21 +340,31 @@ namespace UE::DreamAnim::Lang
 		TUniquePtr<FDabMeta> Meta;
 	};
 
-	/** A template parameter: `Seq`, or `BackTime = 0`. */
+	/**
+	 * A template parameter (`Seq`, `BackTime = 0`), or a function parameter or output with its type
+	 * (`RigElementKey Bone`, `double Scale = 0`, `Array<RigElementKey> Controls`).
+	 */
 	struct FDabParam final : FDabNode
 	{
 		static constexpr EDabNodeKind StaticKind = EDabNodeKind::Param;
 		FDabParam() : FDabNode(StaticKind) {}
 
+		/** Empty for a template parameter. As written, `Array<RigElementKey>` included. */
+		FString TypeName;
+		FDabSpan TypeSpan;
 		FString Name;
 		FDabSpan NameSpan;
 		/** Null when the parameter has no default. */
 		FDabExprPtr Default;
 	};
 
+	struct FDabCodeBlock;
+
 	/**
 	 * `Word Name [(params)] [meta]` followed by a block body, `= Value;`, or just `;`.
-	 * Word is one of StateMachine, State, Layer, Template, Conduit, Alias.
+	 * Word is one of StateMachine, State, Layer, Template, Conduit, Alias; in a ControlRig document also
+	 * Event, Function and Detached (whose bodies are code, in Code), and the hierarchy's Bone, Null,
+	 * Control, Curve, Connector and Socket (whose bodies are blocks).
 	 *
 	 *   StateMachine StandingStates { ... }
 	 *   State Stop { Pose = StopStates; }
@@ -343,6 +373,11 @@ namespace UE::DreamAnim::Lang
 	 *   Template Frame(Seq, N) = SequenceEvaluator(Sequence = Seq, ExplicitFrame = N);
 	 *   Conduit EntryConduit = Main.PoseState.GroundedAmount >= 1;
 	 *   Alias StandingAlias = [ Crouching, StandingToCrouching ];
+	 *   Event Construction [ Graph = "ConstructionGraph" ] { ... code ... }
+	 *   Function FootTrace(RigElementKey Bone) -> (Vector Offset) { ... code ... }
+	 *   Function AxisToBool(RigControlAxis Axis) -> (bool X, bool Y) = (X = ..., Y = ...);
+	 *   Detached [ Graph = "RigVMModel" ] { ... code ... }      (no name)
+	 *   Control global_ctrl { ControlType = EulerTransform; Control root_ctrl { ... } }
 	 */
 	struct FDabNamedBlockStmt final : FDabStmt
 	{
@@ -353,17 +388,22 @@ namespace UE::DreamAnim::Lang
 		FDabSpan WordSpan;
 		FString Name;
 		FDabSpan NameSpan;
-		/** Only templates have parameters; bHasParams tells `Template X()` from `Template X`. */
+		/** Templates and functions have parameters; bHasParams tells `Template X()` from `Template X`. */
 		bool bHasParams = false;
 		TArray<TUniquePtr<FDabParam>> Params;
+		/** A function's `-> (Type Name, ...)`; bHasOutputs is false when no arrow was written. */
+		bool bHasOutputs = false;
+		TArray<TUniquePtr<FDabParam>> Outputs;
 		TUniquePtr<FDabMeta> Meta;
-		/** Set for the `{ ... }` form. */
+		/** Set for the `{ ... }` form of a word whose body is statements. */
 		TUniquePtr<FDabBlockExpr> Body;
-		/** Set for the `= Value;` form. Body and Value are never both set; neither is set for `Word Name [meta];`. */
+		/** Set for the `{ ... }` form of Event, Function and Detached, whose body is code. */
+		TUniquePtr<FDabCodeBlock> Code;
+		/** Set for the `= Value;` form. At most one of Body, Code and Value is set; none for `Word Name [meta];`. */
 		FDabExprPtr Value;
 	};
 
-	/** `#Region "Label"` or `#EndRegion`. */
+	/** `#Region "Label"` or `#EndRegion`. Allowed in blocks and in code blocks. */
 	struct FDabRegionStmt final : FDabStmt
 	{
 		static constexpr EDabNodeKind StaticKind = EDabNodeKind::RegionStmt;
@@ -372,6 +412,111 @@ namespace UE::DreamAnim::Lang
 		bool bEnd = false;
 		/** Empty for #EndRegion. */
 		FString Label;
+	};
+
+	// ------------------------------------------------------------------------------------------
+	// Code (.dcr): the bodies of events, functions, `if`, `for` and `Detached`. Statements run in order;
+	// expressions inside them are data. Inside code a `[` after an expression is an index, not metadata.
+	// ------------------------------------------------------------------------------------------
+
+	/** `{ statements }` holding code. Allowed statements: let, set, expression, if, for, return, Detached, #Region. */
+	struct FDabCodeBlock final : FDabNode
+	{
+		static constexpr EDabNodeKind StaticKind = EDabNodeKind::CodeBlock;
+		FDabCodeBlock() : FDabNode(StaticKind) {}
+
+		TArray<FDabStmtPtr> Statements;
+	};
+
+	enum class EDabLetKind : uint8
+	{
+		/** `let Name = Value;` */
+		Let,
+		/** `Type Name = Value;`: a let with its type written, for values whose type cannot be inferred. */
+		Typed,
+		/** `local Type Name [= Value];`: a local variable of the enclosing function. */
+		Local,
+	};
+
+	struct FDabLetStmt final : FDabStmt
+	{
+		static constexpr EDabNodeKind StaticKind = EDabNodeKind::LetStmt;
+		FDabLetStmt() : FDabStmt(StaticKind) {}
+
+		EDabLetKind LetKind = EDabLetKind::Let;
+		/** Empty for `let`. As written, `Array<double>` included. */
+		FString TypeName;
+		FDabSpan TypeSpan;
+		FString Name;
+		FDabSpan NameSpan;
+		/** Null only for a local written without a value. */
+		FDabExprPtr Value;
+	};
+
+	/** `Target = Value;` in code. Target is a name, a member of one (`V.X`, refused later) or an element (`Items[2]`). */
+	struct FDabSetStmt final : FDabStmt
+	{
+		static constexpr EDabNodeKind StaticKind = EDabNodeKind::SetStmt;
+		FDabSetStmt() : FDabStmt(StaticKind) {}
+
+		FDabExprPtr Target;
+		FDabExprPtr Value;
+	};
+
+	/** An expression written as a statement: `SetTransform(Item = Control, Value = T);`. */
+	struct FDabExprStmt final : FDabStmt
+	{
+		static constexpr EDabNodeKind StaticKind = EDabNodeKind::ExprStmt;
+		FDabExprStmt() : FDabStmt(StaticKind) {}
+
+		FDabExprPtr Expr;
+	};
+
+	/** `if (Condition) { ... }`, then optionally `else if (...) { ... }` (ElseIf) or `else { ... }` (Else). */
+	struct FDabIfStmt final : FDabStmt
+	{
+		static constexpr EDabNodeKind StaticKind = EDabNodeKind::IfStmt;
+		FDabIfStmt() : FDabStmt(StaticKind) {}
+
+		FDabExprPtr Condition;
+		TUniquePtr<FDabCodeBlock> Then;
+		/** Never set together with Else. */
+		TUniquePtr<FDabIfStmt> ElseIf;
+		TUniquePtr<FDabCodeBlock> Else;
+		/** The `else` keyword; empty when there is none. */
+		FDabSpan ElseSpan;
+	};
+
+	/** `for (Element, Index, Count, Ratio in Items) { ... }`, `for (Index, Ratio in Range(5)) { ... }`. */
+	struct FDabForStmt final : FDabStmt
+	{
+		static constexpr EDabNodeKind StaticKind = EDabNodeKind::ForStmt;
+		FDabForStmt() : FDabStmt(StaticKind) {}
+
+		/** One to four names, in the order written. */
+		TArray<FString> Names;
+		TArray<FDabSpan> NameSpans;
+		FDabExprPtr Iterable;
+		TUniquePtr<FDabCodeBlock> Body;
+	};
+
+	/** `return;` or `return (Out = Value, ...);`. */
+	struct FDabReturnStmt final : FDabStmt
+	{
+		static constexpr EDabNodeKind StaticKind = EDabNodeKind::ReturnStmt;
+		FDabReturnStmt() : FDabStmt(StaticKind) {}
+
+		/** Null for a bare `return;`; otherwise a tuple of named outputs. */
+		FDabExprPtr Value;
+	};
+
+	/** `Detached { ... }` inside code: statements chained together that nothing runs. */
+	struct FDabDetachedStmt final : FDabStmt
+	{
+		static constexpr EDabNodeKind StaticKind = EDabNodeKind::DetachedStmt;
+		FDabDetachedStmt() : FDabStmt(StaticKind) {}
+
+		TUniquePtr<FDabCodeBlock> Body;
 	};
 
 	// ------------------------------------------------------------------------------------------
@@ -388,7 +533,7 @@ namespace UE::DreamAnim::Lang
 		FDabSpan PathSpan;
 	};
 
-	enum class EDabDocumentKind : uint8 { AnimBlueprint, AnimLayerInterface, AnimTemplates, Unknown };
+	enum class EDabDocumentKind : uint8 { AnimBlueprint, AnimLayerInterface, AnimTemplates, ControlRig, Unknown };
 	DREAMANIMLANG_API const TCHAR* LexToString(EDabDocumentKind Kind);
 
 	/** `AnimBlueprint(Name="...", Root="...") { ... }`. */
@@ -463,7 +608,7 @@ namespace UE::DreamAnim::Lang
 	// Utilities (DabAst.cpp)
 	// ------------------------------------------------------------------------------------------
 
-	/** Deep copies. Spans are copied as they are; trivia is not (it lives in the file's side table). */
+	/** Deep copies, code statements included. Spans are copied as they are; trivia is not (it lives in the file's side table). */
 	DREAMANIMLANG_API FDabExprPtr CloneExpr(const FDabExpr& Expr);
 	DREAMANIMLANG_API FDabStmtPtr CloneStmt(const FDabStmt& Stmt);
 	DREAMANIMLANG_API TUniquePtr<FDabMeta> CloneMeta(const FDabMeta& Meta);

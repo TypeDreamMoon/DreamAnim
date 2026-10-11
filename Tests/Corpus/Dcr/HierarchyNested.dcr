@@ -1,0 +1,48 @@
+ControlRig(Name="X", Root="Game")
+{
+    Hierarchy = {
+        Import = SKM_Manny_Simple;
+
+        Control global_ctrl
+        {
+            ControlType    = EulerTransform;
+            ShapeName      = "Hexagon_Thin";
+            ShapeColor     = (1, 0.964687, 0, 1);
+            ShapeTransform = (Scale3D = (15, 15, 15));
+
+            Control body_offset_ctrl
+            {
+                ControlType    = EulerTransform;
+                ShapeName      = "Square_Thick";
+                ShapeColor     = (1, 0.964687, 0, 1);
+                ShapeTransform = (Scale3D = (7.5, 7.5, 10));
+
+                Null leg_l_controls_space
+                {
+                    Null thigh_l_fk_ctrl_space
+                    {
+                        Transform = (
+                            Translation = (9.969203, 2.540597, 93.542798),
+                            Rotation    = (Roll = 86.873609, Pitch = -178.663855, Yaw = -170.253326)
+                        );
+
+                        Control thigh_l_fk_ctrl
+                        {
+                            ControlType    = EulerTransform;
+                            ShapeName      = "Circle_Thick";
+                            ShapeColor     = (0, 0.023085, 0.411458, 1);
+                            ShapeTransform = (Rotation = (Roll = 90), Scale3D = (3.5, 3.5, 10));
+                        }
+                    }
+                }
+            }
+
+            Control leg_l_stretch_switch
+            {
+                AnimationType = AnimationChannel;
+                ControlType   = Bool;
+                DisplayName   = "Stretch";
+            }
+        }
+    }
+}

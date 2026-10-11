@@ -1,0 +1,93 @@
+ControlRig(Name="Tests/CodeSnippets", Root="Game")
+{
+    Variables = {
+        Array<RigElementKey> Chain [ Public; Category = "Setup" ];
+        TArray<double>       Weights = [ 0, 0.5, 1 ];
+        Array<Array<double>> Table;
+        RigElementKey        Control;
+        double               Speed   = 1;
+        bool                 in;
+    }
+
+    Event Forward
+    {
+        let SteeringItem = ResolveConnector(Connector(Steering), SkipSocket = true).Result;
+        float Scale      = GetModuleMetadata(Name = "Control Size", NameSpace = Root, Default = 1);
+        local Vector Offset;
+
+        Array<double> Copy = Weights;
+
+        SetTransform(Item = Control, Value = GetTransform(SteeringItem));
+
+        Speed      = AlphaInterp(Speed, bInterpResult = true);
+        Chain[2]   = Bone(thigh_l);
+        Weights[1] = (Speed + 1) % 3; // wraps around
+        `in`       = true;
+
+        if (Speed > 0.5)
+        {
+            Speed = 0.5;
+        }
+        else if (Speed < 0)
+        {
+            Speed = 0;
+        }
+        else
+        {
+            // keep the speed
+        }
+
+        for (Control in Chain)
+        {
+            SetTransform(Item = Control, Value = GetTransform(Control));
+        }
+        for (Control, Index in Chain)
+        {
+        }
+        for (Item, Index, Count, Ratio in Chain)
+        {
+            Speed = Ratio * Count;
+        }
+        for (Index, Ratio in Range(5))
+        {
+            Speed = Speed + Ratio;
+        }
+
+        /* regions pair up inside one block */
+        #Region "Spawn"
+        Detached
+        {
+            Speed = 0;
+        }
+        #EndRegion
+
+        // nested index
+        Table[0][1] = Weights[Index + 1];
+        // the last word
+    }
+
+    Event `Old Arm CONSTR` [ Graph = "ConstructionGraph" ]
+    {
+        Reset();
+    }
+
+    Function Pick(Array<double> Values, int32 Index = 0, int32 Count = 3) -> (double Value, bool Found)
+    {
+        local double Result = 0;
+        if (Index >= 0 && Index < Count)
+        {
+            Result = Values[Index];
+        }
+        return (Value = Result, Found = Index >= 0);
+    }
+
+    Function Nothing()
+    {
+        return;
+    }
+
+    Detached [ Graph = "RigVMModel" ]
+    {
+        Speed = 0;
+    }
+}

@@ -47,6 +47,8 @@ namespace UE::DreamAnim::Lang
 		AnimLayerInterface,
 		/** `.dat`: a template library, only ever #included. */
 		Templates,
+		/** `.dcr`: a Control Rig. */
+		ControlRig,
 		Unknown,
 	};
 

@@ -1,0 +1,36 @@
+ControlRig(Name="X", Root="Game")
+{
+    Hierarchy = {
+        Import = SKM_Manny_Simple;
+
+        Bone ik_hand_l_wrld
+        {
+            Parent    = Bone(ik_hand_root);
+            Transform = (Translation = (0, 12.5, 0));
+        }
+        Bone ik_hand_l_pivot
+        {
+            Parent    = Bone(ik_hand_l_wrld);
+            Transform = (Translation = (0, 0, 3), Rotation = (Pitch = 90));
+        }
+        Bone ik_foot_l_ball
+        {
+            Parent    = Bone(IK_foot_L);
+            Transform = (Translation = (0, 14.25, 0));
+        }
+        Curve IKBlend_l;
+        Curve IK_blend_interact;
+
+        Null root_space { Transform = (Translation = (0, 0, 100)); }
+        Socket pelvis_socket
+        {
+            Transform   = (Translation = (0, 0, 5));
+            Color       = (1, 1, 1, 1);
+            Description = "A socket";
+        }
+        Connector Steering;
+        Connector `Parent Control`
+        {
+        }
+    }
+}

@@ -1,0 +1,150 @@
+ControlRig(Name="Modules58/Hinge", Root="Plugin.ControlRigModules")
+{
+    Settings = {
+        PreviewMesh = Path(Plugin.ControlRigModules, "Modules/Meshes/SKM_Car_Template");
+        Uses        = [ Path(Plugin.ControlRig, "StandardFunctionLibrary/StandardFunctionLibrary") ];
+    }
+
+    Module = { Identifier = (Name = "Hinge"); }
+
+    Hierarchy = {
+        Connector Steering;
+        Socket pelvis_socket
+        {
+            Description = "This is the default temporary socket used for the root connection.";
+        }
+        Connector `Parent Control`;
+    }
+
+    Variables = {
+        ModuleSettings `Module Settings` [ Public ];
+        RigControlAxis PrimaryAxis     = X [ Public ];
+        LinearColor    Color           = (1, 0, 0, 1) [ Public ];
+        bool           LimitMin        = false [ Public ];
+        bool           LimitMax        = false [ Public ];
+        double         Minimum         = 0 [ Public ];
+        double         Maximum         = 0 [ Public ];
+        RigElementKey  Control;
+        float          Weight;
+        float          Scale [ Public ];
+        bool           `Controlled by Proxy` [ Public ];
+        bool           `Proxy Swing` [ Public ];
+        FName          `Control Shape` = "Circle_Thick" [ Public ];
+    }
+
+    Event Forward
+    {
+        #Region "Forwards Solve (Animation Data to Bone Pose)"
+        SetTransform(
+            Item  = ResolveConnector(Connector(Steering), SkipSocket = true).Result,
+            Value = GetTransform(Control)
+        );
+        #EndRegion
+    }
+
+    Event Backward
+    {
+        #Region "Backwards Solve (Bone Pose to Animation Data)"
+        SetTransform(
+            Item  = Control,
+            Value = GetTransform(ResolveConnector(Connector(Steering), SkipSocket = true).Result)
+        );
+        SetMetadata(Item = Control, Name = "RequiresBackwardSolve", NameSpace = Root, Value = false);
+        #EndRegion
+    }
+
+    Event Construction [ Graph = "ConstructionGraph" ]
+    {
+        let SteeringItem = ResolveConnector(Connector(Steering), SkipSocket = true).Result;
+        let Axis         = CastEnumToInt(PrimaryAxis);
+
+        #Region "Spawn Control"
+        // Compute settings of the control based on variables
+        let SpawnControl = HierarchyAddControlRotator(
+            Name            = Concat(SteeringItem.Name, "_hinge_ctrl"),
+            Parent          = ResolveConnector(Connector(`Parent Control`)).Result,
+            OffsetTransform = GetTransform(SteeringItem, bInitial = true),
+            OffsetSpace     = GlobalSpace,
+            Settings        = (
+                Limits = (
+                    LimitPitch = (bMinimum = LimitMin, bMaximum = LimitMax),
+                    LimitYaw   = (bMinimum = LimitMin, bMaximum = LimitMax),
+                    LimitRoll  = (bMinimum = LimitMin, bMaximum = LimitMax),
+                    MinValue   = SelectInt32(Axis, [ (Roll = Minimum), (Pitch = Minimum), (Yaw = Minimum) ]),
+                    MaxValue   = SelectInt32(Axis, [ (Roll = Maximum), (Pitch = Maximum), (Yaw = Maximum) ])
+                ),
+                Shape  = (
+                    Name      = `Control Shape`,
+                    Color     = Color,
+                    Transform = (
+                        Rotation = SelectInt32(
+                            Axis,
+                            [ (0, -0.707107, 0, 0.707107), (-0.707107, 0, 0, 0.707107), () ]
+                        ),
+                        Scale3D  = (1, 1, 1) * Scale
+                    )
+                )
+            )
+        );
+        Control = SpawnControl;
+        #EndRegion
+
+        #Region "Setup animation channels"
+        Detached
+        {
+            HierarchyAddAnimationChannelFloat(Parent = SpawnControl, Name = "Weight", InitialValue = Weight);
+        }
+        #EndRegion
+
+        #Region "Metadata"
+        SetMetadata(Item = SpawnControl, Name = "RequiresBackwardSolve", NameSpace = Root, Value = false);
+        SetMetadata(
+            Item      = SpawnControl,
+            Name      = "SourceBone",
+            NameSpace = Root,
+            Value     = ResolveConnector(Connector(Steering), SkipSocket = true).Result
+        );
+        SetModuleMetadata(Name = "Parent Control", NameSpace = Self, Value = SpawnControl);
+        if (`Controlled by Proxy`)
+        {
+            SetMetadataTag(Item = SpawnControl, Tag = "Run Backwards", NameSpace = Root);
+        }
+        SetMetadataTag(
+            Item      = ResolveConnector(Connector(Steering), SkipSocket = true).Result,
+            Tag       = "Steering Bones",
+            NameSpace = Root
+        );
+        if (`Proxy Swing`)
+        {
+            SetMetadataTag(
+                Item      = ResolveConnector(Connector(Steering), SkipSocket = true).Result,
+                Tag       = "Swing Bones",
+                NameSpace = Root
+            );
+        }
+        #EndRegion
+
+        #Region "Finalize"
+        `Scale Module Controls`(
+            Controls       = [ SpawnControl ],
+            `Local Scale`  = `Module Settings`.ControlSize,
+            `Global Scale` = GetModuleMetadata(Name = "Control Size", NameSpace = Root, Default = 1)
+        );
+        `Color Module Controls`(
+            Controls    = [ SpawnControl ],
+            LeftColor   = `Module Settings`.LeftColor,
+            RightColor  = `Module Settings`.RightColor,
+            CenterColor = `Module Settings`.CenterColor
+        );
+        #EndRegion
+    }
+
+    Event Connector [ Graph = "RigVMModel Connector Event Graph" ]
+    {
+        `Connect to Module Metadata`(
+            Connector                   = Connector(`Parent Control`),
+            `Module Metadata Name`      = "Parent Control",
+            `Module Metadata NameSpace` = Parent
+        );
+    }
+}

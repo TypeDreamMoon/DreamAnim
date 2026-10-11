@@ -1,0 +1,14 @@
+ControlRig(Name="X")
+{
+    Function `Axis to Bool`(RigControlAxis Axis) -> (bool X, bool Y, bool Z) [ Public ] = (
+        X = Axis == X,
+        Y = Axis == Y,
+        Z = Axis == Z
+    );
+
+    Function Second(Array<double> Values) -> (double Value) = Values[1];
+
+    Function Wrap(int32 Index, int32 Count) -> (int32 Result) = (Index + 1) % Count;
+
+    Function Origin() -> (Vector Result) = (0, 0, 0);
+}

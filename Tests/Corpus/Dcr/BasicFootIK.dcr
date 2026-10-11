@@ -1,0 +1,91 @@
+ControlRig(Name="Characters/Mannequins/Rigs/CR_Mannequin_BasicFootIK", Root="Plugin.MoverExamples")
+{
+    Settings  = { PreviewMesh = SKM_Manny_Simple; }
+    Hierarchy = { Import = SKM_Manny_Simple; }
+
+    Variables = {
+        double ZOffset_L_Target;
+        double ZOffset_R_Target;
+        double ZOffset_L;
+        double ZOffset_R;
+        double ZOffset_Pelvis;
+        bool   ShouldDoIKTrace [ Public ];
+    }
+
+    Function FootTrace(RigElementKey `Ik Foot Bone`) -> (Vector Offset)
+    {
+        local Vector AnimatedFloorLocation;
+
+        let FootPos = GetTransform(`Ik Foot Bone`).Translation;
+        let RootPos = GetTransform(Bone(root)).Translation;
+        let Y       = FootPos.Y + 5;
+        let Hit = SphereTraceByTraceChannel(
+            Start  = Injected(VisualDebugVectorItemSpace((X = FootPos.X, Y = Y, Z = RootPos.Z) + (0, 0, 30))),
+            End    = Injected(VisualDebugVectorItemSpace((X = FootPos.X, Y = Y, Z = RootPos.Z) - (0, 0, 50))),
+            Radius = 3
+        );
+        return (Offset = Injected(VisualDebugVectorItemSpace(Hit.HitLocation)));
+    }
+
+    Event Forward
+    {
+        if (ShouldDoIKTrace)
+        {
+            #Region "Step 1: If Should Do IK Trace is true, do traces on both feet (using custom trace function) and set the Z offset targets from the trace result. If Should Do IK Trace is false, reset targets to 0."
+            ZOffset_L_Target = FootTrace(Bone(IK_foot_L)).Z;
+            ZOffset_R_Target = FootTrace(Bone(IK_foot_R)).Z;
+
+            Detached
+            {
+                ZOffset_L_Target = 0;
+                ZOffset_R_Target = 0;
+            }
+            #EndRegion
+
+            #Region "Step 2: Interpolate the Z offsets toward their target values."
+            ZOffset_L = AlphaInterp(
+                ZOffset_L_Target,
+                bInterpResult         = true,
+                InterpSpeedIncreasing = 15,
+                InterpSpeedDecreasing = 15
+            );
+            ZOffset_R = AlphaInterp(
+                ZOffset_R_Target,
+                bInterpResult         = true,
+                InterpSpeedIncreasing = 15,
+                InterpSpeedDecreasing = 15
+            );
+            #EndRegion
+
+            #Region "Step 3: Use the lowest foot offset for the pelvis to prevent overextension."
+            ZOffset_Pelvis = ZOffset_L < ZOffset_R ? ZOffset_L : ZOffset_R;
+            #EndRegion
+
+            #Region "Step 4: Add the interpolated Z offsets to the IK foot bones and pelvis. This will move them up or down."
+            ModifyTransforms(
+                ItemToModify = [ (Item = Bone(IK_foot_L), Transform = (Translation = (Z = ZOffset_L))) ],
+                Mode         = AdditiveGlobal
+            );
+            ModifyTransforms(
+                ItemToModify = [ (Item = Bone(IK_foot_R), Transform = (Translation = (Z = ZOffset_R))) ],
+                Mode         = AdditiveGlobal
+            );
+            ModifyTransforms(
+                ItemToModify = [ (Item = Bone(pelvis), Transform = (Translation = (Z = ZOffset_Pelvis))) ],
+                Mode         = AdditiveGlobal
+            );
+            #EndRegion
+
+            #Region "Step 5: Use a Full Body IK node to solve the IK, and use the IK foot bones as the effector targets for each foot."
+            PBIK(
+                Root      = "pelvis",
+                Effectors = [
+                    (Bone = "foot_l", Transform = GetTransform(Bone(IK_foot_L))),
+                    (Bone = "foot_r", Transform = GetTransform(Bone(IK_foot_R)))
+                ],
+                Settings  = (RootBehavior = PinToInput)
+            );
+            #EndRegion
+        }
+    }
+}

@@ -1,14 +1,15 @@
 // Copyright DreamMoon. All Rights Reserved.
 //
 // The lexer. One pass, at most three characters of lookahead. It never gives up: every problem is
-// reported and still yields a token (an unclosed string is one String, a malformed number one Number,
-// a stray character one Unknown), so the parser stays aligned with the source and one typo does not
-// turn the rest of the file into noise. Positions always come from FDabSourceText::MakeSpan, so a
+// reported and still yields a token (an unclosed string is one String, an unclosed name in backticks
+// one Identifier, a malformed number one Number, a stray character one Unknown), so the parser stays
+// aligned with the source and one typo does not turn the rest of the file into noise. Positions always come from FDabSourceText::MakeSpan, so a
 // CRLF file and an LF file report the same lines.
 
 #include "Lang/DabToken.h"
 
 #include "Lang/DabDiagnostic.h"
+#include "Lang/DabPrinter.h"
 #include "Lang/DabSource.h"
 #include "Misc/Char.h"
 #include "Misc/CString.h"
@@ -124,6 +125,7 @@ namespace UE::DreamAnim::Lang
 			EDabTokenKind::Minus,
 			EDabTokenKind::Star,
 			EDabTokenKind::Slash,
+			EDabTokenKind::Percent,
 			EDabTokenKind::Bang,
 			EDabTokenKind::Less,
 			EDabTokenKind::Greater,
@@ -156,6 +158,7 @@ namespace UE::DreamAnim::Lang
 		case EDabTokenKind::Minus: return TEXT("Minus");
 		case EDabTokenKind::Star: return TEXT("Star");
 		case EDabTokenKind::Slash: return TEXT("Slash");
+		case EDabTokenKind::Percent: return TEXT("Percent");
 		case EDabTokenKind::Bang: return TEXT("Bang");
 		case EDabTokenKind::AmpersandAmpersand: return TEXT("AmpersandAmpersand");
 		case EDabTokenKind::PipePipe: return TEXT("PipePipe");
@@ -192,6 +195,7 @@ namespace UE::DreamAnim::Lang
 		case EDabTokenKind::Minus: return TEXT("-");
 		case EDabTokenKind::Star: return TEXT("*");
 		case EDabTokenKind::Slash: return TEXT("/");
+		case EDabTokenKind::Percent: return TEXT("%");
 		case EDabTokenKind::Bang: return TEXT("!");
 		case EDabTokenKind::AmpersandAmpersand: return TEXT("&&");
 		case EDabTokenKind::PipePipe: return TEXT("||");
@@ -538,6 +542,46 @@ namespace UE::DreamAnim::Lang
 					continue;
 				}
 
+				// ---------------------------------------------------------------- names in backticks
+				if (Character == TEXT('`'))
+				{
+					const int32 NameStart = Cursor;
+					++Cursor;
+					const int32 TextStart = Cursor;
+					// Like a string, a name never spans a line.
+					while (Cursor < Length && !IsLineBreak(Chars[Cursor]) && Chars[Cursor] != TEXT('`'))
+					{
+						++Cursor;
+					}
+					const bool bClosed = Cursor < Length && Chars[Cursor] == TEXT('`');
+
+					FDabToken Name;
+					Name.Kind = EDabTokenKind::Identifier;
+					Name.bQuoted = true;
+					Name.Text = SourceText.Mid(TextStart, Cursor - TextStart);
+					if (bClosed)
+					{
+						++Cursor;
+					}
+					Name.Span = Source.MakeSpan(NameStart, Cursor - NameStart);
+
+					if (!bClosed)
+					{
+						Sink.Error(TEXT("DAB1007"), Source.MakeSpan(NameStart, 1),
+							TEXT("The name in backticks is not closed on its line."),
+							TEXT("Add the closing '`'; a name cannot span lines."));
+					}
+					else if (Name.Text.IsEmpty())
+					{
+						Sink.Error(TEXT("DAB1007"), Name.Span,
+							TEXT("A name in backticks cannot be empty."),
+							TEXT("Write the name between the backticks, as in `Module Settings`."));
+					}
+
+					Emit(Name);
+					continue;
+				}
+
 				// ---------------------------------------------------------------- identifiers
 				if (IsIdentifierStart(Character))
 				{
@@ -637,5 +681,21 @@ namespace UE::DreamAnim::Lang
 	TArray<FDabToken> LexDab(const FDabSourceText& Source, FDabDiagnosticSink& Sink, const FDabLexOptions& Options)
 	{
 		return DabLexerDetail::LexSource(Source, Sink, Options);
+	}
+
+	bool IsDabPlainIdentifier(const FString& Name)
+	{
+		if (Name.IsEmpty() || !DabLexerDetail::IsIdentifierStart(Name[0]))
+		{
+			return false;
+		}
+		for (int32 Index = 1; Index < Name.Len(); ++Index)
+		{
+			if (!DabLexerDetail::IsIdentifierChar(Name[Index]))
+			{
+				return false;
+			}
+		}
+		return true;
 	}
 }

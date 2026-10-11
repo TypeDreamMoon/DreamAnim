@@ -1,0 +1,22 @@
+ControlRig(Name="X")
+{
+    Function `Scale Module Controls`(Array<RigElementKey> Controls, double `Local Scale` = 0, double `Global Scale` = 1) [ Public; Category = "Modules"; Keywords = "Standard Functions Library Module Modular"; Description = "Scales the shape of each control it is given." ]
+    {
+        for (Control in Controls)
+        {
+            let Shape = GetShapeTransform(Control.Name);
+            SetShapeTransform(
+                Control   = Control.Name,
+                Transform = (
+                    Rotation    = Shape.Rotation,
+                    Translation = Shape.Translation,
+                    Scale3D     = Multiply(
+                        Shape.Scale3D,
+                        (`Global Scale`, `Global Scale`, `Global Scale`),
+                        (`Local Scale`, `Local Scale`, `Local Scale`)
+                    )
+                )
+            );
+        }
+    }
+}
