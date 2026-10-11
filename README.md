@@ -173,6 +173,10 @@ Sources live in the project's `DAnim/` folder, or in `DAnim/` of an enabled plug
 Test results land in `<host>/Saved/DreamAnimTests/<time>-<preset>/`: the engine's `index.json`, the run
 log and `summary.md`.
 
+`Tools/Tests/Test-DabTools.ps1` checks the CLI's engine selection, test exit codes and host refresh
+without running Unreal. Run it with PowerShell 7 and `-NoProfile`. Refreshing a test host preserves its
+engine association; `Tools/TestHost/New-DreamAnimTestHost.ps1 -EngineAssociation 5.8` explicitly changes it.
+
 ## Documentation
 
 | Page | Contents |

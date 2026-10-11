@@ -64,6 +64,21 @@ try {
     @{ EngineAssociation = '{unregistered}' } | ConvertTo-Json | Set-Content -LiteralPath $project -Encoding UTF8
     $EngineRoot = $fakeEngine
     Assert-Equal $fakeEngine (Resolve-EngineRoot $project) 'Explicit installation'
+
+    # Existing plugin directories avoid all clone/worktree operations; mock the one read-only git call.
+    function git { $global:LASTEXITCODE = 0; return 'b754d6f0f2bb03741d301f8fb88077ebfe561e17' }
+    $testHost = Join-Path $scratch 'Host'
+    New-Item -ItemType Directory -Path (Join-Path $testHost 'Plugins/DreamAnim'), (Join-Path $testHost 'Plugins/ALS-Refactored') -Force | Out-Null
+    $hostProject = Join-Path $testHost 'DreamAnimTestHost.uproject'
+    $createHost = Join-Path $toolsDir 'TestHost/New-DreamAnimTestHost.ps1'
+    & $createHost -HostDir $testHost 6> (Join-Path $scratch 'host.log')
+    Assert-Equal '5.8' ((Get-Content -LiteralPath $hostProject -Raw -Encoding UTF8 | ConvertFrom-Json).EngineAssociation) 'New host'
+    @{ EngineAssociation = '{custom-source}' } | ConvertTo-Json | Set-Content -LiteralPath $hostProject -Encoding UTF8
+    & $createHost -HostDir $testHost 6>> (Join-Path $scratch 'host.log')
+    Assert-Equal '{custom-source}' ((Get-Content -LiteralPath $hostProject -Raw -Encoding UTF8 | ConvertFrom-Json).EngineAssociation) 'Refreshed host'
+    & $createHost -HostDir $testHost -EngineAssociation '5.8' 6>> (Join-Path $scratch 'host.log')
+    Assert-Equal '5.8' ((Get-Content -LiteralPath $hostProject -Raw -Encoding UTF8 | ConvertFrom-Json).EngineAssociation) 'Explicit host override'
+    Assert-Equal '5.8' ((Get-Content -LiteralPath (Join-Path $testHost '.dreamanim-testhost.json') -Raw -Encoding UTF8 | ConvertFrom-Json).engineAssociation) 'Host metadata'
     Write-Host 'Tool regression checks passed.'
 }
 finally {

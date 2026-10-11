@@ -14,6 +14,7 @@
 param(
     [string]$HostDir = 'I:\UnrealProject_Moon\DEV_58\DreamAnimTestHost',
     [string]$Branch = 'dev',
+    [string]$EngineAssociation,
     [string]$AlsSource = 'https://github.com/Sixze/ALS-Refactored.git',
     [string]$AlsCommit = 'b754d6f0f2bb03741d301f8fb88077ebfe561e17'
 )
@@ -29,7 +30,17 @@ function Invoke-Git([string[]]$GitArgs) {
 
 Write-Host "==> Template -> $HostDir"
 New-Item -ItemType Directory -Force -Path $HostDir | Out-Null
+$projectPath = Join-Path $HostDir 'DreamAnimTestHost.uproject'
+if (-not $PSBoundParameters.ContainsKey('EngineAssociation')) {
+    $EngineAssociation = if (Test-Path -LiteralPath $projectPath) {
+        (Get-Content -LiteralPath $projectPath -Raw -Encoding UTF8 | ConvertFrom-Json).EngineAssociation
+    } else { '5.8' }
+}
 Copy-Item -Path (Join-Path $template '*') -Destination $HostDir -Recurse -Force
+# Only the association line changes, so the file keeps the template's layout.
+$projectText = Get-Content -LiteralPath $projectPath -Raw -Encoding UTF8
+$projectText = [regex]::Replace($projectText, '("EngineAssociation"\s*:\s*)"[^"]*"', { param($m) $m.Groups[1].Value + '"' + $EngineAssociation + '"' })
+Set-Content -LiteralPath $projectPath -Value $projectText -Encoding UTF8 -NoNewline
 
 $pluginDir = Join-Path $HostDir 'Plugins\DreamAnim'
 if (-not (Test-Path $pluginDir)) {
@@ -47,7 +58,9 @@ if (-not (Test-Path $alsDir)) {
     Invoke-Git @('clone', '--quiet', $AlsSource, $alsDir)
     Invoke-Git @('-C', $alsDir, 'checkout', '--quiet', '--detach', $AlsCommit)
 } else {
-    $head = (& git -C $alsDir rev-parse HEAD).Trim()
+    $head = & git -C $alsDir rev-parse HEAD
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot read the ALS-Refactored revision.' }
+    $head = ([string]$head).Trim()
     if ($head -ne $AlsCommit) { Write-Warning "ALS-Refactored is at $head, not the pinned $AlsCommit" }
     else { Write-Host "    ALS-Refactored already at the pinned commit" }
 }
@@ -58,7 +71,7 @@ $info = [ordered]@{
     worktreePath      = $pluginDir
     branch            = $Branch
     alsCommit         = $AlsCommit
-    engineAssociation = '{486FC676-41CB-DA5E-D95C-8AA1D8EB76B0}'
+    engineAssociation = $EngineAssociation
 }
 $info | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $HostDir '.dreamanim-testhost.json') -Encoding utf8
 
