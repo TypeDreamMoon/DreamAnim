@@ -403,6 +403,40 @@ namespace UE::DreamAnim::Compiler::ExtractPrivate
 			}
 
 			const FString Builtin = GetBuiltinName(OperatorName);
+			if (Function && Function->GetOuterUClass() == UKismetMathLibrary::StaticClass())
+			{
+				const TCHAR* Conversion = nullptr;
+				if (OperatorName == TEXT("Conv_ByteToInt"))
+				{
+					Conversion = TEXT("ByteToInt");
+				}
+				else if (OperatorName == TEXT("Conv_ByteToInt64"))
+				{
+					Conversion = TEXT("ByteToInt64");
+				}
+				else if (OperatorName == TEXT("Conv_IntToInt64"))
+				{
+					Conversion = TEXT("IntToInt64");
+				}
+				else if (OperatorName == TEXT("Conv_ByteToDouble"))
+				{
+					Conversion = TEXT("ByteToReal");
+				}
+				else if (OperatorName == TEXT("Conv_IntToDouble"))
+				{
+					Conversion = TEXT("IntToReal");
+				}
+				else if (OperatorName == TEXT("Conv_Int64ToDouble"))
+				{
+					Conversion = TEXT("Int64ToReal");
+				}
+				if (Conversion && RequireInputs(1))
+				{
+					TArray<FDabExprPtr> Args;
+					Args.Add(LowerArgument(0));
+					return MakeCall(MakeName(Conversion), MoveTemp(Args));
+				}
+			}
 			if (!Builtin.IsEmpty())
 			{
 				TArray<FDabExprPtr> Args;

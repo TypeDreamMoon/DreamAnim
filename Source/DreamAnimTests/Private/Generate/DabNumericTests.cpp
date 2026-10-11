@@ -94,6 +94,36 @@ namespace UE::DreamAnim::Tests::NumericPrivate
 	}
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDabComparisonConstantRangeTest, "DreamAnim.Generate.ComparisonConstantRange",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+/**
+ * A comparison whose constant does not fit the variable's type is made in a wider type, not with the
+ * constant cut down: a byte against 256 or -1, an int against 2^31. Both orders of the operands, and the
+ * constants at the edge of the type.
+ */
+bool FDabComparisonConstantRangeTest::RunTest(const FString& Parameters)
+{
+	using namespace UE::DreamAnim::Tests::NumericPrivate;
+	const TCHAR* const Properties = TEXT("byte Small = 1; int Count = 1;");
+	const TPair<const TCHAR*, double> Cases[] = {
+		{ TEXT("Props.Small < 256"), 1.0 },
+		{ TEXT("256 > Props.Small"), 1.0 },
+		{ TEXT("Props.Small > -1"), 1.0 },
+		{ TEXT("-1 < Props.Small"), 1.0 },
+		{ TEXT("Props.Small <= 255"), 1.0 },
+		{ TEXT("Props.Small > 0"), 1.0 },
+		{ TEXT("Props.Count < 2147483648"), 1.0 },
+		{ TEXT("Props.Count > -2147483648"), 1.0 },
+		{ TEXT("Props.Count > 2147483647"), 0.0 },
+	};
+	for (int32 Index = 0; Index < UE_ARRAY_COUNT(Cases); ++Index)
+	{
+		ExpectValue(*this, FString::Printf(TEXT("AB_Range%d"), Index), Properties, FString::Printf(TEXT("(%s) ? 1 : 0"), Cases[Index].Key), Cases[Index].Value);
+	}
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDabInt64ExactTest, "DreamAnim.Generate.IntegerBounds",
 	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
 
@@ -146,6 +176,7 @@ bool FDabInt64ExactTest::RunTest(const FString& Parameters)
 		TestTrue(FString::Printf(TEXT("%s is refused, saying it %s"), Case.Key, Case.Value), bSaysWhy);
 	}
 
+	ExpectValue(*this, TEXT("AB_ExactComparison"), TEXT("int64 Exact = 9007199254740993;"), TEXT("(Props.Exact == 9007199254740992) ? 1 : 0"), 0.0);
 	return true;
 }
 

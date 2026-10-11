@@ -148,6 +148,11 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 		FString Path;
 		if (DabGenTryGetNumber(Expr, Number))
 		{
+			int64 Integer = 0;
+			if (TryGetDabInteger(Expr, Integer) && (Integer < MIN_int32 || Integer > MAX_int32))
+			{
+				return EDabGenKind::Int64;
+			}
 			return EDabGenKind::Real;
 		}
 		if (DabGenTryGetBool(Expr, bValue))
@@ -641,9 +646,21 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 				for (const FValue& Value : Values)
 				{
 					double Number = 0.0;
-					if (Value.Constant && DabGenTryGetNumber(*Value.Constant, Number) && FMath::Frac(Number) != 0.0)
+					if (Value.Constant && DabGenTryGetNumber(*Value.Constant, Number))
 					{
-						return EDabGenKind::Real;
+						int64 Integer = 0;
+						if (!TryGetDabInteger(*Value.Constant, Integer))
+						{
+							return EDabGenKind::Real;
+						}
+						if (Integer < MIN_int32 || Integer > MAX_int32)
+						{
+							Kind = EDabGenKind::Int64;
+						}
+						else if (Kind == EDabGenKind::Byte && (Integer < 0 || Integer > MAX_uint8))
+						{
+							Kind = EDabGenKind::Int;
+						}
 					}
 				}
 			}
@@ -912,6 +929,36 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 			};
 
 			const EDabGenKind Kind = KindOfAll(Positional);
+			// Explicit widening preserves the type of automatic K2 conversions on decompile/rebuild.
+			const TCHAR* Conversion = nullptr;
+			if (Name == TEXT("ByteToInt"))
+			{
+				Conversion = TEXT("Conv_ByteToInt");
+			}
+			else if (Name == TEXT("ByteToInt64"))
+			{
+				Conversion = TEXT("Conv_ByteToInt64");
+			}
+			else if (Name == TEXT("IntToInt64"))
+			{
+				Conversion = TEXT("Conv_IntToInt64");
+			}
+			else if (Name == TEXT("ByteToReal"))
+			{
+				Conversion = TEXT("Conv_ByteToDouble");
+			}
+			else if (Name == TEXT("IntToReal"))
+			{
+				Conversion = TEXT("Conv_IntToDouble");
+			}
+			else if (Name == TEXT("Int64ToReal"))
+			{
+				Conversion = TEXT("Conv_Int64ToDouble");
+			}
+			if (Conversion)
+			{
+				return Expect(1) ? CallLibrary(DabGenMathLibrary(), Conversion, Positional, nullptr, Expr, Depth) : FValue();
+			}
 			if (Name == TEXT("Abs"))
 			{
 				if (!Expect(1))

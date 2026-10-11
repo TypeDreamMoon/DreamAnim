@@ -971,6 +971,8 @@ nodes, the thread-safe way to read the instance. Calls with arguments cannot be 
 | `Abs(x)` | absolute value |
 | `Min(a, b)`, `Max(a, b)` | smaller, larger |
 | `Clamp(x, lo, hi)` | `x` limited to `lo..hi` |
+| `ByteToInt(x)`, `ByteToInt64(x)`, `IntToInt64(x)` | widen an integer; retained by the decompiler when K2 inserts a conversion |
+| `ByteToReal(x)`, `IntToReal(x)`, `Int64ToReal(x)` | convert to a double precision real; `Int64ToReal` can round values above `2^53` |
 | `IsValid(x)` | for a gameplay tag, whether it is valid; for an object or class, whether it is not `None` |
 | `Matches(t, u)` | whether tag `t` matches tag `u`, or container `t` has tag `u`; `Matches(t, u, Exact = true)` for an exact match |
 | `StateWeight`, `StateTime`, `MachineWeight`, `TimeRemaining`, `TimeRemainingRatio` | see [Reading machine state](#reading-machine-state) |
