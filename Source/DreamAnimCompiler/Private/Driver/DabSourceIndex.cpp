@@ -139,6 +139,8 @@ namespace UE::DreamAnim::Compiler::DriverPrivate
 			return Lang::EDabDocumentKind::AnimLayerInterface;
 		case Lang::EDabFileKind::Templates:
 			return Lang::EDabDocumentKind::AnimTemplates;
+		case Lang::EDabFileKind::ControlRig:
+			return Lang::EDabDocumentKind::ControlRig;
 		default:
 			return Lang::EDabDocumentKind::Unknown;
 		}

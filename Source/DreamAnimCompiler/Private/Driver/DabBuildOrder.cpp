@@ -109,11 +109,24 @@ namespace UE::DreamAnim::Compiler
 			}
 		}
 
-		const auto Precedes = [](const FString& A, const FString& B)
+		// Control Rigs first (an Animation Blueprint may run one), then interfaces, then the rest; by path within each.
+		const auto Rank = [](const FString& File)
 		{
-			const bool bInterfaceA = Lang::GetDabFileKindFromPath(A) == Lang::EDabFileKind::AnimLayerInterface;
-			const bool bInterfaceB = Lang::GetDabFileKindFromPath(B) == Lang::EDabFileKind::AnimLayerInterface;
-			return bInterfaceA != bInterfaceB ? bInterfaceA : A < B;
+			switch (Lang::GetDabFileKindFromPath(File))
+			{
+			case Lang::EDabFileKind::ControlRig:
+				return 0;
+			case Lang::EDabFileKind::AnimLayerInterface:
+				return 1;
+			default:
+				return 2;
+			}
+		};
+		const auto Precedes = [&Rank](const FString& A, const FString& B)
+		{
+			const int32 RankA = Rank(A);
+			const int32 RankB = Rank(B);
+			return RankA != RankB ? RankA < RankB : A < B;
 		};
 
 		TMap<FString, TArray<FString>> DependsOn;

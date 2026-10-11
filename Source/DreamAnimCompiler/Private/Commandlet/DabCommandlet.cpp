@@ -5,6 +5,7 @@
 #include "Animation/AnimBlueprint.h"
 #include "AssetRegistry/AssetData.h"
 #include "AssetRegistry/IAssetRegistry.h"
+#include "Driver/DabDocumentHandler.h"
 #include "Driver/DabDriver.h"
 #include "Driver/DabDriverPrivate.h"
 #include "HAL/FileManager.h"
@@ -541,13 +542,17 @@ namespace UE::DreamAnim::Compiler::CommandletPrivate
 			Filter.PackagePaths.Add(FName(*Under));
 			Filter.bRecursivePaths = true;
 			Filter.ClassPaths.Add(UAnimBlueprint::StaticClass()->GetClassPathName());
+			for (const IDabDocumentHandler* Handler : GetDabDocumentHandlers())
+			{
+				Filter.ClassPaths.Append(Handler->GetDecompileClasses());
+			}
 			Filter.bRecursiveClasses = true;
 			TArray<FAssetData> Found;
 			Registry.GetAssets(Filter, Found);
 			Found.Sort([](const FAssetData& A, const FAssetData& B) { return A.PackageName.LexicalLess(B.PackageName); });
 			if (Found.IsEmpty())
 			{
-				Run.Fail(FString::Printf(TEXT("No Animation Blueprint under %s."), *Under));
+				Run.Fail(FString::Printf(TEXT("Nothing to decompile under %s: no Animation Blueprint or Control Rig."), *Under));
 			}
 			for (const FAssetData& Asset : Found)
 			{
@@ -559,7 +564,7 @@ namespace UE::DreamAnim::Compiler::CommandletPrivate
 		const bool bOutIsFile = !OutPath.IsEmpty() && IsDabSourceFile(OutPath);
 		if (bOutIsFile && ObjectPaths.Num() > 1 && !Run.bStdout)
 		{
-			Run.Fail(FString::Printf(TEXT("-Out names one file, but %d Blueprints are being decompiled; give a folder."), ObjectPaths.Num()));
+			Run.Fail(FString::Printf(TEXT("-Out names one file, but %d assets are being decompiled; give a folder."), ObjectPaths.Num()));
 			ObjectPaths.Reset();
 		}
 
@@ -575,13 +580,23 @@ namespace UE::DreamAnim::Compiler::CommandletPrivate
 		int32 NumSlots = 0;
 		for (const FString& ObjectPath : ObjectPaths)
 		{
-			const UAnimBlueprint* Blueprint = LoadObject<UAnimBlueprint>(nullptr, *ObjectPath);
-			if (!Blueprint)
+			UObject* Object = LoadObject<UObject>(nullptr, *ObjectPath);
+			const UAnimBlueprint* Blueprint = Cast<UAnimBlueprint>(Object);
+			// Anything else goes to the front end that takes it (a Control Rig).
+			IDabDocumentHandler* Handler = Object && !Blueprint ? FindDabDecompileHandler(*Object) : nullptr;
+			if (!Blueprint && !Handler)
 			{
-				Run.Fail(FString::Printf(TEXT("Cannot load the Animation Blueprint %s."), *ObjectPath));
+				Run.Fail(FString::Printf(TEXT("Cannot load an Animation Blueprint or a Control Rig at %s."), *ObjectPath));
 				continue;
 			}
-			const FDabDecompileResult Decompiled = DecompileDabBlueprint(*Blueprint, FDabLowerOptions(), Run.AnimSet.IsEmpty() ? nullptr : &Migration);
+			if (Handler && !Run.AnimSet.IsEmpty())
+			{
+				Run.Fail(FString::Printf(TEXT("-AnimSet goes with Animation Blueprints; %s is not one."), *ObjectPath));
+				continue;
+			}
+			const FDabDecompileResult Decompiled = Blueprint
+				? DecompileDabBlueprint(*Blueprint, FDabLowerOptions(), Run.AnimSet.IsEmpty() ? nullptr : &Migration)
+				: Handler->Decompile(*Object);
 			const int32 ErrorsBefore = Run.NumErrors;
 			for (const Lang::FDabDiagnostic& Diagnostic : Decompiled.Diagnostics)
 			{
@@ -600,15 +615,15 @@ namespace UE::DreamAnim::Compiler::CommandletPrivate
 			if (Run.bStdout)
 			{
 				NumSlots += Decompiled.LiftedAssets.Num();
-				PrintDabTextBlock(Blueprint->GetPathName(), Decompiled.Text);
+				PrintDabTextBlock(Object->GetPathName(), Decompiled.Text);
 				++NumDone;
 				continue;
 			}
 
 			const FString Target = bOutIsFile ? OutPath
-				: OutPath.IsEmpty() ? GetDefaultDecompilePath(*Blueprint)
-				: DriverPrivate::NormalizeDabPath(FPaths::Combine(OutPath, DriverPrivate::GetDabDecompileRelativePath(Blueprint->GetPackage()->GetName())
-					+ DriverPrivate::GetDabDecompileExtension(*Blueprint)));
+				: OutPath.IsEmpty() ? (Blueprint ? GetDefaultDecompilePath(*Blueprint) : Handler->GetDefaultDecompilePath(*Object))
+				: DriverPrivate::NormalizeDabPath(FPaths::Combine(OutPath, DriverPrivate::GetDabDecompileRelativePath(Object->GetPackage()->GetName())
+					+ (Blueprint ? FString(DriverPrivate::GetDabDecompileExtension(*Blueprint)) : Handler->GetSourceExtension())));
 			FString Text = Decompiled.Text;
 			FString Existing;
 			bool bUnchanged = false;
@@ -632,7 +647,7 @@ namespace UE::DreamAnim::Compiler::CommandletPrivate
 				Run.Fail(FString::Printf(TEXT("Cannot write %s."), *Target));
 				continue;
 			}
-			if (!Run.AnimSet.IsEmpty())
+			if (Blueprint && !Run.AnimSet.IsEmpty())
 			{
 				FDabAnimSetMigration Commit = Migration;
 				Commit.bPreview = false;

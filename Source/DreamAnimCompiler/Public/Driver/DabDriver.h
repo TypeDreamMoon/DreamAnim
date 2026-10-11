@@ -25,7 +25,7 @@ namespace UE::DreamAnim::Compiler
 	 */
 	DREAMANIMCOMPILER_API TArray<FString> GetDabSourceRoots();
 
-	/** `.dab`, `.dai` and `.dat`. */
+	/** `.dab`, `.dai`, `.dat` and `.dcr`. */
 	DREAMANIMCOMPILER_API bool IsDabSourceFile(const FString& FilePath);
 
 	/** One source as the index knows it: read only as far as its includes and document header. */
@@ -94,8 +94,10 @@ namespace UE::DreamAnim::Compiler
 		/** The parsed, expanded file and its libraries; null when the file could not be read. */
 		TUniquePtr<Lang::FDabCompilationUnit> Unit;
 		Model::FDabModel Model;
-		/** Set when generated. */
+		/** Set when an Animation Blueprint or interface was generated. */
 		UAnimBlueprint* Blueprint = nullptr;
+		/** Set when generated: the Blueprint, or what a document handler built (a Control Rig). */
+		UObject* Asset = nullptr;
 
 		bool Succeeded() const { return NumErrors == 0; }
 	};

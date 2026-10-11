@@ -4,6 +4,7 @@
 // decompiler, and diagnostics in the forms tools read.
 
 #include "Driver/DabDriver.h"
+#include "Driver/DabDocumentHandler.h"
 #include "Driver/DabDriverPrivate.h"
 
 #include "Animation/AnimBlueprint.h"
@@ -275,6 +276,22 @@ namespace UE::DreamAnim::Compiler
 		{
 			return Result;
 		}
+		// A kind another module builds (a Control Rig): that module's handler takes it from here.
+		if (Unit.Main && Unit.Main->Document && Unit.Main->Document->DocumentKind == Lang::EDabDocumentKind::ControlRig)
+		{
+			if (IDabDocumentHandler* Handler = FindDabDocumentHandler(Lang::EDabDocumentKind::ControlRig))
+			{
+				Handler->Compile(Result, Text, Options);
+			}
+			else
+			{
+				Lang::FDabDiagnosticSink Sink(Result.FilePath);
+				Sink.Error(TEXT("DAB7006"), Unit.Main->Document->KindSpan, TEXT("ControlRig documents are built by the DreamAnimRig module, which is not loaded"),
+					TEXT("Enable the Control Rig plugin; DreamAnimRig loads with the editor."));
+				DriverPrivate::AppendCompileDiagnostics(Result, Sink);
+			}
+			return Result;
+		}
 		// Where the model's parts came from: write-back asks for it, and compiler messages are placed with it.
 		FDabProvenance OwnProvenance;
 		FDabProvenance& Provenance = Options.Provenance ? *Options.Provenance : OwnProvenance;
@@ -303,6 +320,7 @@ namespace UE::DreamAnim::Compiler
 			DriverPrivate::AppendCompileDiagnostics(Result, Sink);
 			DriverPrivate::AppendBlueprintCompilerMessages(Result, Generated, Provenance);
 			Result.Blueprint = Generated.Blueprint;
+			Result.Asset = Generated.Blueprint;
 		}
 		return Result;
 	}
