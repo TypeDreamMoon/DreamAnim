@@ -13,6 +13,7 @@
 #include "Misc/OutputDevice.h"
 #include "RigVMEditorAsset.h"
 
+struct FScopedScriptExceptionHandler;
 class UControlRig;
 class URigVMController;
 class URigVMGraph;
@@ -64,6 +65,27 @@ namespace UE::DreamAnim::Rig
 	 * the other kind through RecompileVM. Returns the errors it logged or reported.
 	 */
 	DREAMANIMRIG_API TArray<FString> CompileDcrRig(const FDcrRig& Rig, int32* OutWarnings = nullptr);
+
+	/**
+	 * Keeps the script and Blueprint compilers' messages off the engine's log while it lives. A Blueprint compiles
+	 * when it is loaded, copied or rebuilt, and on the engine's log its messages would count as errors of whoever
+	 * runs this (a test, a commandlet), the harmless ones included; the rig's own compile log keeps them. RigVM's
+	 * compiler reports through the script exception handler, which logs past the category's verbosity, so a handler
+	 * that drops them is pushed too.
+	 */
+	class DREAMANIMRIG_API FDcrQuietCompileScope
+	{
+	public:
+		FDcrQuietCompileScope();
+		~FDcrQuietCompileScope();
+		FDcrQuietCompileScope(const FDcrQuietCompileScope&) = delete;
+		FDcrQuietCompileScope& operator=(const FDcrQuietCompileScope&) = delete;
+
+	private:
+		ELogVerbosity::Type Script;
+		ELogVerbosity::Type Blueprint;
+		TUniquePtr<FScopedScriptExceptionHandler> Handler;
+	};
 
 	/** Collects the warnings and errors logged while it lives. */
 	class DREAMANIMRIG_API FDcrLogCapture : public FOutputDevice

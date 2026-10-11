@@ -7,9 +7,11 @@
 #include "ControlRigBlueprintFactory.h"
 #include "ControlRigBlueprintLegacy.h"
 #include "ControlRigRuntimeAsset.h"
+#include "Engine/Blueprint.h"
 #include "IAssetTools.h"
 #include "Kismet2/CompilerResultsLog.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "Misc/CoreMisc.h"
 #include "Misc/PackageName.h"
 #include "Modules/ModuleManager.h"
 #include "RigVMBlueprintLegacy.h"
@@ -17,9 +19,26 @@
 #include "RigVMModel/RigVMGraph.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
+#include "UObject/Script.h"
 
 namespace UE::DreamAnim::Rig
 {
+	FDcrQuietCompileScope::FDcrQuietCompileScope()
+		: Script(LogScript.GetVerbosity())
+		, Blueprint(LogBlueprint.GetVerbosity())
+		, Handler(MakeUnique<FScopedScriptExceptionHandler>([](ELogVerbosity::Type, const TCHAR*, const TCHAR*) {}))
+	{
+		LogScript.SetVerbosity(ELogVerbosity::Fatal);
+		LogBlueprint.SetVerbosity(ELogVerbosity::Fatal);
+	}
+
+	FDcrQuietCompileScope::~FDcrQuietCompileScope()
+	{
+		Handler.Reset();
+		LogScript.SetVerbosity(Script);
+		LogBlueprint.SetVerbosity(Blueprint);
+	}
+
 	const TCHAR* LexToString(EDcrAssetKind Kind)
 	{
 		return Kind == EDcrAssetKind::Legacy ? TEXT("Legacy") : TEXT("Independent");
@@ -63,12 +82,16 @@ namespace UE::DreamAnim::Rig
 
 	FDcrRig LoadDcrRig(const FString& ObjectPath)
 	{
+		// A Blueprint compiles as it loads.
+		FDcrQuietCompileScope Quiet;
 		return WrapDcrRig(LoadObject<UObject>(nullptr, *ObjectPath));
 	}
 
 	FDcrRig DuplicateDcrRig(const FDcrRig& Source, const FString& Folder, const FString& Name)
 	{
 		IAssetTools& Tools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
+		// A Blueprint's copy compiles as it is made.
+		FDcrQuietCompileScope Quiet;
 		return WrapDcrRig(Tools.DuplicateAsset(Name, Folder, Source.Asset));
 	}
 
@@ -92,15 +115,10 @@ namespace UE::DreamAnim::Rig
 
 	URigVMGraph* AddDcrModelGraph(const FDcrRig& Rig, const FString& Name)
 	{
-		if (URigVMBlueprint* Blueprint = Cast<URigVMBlueprint>(Rig.Editor))
-		{
-			return Blueprint->AddModel(Name, false, false);
-		}
-		if (URigVMEditorAsset* EditorAsset = Cast<URigVMEditorAsset>(Rig.Editor))
-		{
-			return EditorAsset->AddModel(Name, false, false);
-		}
-		return nullptr;
+		// The client's FName overload takes the name as it is: the assets' AddModel(FString) puts
+		// "RigVMModel " in front of it, and a rebuilt rig would not have the graph names it had.
+		FRigVMClient* Client = Rig.RigVM ? Rig.RigVM->GetRigVMClient() : nullptr;
+		return Client ? Client->AddModel(FName(*Name), false) : nullptr;
 	}
 
 	URigVMGraph* FindDcrModelGraph(const FDcrRig& Rig, const FString& Name)
@@ -141,27 +159,41 @@ namespace UE::DreamAnim::Rig
 
 	TArray<FString> CompileDcrRig(const FDcrRig& Rig, int32* OutWarnings)
 	{
+		// The compiler's messages are read from its own log below.
 		FDcrLogCapture Capture;
-		if (UBlueprint* Blueprint = Cast<UBlueprint>(Rig.Asset))
 		{
-			FKismetEditorUtilities::CompileBlueprint(Blueprint, EBlueprintCompileOptions::SkipGarbageCollection);
+			FDcrQuietCompileScope Quiet;
+			if (UBlueprint* Blueprint = Cast<UBlueprint>(Rig.Asset))
+			{
+				FKismetEditorUtilities::CompileBlueprint(Blueprint, EBlueprintCompileOptions::SkipGarbageCollection);
+			}
+			else
+			{
+				Rig.RigVM->RecompileVM();
+			}
 		}
-		else
-		{
-			Rig.RigVM->RecompileVM();
-		}
+
 		const FCompilerResultsLog& Log = Rig.RigVM->GetCompileLog();
 		TArray<FString> Errors = Capture.GetErrors();
+		int32 Warnings = Capture.GetWarnings().Num() + Log.NumWarnings;
 		for (const TSharedRef<FTokenizedMessage>& Message : Log.Messages)
 		{
-			if (Message->GetSeverity() == EMessageSeverity::Error)
+			if (Message->GetSeverity() != EMessageSeverity::Error)
 			{
-				Errors.Add(Message->ToText().ToString());
+				continue;
 			}
+			// Code nothing runs into: the compiler leaves it out, which is what a rig with detached code means.
+			const FString Text = Message->ToText().ToString();
+			if (Text.Contains(TEXT("is not linked to execution")))
+			{
+				++Warnings;
+				continue;
+			}
+			Errors.Add(Text);
 		}
 		if (OutWarnings)
 		{
-			*OutWarnings = Capture.GetWarnings().Num() + Log.NumWarnings;
+			*OutWarnings = Warnings;
 		}
 		return Errors;
 	}
