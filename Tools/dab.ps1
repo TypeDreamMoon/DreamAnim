@@ -34,6 +34,8 @@
 # `===== end <name> =====` lines, and -Markers puts those lines around a single text too (a host line
 # also reaches a redirected stdout, so a tool reading it needs them). Redirected output is UTF-8.
 # The engine log of each run is kept in <project>/Saved/DreamAnim/.
+# The engine is the project's EngineAssociation, looked up among registered source builds and Launcher
+# installations; -EngineRoot <dir> names one instead.
 # A build writes packages: close any editor that has the project open.
 #
 # Exit codes
@@ -51,6 +53,7 @@ param(
     [string]$Filter,
     [switch]$NoBuild,
     [string]$Project,
+    [string]$EngineRoot,
     [int]$TimeoutMinutes = 0,
     [string]$File,
     [string[]]$Root,
@@ -110,15 +113,32 @@ function Find-ProjectAbove([string]$Path) {
 }
 
 function Resolve-EngineRoot([string]$UProject) {
-    $assoc = (Get-Content -LiteralPath $UProject -Raw | ConvertFrom-Json).EngineAssociation
-    $builds = Get-ItemProperty 'HKCU:\Software\Epic Games\Unreal Engine\Builds' -ErrorAction SilentlyContinue
-    $root = if ($builds) { $builds.$assoc } else { $null }
+    $assoc = (Get-Content -LiteralPath $UProject -Raw -Encoding UTF8 | ConvertFrom-Json).EngineAssociation
+    $root = $EngineRoot
     if (-not $root) {
-        # A launcher install of another project's engine.
-        $launcher = Get-ItemProperty "HKLM:\SOFTWARE\EpicGames\Unreal Engine\$assoc" -ErrorAction SilentlyContinue
-        if ($launcher) { $root = $launcher.InstalledDirectory }
+        $builds = Get-ItemProperty 'HKCU:\Software\Epic Games\Unreal Engine\Builds' -ErrorAction SilentlyContinue
+        $root = if ($builds) { $builds.$assoc } else { $null }
+        if (-not $root) {
+            # A launcher install of another project's engine.
+            $launcher = Get-ItemProperty "HKLM:\SOFTWARE\EpicGames\Unreal Engine\$assoc" -ErrorAction SilentlyContinue
+            if ($launcher) { $root = $launcher.InstalledDirectory }
+        }
+        if (-not $root) {
+            $manifest = Join-Path $env:ProgramData 'Epic\UnrealEngineLauncher\LauncherInstalled.dat'
+            if (Test-Path -LiteralPath $manifest) {
+                $installs = (Get-Content -LiteralPath $manifest -Raw -Encoding UTF8 | ConvertFrom-Json).InstallationList
+                $install = $installs | Where-Object { $_.AppName -eq "UE_$assoc" } | Select-Object -First 1
+                if ($install) { $root = $install.InstallLocation }
+            }
+        }
     }
     if (-not $root) { throw "Engine association $assoc is not registered." }
+    # Only what building needs: a source build gets its editor from the first `make`.
+    foreach ($required in @('Engine\Build\Build.version', 'Engine\Build\BatchFiles\Build.bat')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $root $required) -PathType Leaf)) {
+            throw "Engine $root is missing $required. Pass -EngineRoot to select a complete installation."
+        }
+    }
     return $root.Replace('/', '\')
 }
 

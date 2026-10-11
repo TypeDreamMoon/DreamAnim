@@ -156,6 +156,8 @@ Sources live in the project's `DAnim/` folder, or in `DAnim/` of an enabled plug
   to the current folder, or relative to the project. A `.dat` given as `-File` stands for the documents
   that include it.
 - `build` orders the sources: interfaces first, and every document after the DreamAnim assets it names.
+- The engine follows the project's `EngineAssociation`, using registered engines or Epic Launcher's
+  installation list. `-EngineRoot I:/UnrealEngine/UE_5.8` selects an explicit installation.
 - `#include` resolves against the including file's folder first, then the source roots.
 - Diagnostics print as `<file>(<line>,<col>): error DABnnnn: message`, with an indented `hint:` line when
   there is one. `-Json` writes them all as JSON. `-Out` and `-Json` are relative to the project.
