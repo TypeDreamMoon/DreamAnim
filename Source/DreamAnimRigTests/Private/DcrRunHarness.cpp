@@ -12,7 +12,13 @@ namespace UE::DreamAnim::Rig::Tests
 	FDcrRun RunDcrRig(const FDcrRig& Rig, int32 FrameCount, TFunctionRef<void(UControlRig&, int32)> Drive)
 	{
 		FDcrRun Run;
-		UControlRig* Instance = Rig.IsValid() ? Rig.ControlRig->CreateControlRig() : nullptr;
+		UControlRig* Instance = nullptr;
+		if (Rig.IsValid())
+		{
+			// A rig whose VM is out of date compiles before it is instantiated.
+			FDcrQuietCompileScope Quiet;
+			Instance = Rig.ControlRig->CreateControlRig();
+		}
 		if (!Instance)
 		{
 			Run.Error = TEXT("the rig could not be instantiated");

@@ -26,6 +26,7 @@ public class DreamAnimRigTests : ModuleRules
 			"DreamAnimLang",
 			"DreamAnimCompiler",
 			"DreamAnimRig",
+			"Projects",
 		});
 	}
 }
