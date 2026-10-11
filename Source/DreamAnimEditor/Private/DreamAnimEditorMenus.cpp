@@ -10,10 +10,12 @@
 #include "ContentBrowserModule.h"
 #include "DreamAnimEditorSubsystem.h"
 #include "DreamAnimSet.h"
+#include "Driver/DabDocumentHandler.h"
 #include "Driver/DabDriver.h"
 #include "Editor.h"
 #include "Logging/MessageLog.h"
 #include "IContentBrowserSingleton.h"
+#include "Misc/FileHelper.h"
 #include "Misc/MessageDialog.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
@@ -171,12 +173,158 @@ namespace DreamAnimEditorMenus
 		}
 	}
 
+	/**
+	 * Assets another kind of document is made from (Control Rigs, through the handler DreamAnimRig registers), as
+	 * text: each goes to its handler's default path; existing files are replaced only when the user says so.
+	 */
+	void DecompileWithHandlers(const TArray<FAssetData>& Assets)
+	{
+		using namespace UE::DreamAnim::Compiler;
+		UDreamAnimEditorSubsystem* Subsystem = GetSubsystem();
+		if (!Subsystem)
+		{
+			return;
+		}
+		struct FJob
+		{
+			UObject* Asset = nullptr;
+			IDabDocumentHandler* Handler = nullptr;
+			FString Path;
+		};
+		TArray<FJob> Jobs;
+		TArray<FString> Existing;
+		for (const FAssetData& Data : Assets)
+		{
+			UObject* Asset = Data.GetAsset();
+			IDabDocumentHandler* Handler = Asset ? FindDabDecompileHandler(*Asset) : nullptr;
+			if (Handler)
+			{
+				FJob& Job = Jobs.Add_GetRef({ Asset, Handler, Handler->GetDefaultDecompilePath(*Asset) });
+				if (FPaths::FileExists(Job.Path))
+				{
+					Existing.Add(Job.Path);
+				}
+			}
+		}
+		if (Jobs.IsEmpty())
+		{
+			return;
+		}
+		const bool bOverwrite = Existing.IsEmpty() || FMessageDialog::Open(EAppMsgType::YesNo,
+			FText::Format(LOCTEXT("ReplaceSources", "These files exist already:\n\n{0}\n\nReplace them?"), FText::FromString(FString::Join(Existing, TEXT("\n"))))) == EAppReturnType::Yes;
+		FString First;
+		for (const FJob& Job : Jobs)
+		{
+			if (!bOverwrite && FPaths::FileExists(Job.Path))
+			{
+				continue;
+			}
+			const FDabDecompileResult Result = Job.Handler->Decompile(*Job.Asset);
+			if (!Result.bSucceeded)
+			{
+				for (const UE::DreamAnim::Lang::FDabDiagnostic& Diagnostic : Result.Diagnostics)
+				{
+					FMessageLog(TEXT("DreamAnim")).Error(FText::FromString(FString::Printf(TEXT("%s: %s"), *Job.Asset->GetName(), *Diagnostic.Message)));
+				}
+				continue;
+			}
+			if (!FFileHelper::SaveStringToFile(Result.Text, *Job.Path, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+			{
+				FMessageLog(TEXT("DreamAnim")).Error(FText::Format(LOCTEXT("CannotWriteDecompiled", "Cannot write {0}."), FText::FromString(Job.Path)));
+				continue;
+			}
+			if (Result.NumUnsupported > 0)
+			{
+				FMessageLog(TEXT("DreamAnim")).Warning(FText::Format(LOCTEXT("DecompiledUnsupported", "{0}: {1} thing(s) the text cannot hold are listed at the top of {2}."),
+					FText::FromString(Job.Asset->GetName()), Result.NumUnsupported, FText::FromString(Job.Path)));
+			}
+			if (First.IsEmpty())
+			{
+				First = Job.Path;
+			}
+		}
+		Subsystem->RefreshSources();
+		if (!First.IsEmpty())
+		{
+			Subsystem->OpenSource(First);
+		}
+	}
+
+	/** On an asset a document handler takes: open its source or rebuild it when it has one, write it as text when not. */
+	void AddHandlerAssetActions(FToolMenuSection& Section)
+	{
+		const UContentBrowserAssetContextMenuContext* Context = Section.FindContext<UContentBrowserAssetContextMenuContext>();
+		const UDreamAnimEditorSubsystem* Subsystem = GetSubsystem();
+		if (!Context || !Subsystem)
+		{
+			return;
+		}
+		TArray<FAssetData> WithSource;
+		TArray<FAssetData> WithoutSource;
+		for (const FAssetData& Asset : Context->SelectedAssets)
+		{
+			(Subsystem->GetIndex().FindByAsset(Asset.GetObjectPathString()) ? WithSource : WithoutSource).Add(Asset);
+		}
+		if (!WithSource.IsEmpty())
+		{
+			Section.AddMenuEntry(TEXT("DreamAnim_OpenSource"), LOCTEXT("OpenSourceAsset", "Open DreamAnim Source"),
+				LOCTEXT("OpenSourceAssetTip", "Open the text the asset is made from."), FSlateIcon(),
+				FUIAction(FExecuteAction::CreateLambda([WithSource]()
+				{
+					if (UDreamAnimEditorSubsystem* Current = GetSubsystem())
+					{
+						for (const FAssetData& Asset : WithSource)
+						{
+							if (const UE::DreamAnim::Compiler::FDabSourceEntry* Entry = Current->GetIndex().FindByAsset(Asset.GetObjectPathString()))
+							{
+								Current->OpenSource(Entry->FilePath);
+							}
+						}
+					}
+				})));
+			Section.AddMenuEntry(TEXT("DreamAnim_Rebuild"), LOCTEXT("RebuildAsset", "Rebuild from DreamAnim Source"),
+				LOCTEXT("RebuildAssetTip", "Compile the text into the asset again; changes in the asset that are not in the text are dropped."), FSlateIcon(),
+				FUIAction(FExecuteAction::CreateLambda([WithSource]()
+				{
+					if (UDreamAnimEditorSubsystem* Current = GetSubsystem())
+					{
+						for (const FAssetData& Asset : WithSource)
+						{
+							if (const UE::DreamAnim::Compiler::FDabSourceEntry* Entry = Current->GetIndex().FindByAsset(Asset.GetObjectPathString()))
+							{
+								Current->Rebuild(Entry->FilePath);
+							}
+						}
+					}
+				})));
+		}
+		if (!WithoutSource.IsEmpty())
+		{
+			Section.AddMenuEntry(TEXT("DreamAnim_Decompile"), LOCTEXT("DecompileAsset", "Write as DreamAnim Text"),
+				LOCTEXT("DecompileAssetTip", "Write the asset as a DreamAnim source under the project's DAnim folder."), FSlateIcon(),
+				FUIAction(FExecuteAction::CreateLambda([WithoutSource]() { DecompileWithHandlers(WithoutSource); })));
+		}
+	}
+
 	void RegisterMenus()
 	{
 		if (UToolMenu* AssetMenu = UE::ContentBrowser::ExtendToolMenu_AssetContextMenu(UAnimBlueprint::StaticClass()))
 		{
 			FToolMenuSection& Section = AssetMenu->FindOrAddSection(TEXT("GetAssetActions"));
 			Section.AddDynamicEntry(TEXT("DreamAnim"), FNewToolMenuSectionDelegate::CreateStatic(&AddAssetActions));
+		}
+		for (UE::DreamAnim::Compiler::IDabDocumentHandler* Handler : UE::DreamAnim::Compiler::GetDabDocumentHandlers())
+		{
+			for (const FTopLevelAssetPath& ClassPath : Handler->GetDecompileClasses())
+			{
+				UClass* Class = FindObject<UClass>(ClassPath);
+				UToolMenu* AssetMenu = Class ? UE::ContentBrowser::ExtendToolMenu_AssetContextMenu(Class) : nullptr;
+				if (AssetMenu)
+				{
+					FToolMenuSection& Section = AssetMenu->FindOrAddSection(TEXT("GetAssetActions"));
+					Section.AddDynamicEntry(TEXT("DreamAnim"), FNewToolMenuSectionDelegate::CreateStatic(&AddHandlerAssetActions));
+				}
+			}
 		}
 
 		if (UToolMenu* Tools = UToolMenus::Get()->ExtendMenu(TEXT("LevelEditor.MainMenu.Tools")))

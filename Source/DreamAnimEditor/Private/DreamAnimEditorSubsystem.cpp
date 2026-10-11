@@ -332,12 +332,19 @@ UAnimBlueprint* UDreamAnimEditorSubsystem::RebuildSource(const FString& FilePath
 	const UDreamAnimEditorSettings* Settings = GetDefault<UDreamAnimEditorSettings>();
 	UAssetEditorSubsystem* AssetEditors = GEditor ? GEditor->GetEditorSubsystem<UAssetEditorSubsystem>() : nullptr;
 
-	// An open editor would hold graphs the rebuild replaces.
+	// An open editor would hold graphs the rebuild replaces. The asset is an Animation Blueprint, or what another
+	// kind of document builds (a Control Rig).
 	UAnimBlueprint* Existing = FindLoadedBlueprint(FilePath);
-	const bool bWasOpen = Existing && AssetEditors && AssetEditors->FindEditorForAsset(Existing, false) != nullptr;
+	UObject* ExistingAsset = Existing;
+	if (!ExistingAsset)
+	{
+		const FDabSourceEntry* Entry = Index.FindByFile(FilePath);
+		ExistingAsset = Entry && !Entry->AssetPath.IsEmpty() ? FindObject<UObject>(nullptr, *Entry->AssetPath) : nullptr;
+	}
+	const bool bWasOpen = ExistingAsset && AssetEditors && AssetEditors->FindEditorForAsset(ExistingAsset, false) != nullptr;
 	if (bWasOpen)
 	{
-		AssetEditors->CloseAllEditorsForAsset(Existing);
+		AssetEditors->CloseAllEditorsForAsset(ExistingAsset);
 	}
 
 	FDabCompileOptions Options;
@@ -355,21 +362,22 @@ UAnimBlueprint* UDreamAnimEditorSubsystem::RebuildSource(const FString& FilePath
 		LastRefusals.Remove(Blueprint);
 		CloseConflict(*Blueprint);
 	}
-	if (bWasOpen && Blueprint)
+	UObject* Built = Result.Asset ? Result.Asset : (Blueprint ? Blueprint : ExistingAsset);
+	if (bWasOpen && Built)
 	{
-		AssetEditors->OpenEditorForAsset(Blueprint);
+		AssetEditors->OpenEditorForAsset(Built);
 	}
 
 	Report(FString::Printf(TEXT("Rebuilding from %s"), *FPaths::GetCleanFilename(FilePath)), Result.Diagnostics);
 	if (bNotify)
 	{
-		if (Result.Succeeded() && Result.Blueprint)
+		if (Result.Succeeded() && Result.Asset)
 		{
-			Notify(FText::Format(LOCTEXT("Rebuilt", "Rebuilt {0} from {1}"), FText::FromString(Result.Blueprint->GetName()), FileText(FilePath)), true, false);
+			Notify(FText::Format(LOCTEXT("Rebuilt", "Rebuilt {0} from {1}"), FText::FromString(Result.Asset->GetName()), FileText(FilePath)), true, false);
 		}
 		else
 		{
-			Notify(FText::Format(LOCTEXT("RebuildFailed", "{0} has errors; its Blueprint was not rebuilt."), FileText(FilePath)), false, true);
+			Notify(FText::Format(LOCTEXT("RebuildFailed", "{0} has errors; its asset was not rebuilt."), FileText(FilePath)), false, true);
 		}
 	}
 	return Result.Succeeded() ? Result.Blueprint : nullptr;
