@@ -574,7 +574,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 				return MakeNameExpr(Name);
 			}
 		}
-		return MakeNumberExpr(static_cast<double>(Value));
+		return MakeDabInteger(Value);
 	}
 
 	/** Base struct's fields first, each struct's in declaration order: the order tuples print in. */
@@ -710,7 +710,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		{
 			const UEnum* Enum = EnumProperty->GetEnum();
 			const int64 EnumValue = EnumProperty->GetUnderlyingProperty()->GetSignedIntPropertyValue(Value);
-			return Enum ? MakeEnumNameExpr(*Enum, EnumValue) : MakeNumberExpr(static_cast<double>(EnumValue));
+			return Enum ? MakeEnumNameExpr(*Enum, EnumValue) : MakeDabInteger(EnumValue);
 		}
 		if (const FNumericProperty* Numeric = CastField<FNumericProperty>(&Property))
 		{
@@ -726,7 +726,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 			{
 				return MakeNumberExpr(Numeric->GetFloatingPointPropertyValue(Value));
 			}
-			return MakeNumberExpr(static_cast<double>(Numeric->GetSignedIntPropertyValue(Value)));
+			return MakeDabInteger(Numeric->GetSignedIntPropertyValue(Value));
 		}
 		if (const FNameProperty* Name = CastField<FNameProperty>(&Property))
 		{
@@ -1243,8 +1243,18 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 			const FDabLiteralExpr& Literal = static_cast<const FDabLiteralExpr&>(Expr);
 			if (Literal.LiteralKind == EDabLiteralKind::Number)
 			{
+				int64 Integer = 0;
+				if (TryGetDabInteger(Literal, Integer))
+				{
+					return MakeDabInteger(Integer);
+				}
 				double Value = 0.0;
 				ReadNumber(Literal, Value);
+				// Above 2^53 a double no longer holds every integer: keep the literal's own digits.
+				if (FMath::Abs(Value) >= 9007199254740992.0)
+				{
+					return CloneExpr(Literal);
+				}
 				return MakeNumberExpr(Value);
 			}
 			return CloneExpr(Literal);
@@ -1327,13 +1337,19 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		case EDabNodeKind::UnaryExpr:
 		{
 			const FDabUnaryExpr& Unary = static_cast<const FDabUnaryExpr&>(Expr);
+			int64 Integer = 0;
+			if (TryGetDabInteger(Unary, Integer))
+			{
+				return MakeDabInteger(Integer);
+			}
 			FDabExprPtr Operand = Unary.Operand ? Resolve(*Unary.Operand, Rules, bInGetter) : nullptr;
 			if (!Operand)
 			{
 				return nullptr;
 			}
 			double Value = 0.0;
-			if (Unary.Op == EDabUnaryOp::Negate && ReadNumber(*Operand, Value))
+			// Folding a negation through a double is exact only below 2^53; larger constants keep their digits.
+			if (Unary.Op == EDabUnaryOp::Negate && ReadNumber(*Operand, Value) && FMath::Abs(Value) < 9007199254740992.0)
 			{
 				return MakeNumberExpr(-Value);
 			}
@@ -1491,6 +1507,23 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		case ESemTypeKind::Float:
 		case ESemTypeKind::Double:
 		{
+			if (Type.Kind == ESemTypeKind::Integer)
+			{
+				int64 Integer = 0;
+				double Number = 0.0;
+				const bool bInteger = TryGetDabInteger(Expr, Integer);
+				if (!bInteger && (!ReadNumber(Expr, Number) || FMath::Frac(Number) != 0.0))
+				{
+					ReportTypeMismatch(Type, Expr, What, TEXT("an integer takes a whole number"));
+					return nullptr;
+				}
+				if (!bInteger || Integer < Type.MinInteger || Integer > Type.MaxInteger)
+				{
+					ReportTypeMismatch(Type, Expr, What, FString::Printf(TEXT("the value must lie in %lld..%lld"), Type.MinInteger, Type.MaxInteger));
+					return nullptr;
+				}
+				return MakeDabInteger(Integer);
+			}
 			double Value = 0.0;
 			if (!ReadNumber(Expr, Value))
 			{
@@ -1500,20 +1533,6 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 			if (Type.Kind == ESemTypeKind::Float)
 			{
 				return MakeNumberExpr(FloatToShortestDoubleValue(static_cast<float>(Value)));
-			}
-			if (Type.Kind == ESemTypeKind::Double)
-			{
-				return MakeNumberExpr(Value);
-			}
-			if (FMath::IsNaN(Value) || FMath::Abs(Value) >= 9.2e18 || static_cast<double>(static_cast<int64>(Value)) != Value)
-			{
-				ReportTypeMismatch(Type, Expr, What);
-				return nullptr;
-			}
-			if (static_cast<int64>(Value) < Type.MinInteger || static_cast<int64>(Value) > Type.MaxInteger)
-			{
-				ReportTypeMismatch(Type, Expr, What, FString::Printf(TEXT("the value must lie in %lld..%lld"), Type.MinInteger, Type.MaxInteger));
-				return nullptr;
 			}
 			return MakeNumberExpr(Value);
 		}
@@ -1697,6 +1716,11 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 	FDabExprPtr FSemantic::ConvertUntyped(const FDabExpr& InExpr)
 	{
 		const FDabExpr& Expr = SkipParens(InExpr);
+		int64 Integer = 0;
+		if (TryGetDabInteger(Expr, Integer))
+		{
+			return MakeDabInteger(Integer);
+		}
 		double Number = 0.0;
 		if (ReadNumber(Expr, Number))
 		{

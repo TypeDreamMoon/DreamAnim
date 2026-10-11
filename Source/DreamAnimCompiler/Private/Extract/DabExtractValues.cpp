@@ -80,7 +80,7 @@ namespace UE::DreamAnim::Compiler::ExtractPrivate
 					return MakeName(Name);
 				}
 			}
-			return MakeNumber(static_cast<double>(Value));
+			return MakeDabInteger(Value);
 		}
 
 		/** `Als.Gait.Walking` from `(TagName="Als.Gait.Walking")` or from the bare name. */
@@ -564,7 +564,7 @@ namespace UE::DreamAnim::Compiler::ExtractPrivate
 			{
 				return MakeNumber(Numeric->GetFloatingPointPropertyValue(Value));
 			}
-			return MakeNumber(static_cast<double>(Numeric->GetSignedIntPropertyValue(Value)));
+			return MakeDabInteger(Numeric->GetSignedIntPropertyValue(Value));
 		}
 		if (const FNameProperty* Name = CastField<FNameProperty>(&Property))
 		{
@@ -707,7 +707,7 @@ namespace UE::DreamAnim::Compiler::ExtractPrivate
 		}
 		if (Category == UEdGraphSchema_K2::PC_Int || Category == UEdGraphSchema_K2::PC_Int64)
 		{
-			return MakeNumber(FCString::Atod(*Pin.DefaultValue));
+			return MakeDabInteger(FCString::Atoi64(*Pin.DefaultValue));
 		}
 		if (Category == UEdGraphSchema_K2::PC_Real || Category == UEdGraphSchema_K2::PC_Float || Category == UEdGraphSchema_K2::PC_Double)
 		{
@@ -731,7 +731,7 @@ namespace UE::DreamAnim::Compiler::ExtractPrivate
 				}
 				return MakeName(Name);
 			}
-			return MakeNumber(FCString::Atod(*Pin.DefaultValue));
+			return MakeDabInteger(FCString::Atoi64(*Pin.DefaultValue));
 		}
 		if (Category == UEdGraphSchema_K2::PC_Name)
 		{

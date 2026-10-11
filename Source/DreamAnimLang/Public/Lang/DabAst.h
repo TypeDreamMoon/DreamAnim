@@ -469,6 +469,14 @@ namespace UE::DreamAnim::Lang
 	DREAMANIMLANG_API TUniquePtr<FDabMeta> CloneMeta(const FDabMeta& Meta);
 	DREAMANIMLANG_API FDabArgumentPtr CloneArgument(const FDabArgument& Argument);
 
+	/**
+	 * The whole number a constant spells (`-5`, `(3)`, `1e3`, `2.0`), read from the literal's digits so int64
+	 * values above 2^53 come out exact; false for a fraction, a value outside int64 or anything else.
+	 */
+	DREAMANIMLANG_API bool TryGetDabInteger(const FDabExpr& Expr, int64& OutValue);
+	/** An integer literal that keeps every digit of Value, under a unary minus when it is negative. */
+	DREAMANIMLANG_API FDabExprPtr MakeDabInteger(int64 Value);
+
 	/** Calls Visit on every direct child node, in source order. */
 	DREAMANIMLANG_API void ForEachChild(const FDabNode& Node, TFunctionRef<void(const FDabNode&)> Visit);
 

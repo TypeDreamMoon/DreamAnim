@@ -795,7 +795,13 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 			}
 			else
 			{
-				NumericProperty->SetIntPropertyValue(Value, static_cast<int64>(FMath::RoundToDouble(Number)));
+				int64 Integer = 0;
+				if (!TryGetDabInteger(Expr, Integer) || !NumericProperty->CanHoldValue(Integer))
+				{
+					OutError = TEXT("expects an integer within the property's range");
+					return false;
+				}
+				NumericProperty->SetIntPropertyValue(Value, Integer);
 			}
 			return true;
 		}
@@ -1085,12 +1091,15 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 		}
 		if (Category == UEdGraphSchema_K2::PC_Int || Category == UEdGraphSchema_K2::PC_Int64 || Category == UEdGraphSchema_K2::PC_Byte)
 		{
-			if (!bNumber)
+			int64 Integer = 0;
+			if (!TryGetDabInteger(Expr, Integer)
+				|| (Category == UEdGraphSchema_K2::PC_Int && (Integer < MIN_int32 || Integer > MAX_int32))
+				|| (Category == UEdGraphSchema_K2::PC_Byte && (Integer < 0 || Integer > MAX_uint8)))
 			{
-				OutError = TEXT("expects a number");
+				OutError = TEXT("expects an integer within the pin's range");
 				return false;
 			}
-			OutValue = FString::Printf(TEXT("%lld"), static_cast<int64>(FMath::RoundToDouble(Number)));
+			OutValue = FString::Printf(TEXT("%lld"), Integer);
 			return true;
 		}
 		if (Category == UEdGraphSchema_K2::PC_Real || Category == UEdGraphSchema_K2::PC_Float || Category == UEdGraphSchema_K2::PC_Double)
