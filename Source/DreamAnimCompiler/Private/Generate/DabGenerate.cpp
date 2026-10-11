@@ -469,7 +469,7 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 			}
 		}
 
-		if (Ctx.Model.AssetSlots.IsEmpty())
+		if (Ctx.Model.AssetSlots.IsEmpty() && Ctx.Model.DefaultAnimSet.IsEmpty())
 		{
 			return;
 		}
@@ -930,6 +930,13 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 				}
 			}
 			DabGenApplyObjectProperties(Ctx, Defaults, Model.ClassDefaults, TEXT("Defaults"));
+			if (!Model.DefaultAnimSet.IsEmpty())
+			{
+				if (const FObjectPropertyBase* Active = FindFProperty<FObjectPropertyBase>(Defaults->GetClass(), UDreamAnimLibrary::ActiveSetVariable))
+				{
+					Active->SetObjectPropertyValue_InContainer(Defaults, DabGenLoadObject(Model.DefaultAnimSet));
+				}
+			}
 		};
 		const bool bDefaultsFirst = Blueprint->GeneratedClass && (!ParentClass || Blueprint->GeneratedClass->IsChildOf(ParentClass));
 		if (bDefaultsFirst)

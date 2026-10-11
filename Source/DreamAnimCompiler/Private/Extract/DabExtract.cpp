@@ -74,6 +74,11 @@ namespace UE::DreamAnim::Compiler::ExtractPrivate
 				{
 					continue;
 				}
+				// An inherited animation set is the child's DefaultAnimSet setting, read with the variables.
+				if (Property->GetFName() == UDreamAnimLibrary::ActiveSetVariable || Property->GetFName() == UDreamAnimLibrary::PendingSetVariable)
+				{
+					continue;
+				}
 				const void* Value = Property->ContainerPtrToValuePtr<void>(Defaults);
 				const void* Default = Property->ContainerPtrToValuePtr<void>(ParentDefaults);
 				if (Property->Identical(Value, Default, 0))
@@ -170,18 +175,22 @@ namespace UE::DreamAnim::Compiler::ExtractPrivate
 			const UClass* DefaultsClass = Blueprint.GeneratedClass ? Blueprint.GeneratedClass.Get() : Blueprint.SkeletonGeneratedClass.Get();
 			const UObject* Defaults = DefaultsClass ? DefaultsClass->GetDefaultObject() : nullptr;
 			const FString DefaultCategory = UEdGraphSchema_K2::VR_DefaultCategory.ToString();
+			// A child can override the inherited active set without declaring a new variable. A set it only
+			// inherits belongs to its parent's text, not to its own.
+			const FObjectPropertyBase* SetProperty = DefaultsClass ? FindFProperty<FObjectPropertyBase>(DefaultsClass, UDreamAnimLibrary::ActiveSetVariable) : nullptr;
+			const UObject* DefaultSet = SetProperty && Defaults ? SetProperty->GetObjectPropertyValue_InContainer(Defaults) : nullptr;
+			const UClass* ParentClass = Blueprint.ParentClass;
+			const bool bInherited = SetProperty && ParentClass && ParentClass->IsChildOf(SetProperty->GetOwnerClass());
+			const UObject* ParentSet = bInherited ? SetProperty->GetObjectPropertyValue_InContainer(ParentClass->GetDefaultObject()) : nullptr;
+			if (DefaultSet && (!bInherited || DefaultSet != ParentSet))
+			{
+				Ctx.OutModel.DefaultAnimSet = DefaultSet->GetPathName();
+			}
 
 			for (const FBPVariableDescription& Description : Blueprint.NewVariables)
 			{
 				if (Description.VarName == UDreamAnimLibrary::ActiveSetVariable || Description.VarName == UDreamAnimLibrary::PendingSetVariable)
 				{
-					// The generator's animation set variables: the active one's default is the Blueprint's default set.
-					const FObjectPropertyBase* SetProperty = DefaultsClass ? FindFProperty<FObjectPropertyBase>(DefaultsClass, Description.VarName) : nullptr;
-					const UObject* DefaultSet = SetProperty && Defaults ? SetProperty->GetObjectPropertyValue_InContainer(Defaults) : nullptr;
-					if (Description.VarName == UDreamAnimLibrary::ActiveSetVariable && DefaultSet)
-					{
-						Ctx.OutModel.DefaultAnimSet = DefaultSet->GetPathName();
-					}
 					continue;
 				}
 				Model::FDabModelVariable Variable;
