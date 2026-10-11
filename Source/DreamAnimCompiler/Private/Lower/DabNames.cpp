@@ -171,18 +171,36 @@ namespace UE::DreamAnim::Compiler::LowerNamesPrivate
 
 		// Every state name of every machine, for the getters; per-machine scopes below keep names distinct.
 		FScope AllStates;
+		TSet<FString> AmbiguousStates;
+		TMap<FString, FScope> StateScopes;
+		const auto RegisterGlobalState = [&AllStates, &AmbiguousStates](const FString& Name, const FString& NewName)
+		{
+			if (AmbiguousStates.Contains(Name))
+			{
+				return;
+			}
+			if (AllStates.Renames.Contains(Name))
+			{
+				AllStates.Renames.Remove(Name);
+				AmbiguousStates.Add(Name);
+			}
+			else
+			{
+				AllStates.Renames.Add(Name, NewName);
+			}
+		};
 		for (FDabModelStateMachine& Machine : Model.StateMachines)
 		{
 			FScope MachineStates;
 			for (FDabModelState& State : Machine.States)
 			{
 				const FString NewName = MachineStates.Get(State.Name);
-				AllStates.Renames.Add(State.Name, NewName);
+				RegisterGlobalState(State.Name, NewName);
 			}
 			for (FDabModelConduit& Conduit : Machine.Conduits)
 			{
 				const FString NewName = MachineStates.Get(Conduit.Name);
-				AllStates.Renames.Add(Conduit.Name, NewName);
+				RegisterGlobalState(Conduit.Name, NewName);
 			}
 			for (FDabModelAlias& Alias : Machine.Aliases)
 			{
@@ -190,6 +208,7 @@ namespace UE::DreamAnim::Compiler::LowerNamesPrivate
 			}
 
 			Machine.Name = Machines.Lookup(Machine.Name);
+			StateScopes.Add(Machine.Name, MachineStates);
 			Machine.Entry = MachineStates.Lookup(Machine.Entry);
 			for (FDabModelState& State : Machine.States)
 			{
@@ -236,17 +255,19 @@ namespace UE::DreamAnim::Compiler::LowerNamesPrivate
 		}
 		for (FDabModelStateMachine& Machine : Model.StateMachines)
 		{
+			FScope States = AllStates;
+			States.Renames.Append(StateScopes.FindChecked(Machine.Name).Renames);
 			for (FDabModelState& State : Machine.States)
 			{
-				RenameGraph(State.Graph, Caches, Machines, AllStates, Layers);
+				RenameGraph(State.Graph, Caches, Machines, States, Layers);
 			}
 			for (FDabModelConduit& Conduit : Machine.Conduits)
 			{
-				RenameGetterArguments(Conduit.Condition.Get(), AllStates, Machines);
+				RenameGetterArguments(Conduit.Condition.Get(), States, Machines);
 			}
 			for (FDabModelTransition& Transition : Machine.Transitions)
 			{
-				RenameGetterArguments(Transition.Condition.Get(), AllStates, Machines);
+				RenameGetterArguments(Transition.Condition.Get(), States, Machines);
 			}
 		}
 
