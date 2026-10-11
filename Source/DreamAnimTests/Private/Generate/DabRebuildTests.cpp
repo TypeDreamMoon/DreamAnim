@@ -88,6 +88,48 @@ bool FDabRebuildFailureKeepsAssetTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDabRebuildRemovedDefaultsTest, "DreamAnim.Generate.RemovedDefaults",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+/**
+ * A setting, a class default, a tuning value's default and a DefaultAnimSet removed from the text go back
+ * to their defaults on the next build: the result depends on the text, not on what was built before.
+ */
+bool FDabRebuildRemovedDefaultsTest::RunTest(const FString& Parameters)
+{
+	using namespace UE::DreamAnim::Tests::RebuildPrivate;
+
+	UDreamAnimSet* Set = NewObject<UDreamAnimSet>(CreatePackage(TEXT("/Game/DreamAnimTests/Rebuild/DAS_Removed")), TEXT("DAS_Removed"), RF_Public | RF_Standalone);
+	UAnimBlueprint* Blueprint = Build(*this, MakeSource(TEXT("AB_Defaults"),
+		TEXT("Parent = AnimInstance; bEnableLinkedAnimLayerInstanceSharing = true; DefaultAnimSet = Path(Game, \"DreamAnimTests/Rebuild/DAS_Removed\");"),
+		TEXT("Defaults = { RootMotionMode = IgnoreRootMotion; } Properties = { float Speed = 3; } Assets = { AnimSequence Pose; } Graph = { Output = LocalRefPose(); }")));
+	if (!TestNotNull(TEXT("the first build"), Blueprint))
+	{
+		return false;
+	}
+	// A Blueprint float is a double.
+	const FDoubleProperty* Speed = FindFProperty<FDoubleProperty>(Blueprint->GeneratedClass, TEXT("Speed"));
+	TestTrue(TEXT("the setting is applied"), Blueprint->bEnableLinkedAnimLayerInstanceSharing);
+	TestEqual(TEXT("the class default is applied"), CastChecked<UAnimInstance>(GetDefaults(*Blueprint))->RootMotionMode.GetValue(), ERootMotionMode::IgnoreRootMotion);
+	TestTrue(TEXT("the tuning value has its default"), Speed && Speed->GetPropertyValue_InContainer(GetDefaults(*Blueprint)) == 3.0);
+	TestTrue(TEXT("the set is the default"), UDreamAnimLibrary::GetAnimSet(CastChecked<UAnimInstance>(GetDefaults(*Blueprint))) == Set);
+
+	UAnimBlueprint* Rebuilt = Build(*this, MakeSource(TEXT("AB_Defaults"), TEXT("Parent = AnimInstance;"),
+		TEXT("Properties = { float Speed; } Assets = { AnimSequence Pose; } Graph = { Output = LocalRefPose(); }")));
+	if (!TestNotNull(TEXT("the rebuild"), Rebuilt))
+	{
+		return false;
+	}
+	Speed = FindFProperty<FDoubleProperty>(Rebuilt->GeneratedClass, TEXT("Speed"));
+	TestTrue(TEXT("the asset is the same object"), Rebuilt == Blueprint);
+	TestFalse(TEXT("a removed setting returns to its default"), Rebuilt->bEnableLinkedAnimLayerInstanceSharing);
+	TestEqual(TEXT("a removed class default returns to the parent's"), CastChecked<UAnimInstance>(GetDefaults(*Rebuilt))->RootMotionMode.GetValue(),
+		GetDefault<UAnimInstance>()->RootMotionMode.GetValue());
+	TestTrue(TEXT("a removed tuning value default returns to zero"), Speed && Speed->GetPropertyValue_InContainer(GetDefaults(*Rebuilt)) == 0.0);
+	TestNull(TEXT("a removed DefaultAnimSet leaves no set"), UDreamAnimLibrary::GetAnimSet(CastChecked<UAnimInstance>(GetDefaults(*Rebuilt))));
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDabRebuildForwarderArgumentTest, "DreamAnim.Generate.ForwarderPropertyArgument",
 	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
 

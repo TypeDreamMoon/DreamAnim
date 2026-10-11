@@ -801,6 +801,17 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 		DabGenClearBlueprint(Blueprint);
 
 		FDabGenContext Ctx(Model, Sink, Blueprint);
+		// Rebuilding means the settings currently in the source, including settings removed since the last build.
+		for (TFieldIterator<FProperty> It(UAnimBlueprint::StaticClass(), EFieldIteratorFlags::ExcludeSuper); It; ++It)
+		{
+			const FProperty* Property = *It;
+			if (Property->HasAnyPropertyFlags(CPF_Edit) && Property->GetFName() != TEXT("TargetSkeleton")
+				&& !Property->HasAnyPropertyFlags(CPF_Transient | CPF_Deprecated))
+			{
+				Property->CopyCompleteValue_InContainer(Blueprint, GetDefault<UAnimBlueprint>());
+			}
+		}
+		Blueprint->bIsTemplate = bBlueprint && Skeleton == nullptr;
 		DabGenApplyObjectProperties(Ctx, Blueprint, Model.ClassSettings, TEXT("Settings"));
 		if (bBlueprint)
 		{
@@ -889,15 +900,46 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 		Result.Blueprint = Blueprint;
 		// Class defaults go on the current class's default object before the compile: the compile carries them
 		// to the new one and, only then, lists them among the values new instances copy from it.
-		const bool bDefaultsFirst = Blueprint->GeneratedClass != nullptr;
-		if (bDefaultsFirst && !Model.ClassDefaults.IsEmpty())
+		const auto ApplyDefaults = [&Ctx, Blueprint, ParentClass, &Model]()
 		{
-			DabGenApplyObjectProperties(Ctx, Blueprint->GeneratedClass->GetDefaultObject(), Model.ClassDefaults, TEXT("Defaults"));
+			UObject* Defaults = Blueprint->GeneratedClass->GetDefaultObject();
+			const UObject* ParentDefaults = ParentClass ? ParentClass->GetDefaultObject() : nullptr;
+			if (ParentDefaults)
+			{
+				for (TFieldIterator<FProperty> It(ParentClass); It; ++It)
+				{
+					const FProperty* Property = *It;
+					// An instanced subobject is the parent's own: copying the pointer would share it, so it stays.
+					if (Property->HasAnyPropertyFlags(CPF_Edit)
+						&& !Property->HasAnyPropertyFlags(CPF_Transient | CPF_Deprecated | CPF_DisableEditOnTemplate
+							| CPF_InstancedReference | CPF_ContainsInstancedReference)
+						&& Property->GetOwnerClass() != UObject::StaticClass())
+					{
+						Property->CopyCompleteValue_InContainer(Defaults, ParentDefaults);
+					}
+				}
+			}
+			// A variable whose default the text no longer gives gets its type's zero value; the compile would
+			// otherwise carry the previous class's value over by name.
+			for (const FBPVariableDescription& Variable : Blueprint->NewVariables)
+			{
+				const FProperty* Property = Variable.DefaultValue.IsEmpty() ? FindFProperty<FProperty>(Defaults->GetClass(), Variable.VarName) : nullptr;
+				if (Property)
+				{
+					Property->ClearValue_InContainer(Defaults);
+				}
+			}
+			DabGenApplyObjectProperties(Ctx, Defaults, Model.ClassDefaults, TEXT("Defaults"));
+		};
+		const bool bDefaultsFirst = Blueprint->GeneratedClass && (!ParentClass || Blueprint->GeneratedClass->IsChildOf(ParentClass));
+		if (bDefaultsFirst)
+		{
+			ApplyDefaults();
 		}
 		DabGenCompile(Blueprint, Ctx.GuidPlaces, Result);
-		if (!bDefaultsFirst && Blueprint->GeneratedClass && !Model.ClassDefaults.IsEmpty())
+		if (!bDefaultsFirst && Blueprint->GeneratedClass)
 		{
-			DabGenApplyObjectProperties(Ctx, Blueprint->GeneratedClass->GetDefaultObject(), Model.ClassDefaults, TEXT("Defaults"));
+			ApplyDefaults();
 			Result.CompilerErrors.Reset();
 			Result.CompilerWarnings.Reset();
 			Result.CompilerErrorOrigins.Reset();
