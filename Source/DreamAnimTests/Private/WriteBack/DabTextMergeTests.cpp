@@ -44,6 +44,13 @@ namespace UE::DreamAnim::Tests::TextMergeTests
 			TestEqualSensitive(TEXT("theirs"), Conflicts[0].Theirs, FString(TEXT("    Two = 22;")));
 		}
 
+		TestFalse(TEXT("case-distinct replacements conflict"), MergeDabTexts(TEXT("Label = idle;\n"),
+			TEXT("Label = Walk;\n"), TEXT("Label = walk;\n"), Merged, Conflicts));
+		TestEqual(TEXT("case conflict is reported"), Conflicts.Num(), 1);
+		TestTrue(TEXT("identical case-only edits merge"), MergeDabTexts(TEXT("Label = Walk;\n"),
+			TEXT("Label = walk;\n"), TEXT("Label = walk;\n"), Merged, Conflicts));
+		TestEqualSensitive(TEXT("case-only edit survives"), Merged, FString(TEXT("Label = walk;\n")));
+
 		// Neighbouring lines are not taken apart.
 		TestFalse(TEXT("neighbouring lines conflict"), MergeDabTexts(Base,
 			TEXT("A {\n    One = 11;\n    Two = 2;\n\n    Three = 3;\n    Four = 4;\n}\n"),

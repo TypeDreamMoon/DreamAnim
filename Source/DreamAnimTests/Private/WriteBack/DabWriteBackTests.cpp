@@ -27,6 +27,7 @@
 #include "Misc/AutomationTest.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "UObject/UnrealType.h"
 #include "WriteBack/DabWriteBack.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -35,6 +36,42 @@ namespace UE::DreamAnim::Tests::WriteBackTests
 {
 	using namespace UE::DreamAnim::Lang;
 	using namespace UE::DreamAnim::Compiler;
+
+	IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDabWriteBackStringCaseTest, "DreamAnim.WriteBack.StringCase",
+		EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+	bool FDabWriteBackStringCaseTest::RunTest(const FString& Parameters)
+	{
+		const FString Source = TEXT("AnimBlueprint(Name=\"DreamAnimTests/WriteBack/AB_StringCase\") { "
+			"Settings = { Parent = AnimInstance; Skeleton = SK_Als; } "
+			"Defaults = { RootMotionMode = ignorerootmotion; } "
+			"Properties = { FString Label = \"Walk\"; } Graph = { Output = LocalRefPose(); } }");
+		FDabCompileOptions Options;
+		Options.bSave = false;
+		const FDabCompileResult Built = CompileDabText(TEXT("StringCase.dab"), Source, Options);
+		if (!TestTrue(TEXT("the source builds"), Built.Succeeded()) || !Built.Blueprint)
+		{
+			return false;
+		}
+
+		// A name the checker reads without regard to case (an enum value here) is not an edit.
+		const FDabWriteBackResult Unchanged = WriteBackDabBlueprint(*Built.Blueprint, TEXT("StringCase.dab"), Source);
+		TestTrue(TEXT("a name spelt in another case is a fixed point"), Unchanged.IsComplete());
+		TestFalse(TEXT("with no edits"), Unchanged.HasEdits());
+
+		// A string is compared as written: changing only its case is an edit.
+		FStrProperty* Label = FindFProperty<FStrProperty>(Built.Blueprint->GeneratedClass, TEXT("Label"));
+		if (!TestNotNull(TEXT("the string property"), Label))
+		{
+			return false;
+		}
+		Label->SetPropertyValue_InContainer(Built.Blueprint->GeneratedClass->GetDefaultObject(), TEXT("walk"));
+		const FDabWriteBackResult Written = WriteBackDabBlueprint(*Built.Blueprint, TEXT("StringCase.dab"), Source);
+		TestTrue(TEXT("the case-only edit is written completely"), Written.IsComplete());
+		TestTrue(TEXT("as an edit"), Written.HasEdits());
+		TestEqualSensitive(TEXT("only the string changes"), Written.Text, Source.Replace(TEXT("\"Walk\""), TEXT("\"walk\"")));
+		return true;
+	}
 
 	const TCHAR* const BaseText = TEXT(
 		"AnimBlueprint(Name=\"DreamAnimTests/WriteBack/AB_WriteBack\", Root=\"Game\")\n"

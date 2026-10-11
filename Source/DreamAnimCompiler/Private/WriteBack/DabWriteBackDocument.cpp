@@ -62,7 +62,7 @@ namespace UE::DreamAnim::Compiler::WriteBackPrivate
 		}
 		*SlotA = nullptr;
 		*SlotB = nullptr;
-		return PrintDabStmt(*CopyA) == PrintDabStmt(*CopyB);
+		return PrintDabStmt(*CopyA).Equals(PrintDabStmt(*CopyB), ESearchCase::CaseSensitive);
 	}
 
 	void FWriteBack::RewriteSection(const FString& Section, const TArray<FSectionEntry>& Before, const TArray<FSectionEntry>& After,
@@ -79,7 +79,7 @@ namespace UE::DreamAnim::Compiler::WriteBackPrivate
 		{
 			Wanted.Add(Entry.Name);
 			const FSectionEntry* const* Found = Old.Find(Entry.Name);
-			if (!Found || (*Found)->Printed != Entry.Printed)
+			if (!Found || !(*Found)->Printed.Equals(Entry.Printed, ESearchCase::CaseSensitive))
 			{
 				Changed.Add(Entry.Name);
 			}
@@ -303,7 +303,7 @@ namespace UE::DreamAnim::Compiler::WriteBackPrivate
 				Refuse(TEXT("DAB8008"), FDabSpan(), FString::Printf(TEXT("Layer %s is gone from the Blueprint; layers come from the interfaces, which are only changed in the text."), *Layer.Name));
 				continue;
 			}
-			if (PrintMeta(Layer.Graph.ResultProperties) == PrintMeta(EditedLayer->Graph.ResultProperties))
+			if (PrintMeta(Layer.Graph.ResultProperties).Equals(PrintMeta(EditedLayer->Graph.ResultProperties), ESearchCase::CaseSensitive))
 			{
 				continue;
 			}

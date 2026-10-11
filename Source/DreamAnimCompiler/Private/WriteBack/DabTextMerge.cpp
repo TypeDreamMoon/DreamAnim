@@ -85,7 +85,18 @@ namespace UE::DreamAnim::Compiler::MergePrivate
 
 	bool SameMergeHunk(const FMergeHunk& X, const FMergeHunk& Y)
 	{
-		return X.BaseStart == Y.BaseStart && X.BaseEnd == Y.BaseEnd && X.Lines == Y.Lines;
+		if (X.BaseStart != Y.BaseStart || X.BaseEnd != Y.BaseEnd || X.Lines.Num() != Y.Lines.Num())
+		{
+			return false;
+		}
+		for (int32 Index = 0; Index < X.Lines.Num(); ++Index)
+		{
+			if (!X.Lines[Index].Equals(Y.Lines[Index], ESearchCase::CaseSensitive))
+			{
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/** Overlapping or next to each other: two edits there cannot both be taken safely. */

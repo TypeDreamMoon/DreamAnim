@@ -118,7 +118,7 @@ namespace UE::DreamAnim::Compiler::WriteBackPrivate
 		{
 			const FString Left = E.IsValidIndex(Index) ? E[Index].TrimStartAndEnd() : FString(TEXT("<end>"));
 			const FString Right = A.IsValidIndex(Index) ? A[Index].TrimStartAndEnd() : FString(TEXT("<end>"));
-			if (Left != Right)
+			if (!Left.Equals(Right, ESearchCase::CaseSensitive))
 			{
 				return FString::Printf(TEXT("the text gives `%s` where the Blueprint has `%s`"), *Left, *Right);
 			}
@@ -185,7 +185,7 @@ namespace UE::DreamAnim::Compiler::WriteBackPrivate
 		Result.bCompared = true;
 		const FString Before = DumpDabModel(Model);
 		const FString Wanted = DumpDabModel(WriteBack.Edited);
-		if (Before == Wanted)
+		if (Before.Equals(Wanted, ESearchCase::CaseSensitive))
 		{
 			Result.bFixedPoint = true;
 			return Result;
@@ -230,7 +230,7 @@ namespace UE::DreamAnim::Compiler::WriteBackPrivate
 			return Result;
 		}
 		const FString After = DumpDabModel(Checked.Model);
-		Result.bFixedPoint = After == Wanted;
+		Result.bFixedPoint = After.Equals(Wanted, ESearchCase::CaseSensitive);
 		if (!Result.bFixedPoint)
 		{
 			WriteBack.Refuse(TEXT("DAB8005"), FDabSpan(), FString::Printf(TEXT("The text still differs from the Blueprint: %s."), *FirstDumpDifference(After, Wanted)),

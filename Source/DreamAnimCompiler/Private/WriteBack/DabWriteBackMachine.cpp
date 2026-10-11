@@ -147,10 +147,10 @@ namespace UE::DreamAnim::Compiler::WriteBackPrivate
 
 	bool FWriteBack::StateSettingsDiffer(const FDabModelState& TextState, const FDabModelState& EditedState) const
 	{
-		return PrintMeta(TextState.Properties) != PrintMeta(EditedState.Properties)
-			|| PrintCall(TextState.OnEnter) != PrintCall(EditedState.OnEnter)
-			|| PrintCall(TextState.OnExit) != PrintCall(EditedState.OnExit)
-			|| PrintCall(TextState.OnBlended) != PrintCall(EditedState.OnBlended);
+		return !PrintMeta(TextState.Properties).Equals(PrintMeta(EditedState.Properties), ESearchCase::CaseSensitive)
+			|| !PrintCall(TextState.OnEnter).Equals(PrintCall(EditedState.OnEnter), ESearchCase::CaseSensitive)
+			|| !PrintCall(TextState.OnExit).Equals(PrintCall(EditedState.OnExit), ESearchCase::CaseSensitive)
+			|| !PrintCall(TextState.OnBlended).Equals(PrintCall(EditedState.OnBlended), ESearchCase::CaseSensitive);
 	}
 
 	void FWriteBack::WriteStateSettings(FDabNamedBlockStmt& Fresh, const FDabModelState& EditedState)
@@ -236,7 +236,7 @@ namespace UE::DreamAnim::Compiler::WriteBackPrivate
 				const FString Printed = Print(Condition.Get());
 				return Printed.IsEmpty() ? FString(TEXT("true")) : Printed;
 			};
-			if (!EditedConduit || ConditionText(TextConduit.Condition) == ConditionText(EditedConduit->Condition))
+			if (!EditedConduit || ConditionText(TextConduit.Condition).Equals(ConditionText(EditedConduit->Condition), ESearchCase::CaseSensitive))
 			{
 				continue;
 			}
@@ -278,7 +278,7 @@ namespace UE::DreamAnim::Compiler::WriteBackPrivate
 			{
 				const FDabExprPtr OldRule = LowerDabValue(Compiled.Model, *TextTransition.Condition, LowerOptions);
 				const FDabExprPtr NewRule = (*EditedTransition)->Condition ? LowerDabValue(Edited, *(*EditedTransition)->Condition, LowerOptions) : nullptr;
-				if (NewRule && Print(OldRule.Get()) != Print(NewRule.Get()))
+				if (NewRule && !Print(OldRule.Get()).Equals(Print(NewRule.Get()), ESearchCase::CaseSensitive))
 				{
 					RulesWritten.Add(TextTransition.SharedRuleName);
 					const FDabAssignStmt* const* Rule = Provenance.Rules.Find(TextMachine.Name + TEXT("/") + TextTransition.SharedRuleName);
@@ -297,7 +297,7 @@ namespace UE::DreamAnim::Compiler::WriteBackPrivate
 
 			const TUniquePtr<FDabTransitionStmt> OldRow = LowerDabTransition(Compiled.Model, TextTransition, LowerOptions);
 			const TUniquePtr<FDabTransitionStmt> NewRow = LowerDabTransition(Edited, **EditedTransition, LowerOptions);
-			if (PrintDabStmt(*OldRow) == PrintDabStmt(*NewRow))
+			if (PrintDabStmt(*OldRow).Equals(PrintDabStmt(*NewRow), ESearchCase::CaseSensitive))
 			{
 				continue;
 			}
@@ -310,14 +310,14 @@ namespace UE::DreamAnim::Compiler::WriteBackPrivate
 				continue;
 			}
 			TArray<FString> What;
-			if (Print(OldRow->Condition.Get()) != Print(NewRow->Condition.Get()))
+			if (!Print(OldRow->Condition.Get()).Equals(Print(NewRow->Condition.Get()), ESearchCase::CaseSensitive))
 			{
 				// The row keeps what it wrote unless the condition itself changed (rule names inside it go then).
 				GraveyardExprs.Add(MoveTemp(Row->Condition));
 				Row->Condition = MoveTemp(NewRow->Condition);
 				What.Add(TEXT("condition"));
 			}
-			if (PrintRowOptions(OldRow->Meta.Get()) != PrintRowOptions(NewRow->Meta.Get()))
+			if (!PrintRowOptions(OldRow->Meta.Get()).Equals(PrintRowOptions(NewRow->Meta.Get()), ESearchCase::CaseSensitive))
 			{
 				Row->Meta = MoveTemp(NewRow->Meta);
 				What.Add(TEXT("options"));
@@ -326,7 +326,7 @@ namespace UE::DreamAnim::Compiler::WriteBackPrivate
 			Change(RowLocation, FString::Join(What, TEXT(", ")), true);
 		}
 
-		if (PrintMeta(TextMachine.Properties) != PrintMeta(EditedMachine.Properties))
+		if (!PrintMeta(TextMachine.Properties).Equals(PrintMeta(EditedMachine.Properties), ESearchCase::CaseSensitive))
 		{
 			Fresh.Meta = LowerDabMeta(Edited, EditedMachine.Properties, LowerOptions);
 			Text->ReprintStmt(Fresh.Span, Fresh);

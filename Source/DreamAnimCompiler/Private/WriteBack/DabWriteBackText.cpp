@@ -59,7 +59,7 @@ namespace UE::DreamAnim::Compiler::WriteBackPrivate
 		}
 		// A template body's copy carries the template call's span; only real text prints the same.
 		if (Compiled.Kind <= EDabNodeKind::ParenExpr
-			&& PrintDabExpr(static_cast<const FDabExpr&>(*Found)) != PrintDabExpr(static_cast<const FDabExpr&>(Compiled)))
+			&& !PrintDabExpr(static_cast<const FDabExpr&>(*Found)).Equals(PrintDabExpr(static_cast<const FDabExpr&>(Compiled)), ESearchCase::CaseSensitive))
 		{
 			return nullptr;
 		}

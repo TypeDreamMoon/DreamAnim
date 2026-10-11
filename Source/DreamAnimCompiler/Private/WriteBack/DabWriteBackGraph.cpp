@@ -219,7 +219,7 @@ namespace UE::DreamAnim::Compiler::WriteBackPrivate
 		}
 		TextFunctions.Sort();
 		EditedFunctions.Sort();
-		if (TextFunctions != EditedFunctions)
+		if (!FString::Join(TextFunctions, TEXT("\n")).Equals(FString::Join(EditedFunctions, TEXT("\n")), ESearchCase::CaseSensitive))
 		{
 			const FDabAssignStmt* const* Named = Provenance.NamedPoses.Find(GraphPath + TEXT("/") + TextNode.Id);
 			FDabAssignStmt* Fresh = Named ? static_cast<FDabAssignStmt*>(Text->FindSame(**Named)) : nullptr;
@@ -271,7 +271,7 @@ namespace UE::DreamAnim::Compiler::WriteBackPrivate
 		const FDabExprPtr NewLowered = LowerDabNodeCall(Edited, EditedGraph, EditedNode, Origin->FedPin, LowerOptions);
 		const FDabCallExpr* OldCall = OldLowered ? OldLowered->As<FDabCallExpr>() : nullptr;
 		const FDabCallExpr* NewCall = NewLowered ? NewLowered->As<FDabCallExpr>() : nullptr;
-		if (!OldCall || !NewCall || PrintDabExpr(*OldCall) == PrintDabExpr(*NewCall))
+		if (!OldCall || !NewCall || PrintDabExpr(*OldCall).Equals(PrintDabExpr(*NewCall), ESearchCase::CaseSensitive))
 		{
 			return;
 		}
@@ -288,7 +288,7 @@ namespace UE::DreamAnim::Compiler::WriteBackPrivate
 			{
 				Added.Add(New.Key);
 			}
-			else if (PrintDabExpr(*Old->Value) != PrintDabExpr(*New.Value->Value))
+			else if (!PrintDabExpr(*Old->Value).Equals(PrintDabExpr(*New.Value->Value), ESearchCase::CaseSensitive))
 			{
 				Changed.Add(New.Key);
 			}
@@ -414,7 +414,7 @@ namespace UE::DreamAnim::Compiler::WriteBackPrivate
 			FDabArgument* Kept = FindKey(FreshArgs, New.Key);
 			const FDabArgument* Old = FindKey(OldArgs, New.Key);
 			const bool bPose = ContainsPoseMarker(New.Value->Value.Get());
-			const bool bSame = Old && PrintDabExpr(*Old->Value) == PrintDabExpr(*New.Value->Value);
+			const bool bSame = Old && PrintDabExpr(*Old->Value).Equals(PrintDabExpr(*New.Value->Value), ESearchCase::CaseSensitive);
 			if (Kept && (bPose || bSame))
 			{
 				const int32 Index = Fresh->Args.IndexOfByPredicate([Kept](const FDabArgumentPtr& Candidate) { return Candidate.Get() == Kept; });
