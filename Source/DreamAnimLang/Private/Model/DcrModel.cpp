@@ -17,6 +17,7 @@ namespace UE::DreamAnim::Model
 		case EDcrNodeKind::Collapse: return TEXT("Collapse");
 		case EDcrNodeKind::Entry: return TEXT("Entry");
 		case EDcrNodeKind::Return: return TEXT("Return");
+		case EDcrNodeKind::InvokeEntry: return TEXT("InvokeEntry");
 		case EDcrNodeKind::Comment: return TEXT("Comment");
 		case EDcrNodeKind::Reroute: return TEXT("Reroute");
 		case EDcrNodeKind::Unknown: return TEXT("Unknown");

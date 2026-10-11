@@ -59,6 +59,8 @@ namespace UE::DreamAnim::Model
 		/** The entry and the return of a function's or a collapse node's graph. */
 		Entry,
 		Return,
+		/** Runs another event of the rig where it stands on the chain (the editor's Run Event); Function is the event's name. */
+		InvokeEntry,
 		Comment,
 		/** A free reroute. Normalization folds these into direct links. */
 		Reroute,
@@ -106,7 +108,10 @@ namespace UE::DreamAnim::Model
 		FString Variable;
 		FDcrType VariableType;
 		bool bLocalVariable = false;
-		/** LocalCall / ExternalCall: the function's name. ExternalCall also: the asset holding it, by object path. */
+		/**
+		 * LocalCall / ExternalCall: the function's name. ExternalCall also: the asset holding it, by object path.
+		 * InvokeEntry: the name of the event it runs (`Backwards Solve`).
+		 */
 		FString Function;
 		FString FunctionHost;
 		/** Collapse: the subgraph (with its Entry and Return). */
