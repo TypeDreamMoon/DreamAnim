@@ -49,6 +49,7 @@ several errors, fix the first one and check again.
 | [DAB6xxx](#dab6xxx-structure) | the checker: graphs, poses, state machines, sections |
 | [DAB7xxx](#dab7xxx-generator) | the generator, while it writes the Blueprint, and the Blueprint compiler (DAB7100, DAB7101) |
 | [DAB8xxx](#dab8xxx-decompiling-and-write-back) | write-back (DAB80xx) and the decompiler (DAB81xx) |
+| [DAB9xxx](#dab9xxx-control-rig) | the checker for `ControlRig` documents (`.dcr`): names, types, statements, the hierarchy, functions |
 
 Language rules are in [Language.md](Language.md).
 
@@ -252,3 +253,27 @@ conflicts and node positions.
 | DAB8009 | warning | Writing the changes produced text that does not check. Nothing was written. The message quotes the error. | Make the change in the text. |
 
 DAB8007 is in the range but not raised by the current source.
+
+## DAB9xxx: Control Rig
+
+The checker for `ControlRig` documents. The lexer, parser, template and `#include` codes above apply to a `.dcr`
+file as they do to a `.dab`; the checks that know the engine's Control Rig are these. Two codes of the `.dab`
+checker are used the same way: DAB6008 (a name declared twice: a variable, a function, a section) and DAB6011 (a
+statement or section that does not belong where it is written), and DAB3006 for a header `Root` that is not
+`Game`, `Engine` or `Plugin.<Name>`. The language is described in [ControlRig.md](ControlRig.md).
+
+| Code | Severity | Meaning | How to fix |
+|---|---|---|---|
+| DAB9001 | error | A name finds nothing: a unit, dispatch, template or function; a variable, parameter or let; a type; an input or output pin the node does not have; an output a call does not give; a setting, a metadata key, a property of a hierarchy element; an asset; a value of an enum. Also an `Unsupported(...)` placeholder the decompiler left, which stands for something the text could not say. | Check the spelling. Units are written without their `RigUnit_` / `RigVMFunction_` prefix. A function of another rig needs that rig in `Uses`. Replace `Unsupported(...)` with what it stands for. |
+| DAB9002 | error | A name finds more than one thing: a function of a library in `Uses` and a node of the engine, two functions of the libraries in `Uses`, two units of one short name, two assets of one name. (A function of the rig itself is found first and is never ambiguous.) | Write the library's name before the function (`Library.Name`), the node's full name (`RigUnit_...`), or `Path(Root, "Folder/Name")` for the asset. |
+| DAB9003 | error | A node's wildcard types cannot be told from its arguments or from where its result goes (the pin it is linked to, the type of a typed `let`, the variable it is assigned to). Nothing is guessed. | Give the result a type: `float Scale = GetModuleMetadata(...);`, or pass an argument whose type is known. |
+| DAB9004 | error | A value does not fit: an argument of the wrong type, a literal that is not a value of the pin's type, a call used as a value that gives none, a call with a pin given twice or more arguments than it takes, an operator that no node takes the operands of, a constant expected where a value is computed. | Write a value of the type the message names. Operators take two values of the same type; a vector times a number is the one mix. |
+| DAB9005 | error | A call that only computes a value, written as a statement: it has no execute pins, so it has no effect. | Use the value (`let X = ...;`, an argument, an assignment), or remove the statement. |
+| DAB9006 | error | An assignment to something that is not assignable: a function's parameter, a `let`, a loop name, a read only variable; or to one member of a variable (`V.X = 1;`), or to anything but a variable or an element of an array variable. | Assign the whole variable: `V = (X = 1, Y = V.Y, Z = V.Z);`. RigVM's setter writes the whole value, so a one member assignment would reset the others. |
+| DAB9007 | error | A `return` that is not the last statement of a function's code, or one outside a function. | RigVM has one Return node per function: write the rest of the code as the other side of an `if`. |
+| DAB9008 | error | An `Inline` function that is never called, or is called more than once. It is the body of one collapse node, made where it is called. | Call it once, or remove `[ Inline ]` to make it a function of the library. |
+| DAB9009 | error | A hierarchy element declared twice, or with a parent that is not allowed: a parent not declared before it, a parent of a kind that cannot be one (curves, connectors and sockets), a curve or connector given a parent, a `Parent` that is not written `Bone(name)`. | Declare each element once, parents first (or nested). An imported element is refined by writing it after `Import` with only the properties that change. |
+| DAB9010 | error | The same event twice in one graph, or a `Graph` that is not a non empty string. | Events are written once per graph: put the second one in another graph with `[ Graph = "..." ]`. |
+| DAB9011 | error | A struct has no such member, or a tuple has more positional values than the struct has members. User structs go by their display names. | Use the struct's member names. Name the members when in doubt. |
+| DAB9012 | error | An asset in `Uses` is not a Control Rig, or a function called from one is not public. | List Control Rig assets in `Uses`. Mark the function `[ Public ]` in its rig. |
+| DAB9013 | error | `[ Pure ]` on a function written `= value;`, which is pure already. | Remove `[ Pure ]`. It marks a function written as code whose callers see no execute pins: `Function F(...) -> (...) [ Pure ] { ... }`. |
