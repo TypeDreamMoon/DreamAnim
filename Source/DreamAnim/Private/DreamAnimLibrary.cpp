@@ -12,6 +12,16 @@
 const FName UDreamAnimLibrary::ActiveSetVariable(TEXT("DreamAnimSetActive"));
 const FName UDreamAnimLibrary::PendingSetVariable(TEXT("DreamAnimSetPending"));
 
+int64 UDreamAnimLibrary::SelectInt64(int64 A, int64 B, bool bPickA)
+{
+	return bPickA ? A : B;
+}
+
+uint8 UDreamAnimLibrary::SelectByte(uint8 A, uint8 B, bool bPickA)
+{
+	return bPickA ? A : B;
+}
+
 namespace
 {
 	FObjectPropertyBase* FindSetProperty(const UAnimInstance& Instance, FName Name)

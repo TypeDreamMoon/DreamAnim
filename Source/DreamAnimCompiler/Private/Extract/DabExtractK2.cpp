@@ -484,7 +484,9 @@ namespace UE::DreamAnim::Compiler::ExtractPrivate
 			}
 
 			// Select<Type>(A, B, bPickA): what a generated `c ? a : b` is.
-			if (OperatorName.StartsWith(TEXT("Select")) && Function && Function->GetOuterUClass() == UKismetMathLibrary::StaticClass()
+			if (OperatorName.StartsWith(TEXT("Select")) && Function
+				&& (Function->GetOuterUClass() == UKismetMathLibrary::StaticClass()
+					|| (Function->GetOuterUClass() == UDreamAnimLibrary::StaticClass() && (OperatorName == TEXT("SelectInt64") || OperatorName == TEXT("SelectByte"))))
 				&& Inputs.Num() == 3)
 			{
 				FDabExprPtr Then = LowerArgument(0);

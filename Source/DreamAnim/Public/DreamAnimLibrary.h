@@ -62,4 +62,15 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "DreamAnim", meta = (BlueprintThreadSafe))
 	static UAnimMontage* GetAnimSetMontage(const UDreamAnimSet* Set, FName Blueprint, FName Slot);
+
+	// What generated expressions call where the engine has no function of their own. Generated Blueprints
+	// refer to them by name, so the names are fixed.
+
+	/** `Pick ? A : B` on int64 values: the engine selects only int, float and double without converting. */
+	UFUNCTION(BlueprintPure, Category = "DreamAnim", meta = (BlueprintThreadSafe, BlueprintInternalUseOnly = "true"))
+	static int64 SelectInt64(int64 A, int64 B, bool bPickA);
+
+	/** `Pick ? A : B` on byte values. */
+	UFUNCTION(BlueprintPure, Category = "DreamAnim", meta = (BlueprintThreadSafe, BlueprintInternalUseOnly = "true"))
+	static uint8 SelectByte(uint8 A, uint8 B, bool bPickA);
 };

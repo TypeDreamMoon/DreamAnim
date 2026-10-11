@@ -861,10 +861,13 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 			}
 
 			const TCHAR* FunctionName = nullptr;
+			UClass* Library = DabGenMathLibrary();
 			switch (Kind)
 			{
 			case EDabGenKind::Real:   FunctionName = TEXT("SelectFloat"); break;
 			case EDabGenKind::Int:    FunctionName = TEXT("SelectInt"); break;
+			case EDabGenKind::Int64:  FunctionName = TEXT("SelectInt64"); Library = UDreamAnimLibrary::StaticClass(); break;
+			case EDabGenKind::Byte:   FunctionName = TEXT("SelectByte"); Library = UDreamAnimLibrary::StaticClass(); break;
 			case EDabGenKind::String: FunctionName = TEXT("SelectString"); break;
 			case EDabGenKind::Name:   FunctionName = TEXT("SelectName"); break;
 			case EDabGenKind::Text:   FunctionName = TEXT("SelectText"); break;
@@ -873,7 +876,7 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 				return FValue();
 			}
 			const FValue Inputs[] = { Then, Else, Condition };
-			return CallLibrary(DabGenMathLibrary(), FunctionName, Inputs, nullptr, Expr, Depth);
+			return CallLibrary(Library, FunctionName, Inputs, nullptr, Expr, Depth);
 		}
 
 		static bool IsNumberConstant(const FValue& Value, double Number)

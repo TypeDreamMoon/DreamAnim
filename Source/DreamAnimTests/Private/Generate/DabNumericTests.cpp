@@ -94,6 +94,30 @@ namespace UE::DreamAnim::Tests::NumericPrivate
 	}
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDabConditionalInt64Test, "DreamAnim.Generate.ConditionalInt64",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+/** `Pick ? Count : 0` with an int64 Count. */
+bool FDabConditionalInt64Test::RunTest(const FString& Parameters)
+{
+	using namespace UE::DreamAnim::Tests::NumericPrivate;
+	ExpectValue(*this, TEXT("AB_ConditionalInt64"), TEXT("bool Pick = true; int64 Count = 42;"), TEXT("Props.Pick ? Props.Count : 0"), 42.0);
+	ExpectValue(*this, TEXT("AB_ConditionalInt64Else"), TEXT("bool Pick = false; int64 Count = 42;"), TEXT("Props.Pick ? Props.Count : 7"), 7.0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDabConditionalByteTest, "DreamAnim.Generate.ConditionalByte",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+/** `Pick ? Count : 0` with a byte Count. */
+bool FDabConditionalByteTest::RunTest(const FString& Parameters)
+{
+	using namespace UE::DreamAnim::Tests::NumericPrivate;
+	ExpectValue(*this, TEXT("AB_ConditionalByte"), TEXT("bool Pick = true; byte Count = 42;"), TEXT("Props.Pick ? Props.Count : 0"), 42.0);
+	ExpectValue(*this, TEXT("AB_ConditionalByteElse"), TEXT("bool Pick = false; byte Count = 42;"), TEXT("Props.Pick ? Props.Count : 255"), 255.0);
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDabComparisonConstantRangeTest, "DreamAnim.Generate.ComparisonConstantRange",
 	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
 
@@ -177,6 +201,8 @@ bool FDabInt64ExactTest::RunTest(const FString& Parameters)
 	}
 
 	ExpectValue(*this, TEXT("AB_ExactComparison"), TEXT("int64 Exact = 9007199254740993;"), TEXT("(Props.Exact == 9007199254740992) ? 1 : 0"), 0.0);
+	ExpectValue(*this, TEXT("AB_ExactConditional"), TEXT("bool Pick = true; int64 Exact = 9007199254740993;"),
+		TEXT("((Props.Pick ? Props.Exact : 0) == 9007199254740993) ? 1 : 0"), 1.0);
 	return true;
 }
 
