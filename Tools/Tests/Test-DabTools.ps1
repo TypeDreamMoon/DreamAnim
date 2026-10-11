@@ -25,6 +25,25 @@ try {
         Invoke-Expression $function.Extent.Text
     }
 
+    $run = Join-Path $scratch 'report'
+    New-Item -ItemType Directory -Path $run | Out-Null
+    foreach ($case in @(
+        @{ State = 'Success'; Exit = 0; Expected = 0 },
+        @{ State = 'Skipped'; Exit = 0; Expected = 0 },
+        @{ State = 'Success'; Exit = 3; Expected = 2 },
+        @{ State = 'Success'; Exit = -1; Expected = 2 },
+        @{ State = 'InProcess'; Exit = 0; Expected = 2 },
+        @{ State = 'NotRun'; Exit = 0; Expected = 2 },
+        @{ State = 'Fail'; Exit = -1; Expected = 1 },
+        @{ State = 'Fail'; Exit = 3; Expected = 2 }
+    )) {
+        $tests = @(@{ fullTestPath = 'DreamAnim.Passed'; state = 'Success'; duration = 0; entries = @() },
+            @{ fullTestPath = 'DreamAnim.Other'; state = $case.State; duration = 0; entries = @() })
+        @{ tests = $tests } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $run 'index.json') -Encoding UTF8
+        $actual = Get-Digest $run 1 $false $case.Exit 0 6> (Join-Path $run 'output.log')
+        Assert-Equal $case.Expected $actual "Digest $($case.State)/$($case.Exit)"
+    }
+
     # Registry discovery must not be needed for a Launcher manifest or an explicit override.
     function Get-ItemProperty { param($Path, $ErrorAction) return $null }
     $fakeEngine = Join-Path $scratch 'EngineInstall'

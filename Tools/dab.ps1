@@ -202,6 +202,12 @@ function Get-Digest([string]$RunDir, [int]$Floor, [bool]$TimedOut, $ExitCode, [d
 
     $passed = @($tests | Where-Object { $_.State -eq 'Success' })
     $failed = @($tests | Where-Object { $_.State -eq 'Fail' })
+    $incomplete = @($tests | Where-Object { $_.State -notin 'Success', 'Fail', 'Skipped' })
+    # The engine exits with -1 when a test failed or logged an error: a red run, not a broken one. Any other
+    # exit, or -1 with nothing failed, means the editor stopped for a reason the report does not show.
+    $redExit = $ExitCode -eq -1 -and ($failed.Count -gt 0 -or $ensures.Count -gt 0)
+    if (-not $TimedOut -and ($null -eq $ExitCode -or ($ExitCode -ne 0 -and -not $redExit))) { $infra += "The editor did not exit successfully (exit $ExitCode)." }
+    if ($incomplete.Count -gt 0) { $infra += "$($incomplete.Count) test(s) did not finish: $($incomplete.Path -join ', ')." }
     $ran = $passed.Count + $failed.Count
     if ($ran -lt $Floor) { $infra += "Only $ran test(s) ran; expected at least $Floor. Did DreamAnimTests load?" }
 
