@@ -196,7 +196,11 @@ message about a node the generator added inside a transition's rule or a state i
 transition's row or that state. One about a function the generator wrote (for an expression, a call, a
 slot), or that names no node, is placed at the top of the file.
 
-When there are errors, the Blueprint is left unsaved, in memory.
+When there are errors, a Blueprint that exists already keeps what it had: the build first compiles a
+candidate in a temporary package and touches the asset only when that compiles. Its animation set and
+the text it was last built from stay as they were too. A new Blueprint is created and left unsaved. An
+error that only the real asset shows (rare, such as a Blueprint whose parent was another Animation
+Blueprint and now is not) leaves it rebuilt but unsaved.
 
 | Code | Severity | Meaning | How to fix |
 |---|---|---|---|

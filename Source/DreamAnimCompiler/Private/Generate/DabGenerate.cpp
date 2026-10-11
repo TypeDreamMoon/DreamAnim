@@ -35,6 +35,7 @@
 #include "EdGraphNode_Comment.h"
 #include "EdGraphSchema_K2.h"
 #include "Factories/AnimBlueprintFactory.h"
+#include "GameFramework/Actor.h"
 #include "Generate/DabGenerateInternal.h"
 #include "K2Node_AnimGetter.h"
 #include "Kismet2/BlueprintEditorUtils.h"
@@ -48,6 +49,7 @@
 #include "UObject/MetaData.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
+#include "UObject/UObjectHash.h"
 #include "UObject/UnrealType.h"
 
 namespace UE::DreamAnim::Compiler::GeneratePrivate
@@ -216,7 +218,7 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 	}
 
 	static UAnimBlueprint* DabGenFindOrCreateAsset(const FDabModel& Model, FDabDiagnosticSink& Sink, const FDabGenerateOptions& Options, UClass* ParentClass,
-		USkeleton* Skeleton)
+		USkeleton* Skeleton, bool bPreview)
 	{
 		FString PackageName;
 		FString AssetName;
@@ -230,7 +232,7 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 			PackageName = Model.AssetPath;
 			AssetName = FPackageName::GetShortName(PackageName);
 		}
-		if (!FPackageName::IsValidLongPackageName(PackageName) || AssetName.IsEmpty())
+		if (!FPackageName::IsValidLongPackageName(PackageName, bPreview) || AssetName.IsEmpty())
 		{
 			Sink.Error(TEXT("DAB7006"), FDabSpan(), FString::Printf(TEXT("%s is not a valid asset path"), *PackageName));
 			return nullptr;
@@ -275,14 +277,17 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 		Factory->TargetSkeleton = Skeleton;
 		Factory->bTemplate = !bInterface && Skeleton == nullptr;
 		UAnimBlueprint* Blueprint = Cast<UAnimBlueprint>(Factory->FactoryCreateNew(UAnimBlueprint::StaticClass(), Package, FName(*AssetName),
-			RF_Public | RF_Standalone | RF_Transactional, nullptr, GWarn));
+			bPreview ? RF_Transient : RF_Public | RF_Standalone | RF_Transactional, nullptr, GWarn));
 		if (!Blueprint)
 		{
 			Sink.Error(TEXT("DAB7006"), FDabSpan(), FString::Printf(TEXT("%s: the asset cannot be created"), *ObjectPath));
 			return nullptr;
 		}
-		FAssetRegistryModule::AssetCreated(Blueprint);
-		Package->MarkPackageDirty();
+		if (!bPreview)
+		{
+			FAssetRegistryModule::AssetCreated(Blueprint);
+			Package->MarkPackageDirty();
+		}
 		return Blueprint;
 	}
 
@@ -371,6 +376,43 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 	}
 
+	/** Add against the new descriptions and parent, not the previous build's still-live skeleton. */
+	static bool DabGenAddMemberVariable(UAnimBlueprint* Blueprint, FName Name, const FEdGraphPinType& Type, const FString& Default)
+	{
+		if (Name.IsNone() || Name == NAME_Self || FBlueprintEditorUtils::FindNewVariableIndex(Blueprint, Name) != INDEX_NONE
+			|| (Blueprint->ParentClass && FindFProperty<FProperty>(Blueprint->ParentClass, Name)))
+		{
+			return false;
+		}
+		FBPVariableDescription Variable;
+		Variable.VarName = Name;
+		Variable.VarGuid = FGuid::NewGuid();
+		Variable.FriendlyName = FName::NameToDisplayString(Name.ToString(), Type.PinCategory == UEdGraphSchema_K2::PC_Boolean);
+		Variable.VarType = Type;
+		Variable.PropertyFlags = CPF_Edit | CPF_BlueprintVisible | CPF_DisableEditOnInstance;
+		if (Type.PinCategory == UEdGraphSchema_K2::PC_Object || Type.PinCategory == UEdGraphSchema_K2::PC_Interface)
+		{
+			const UClass* Class = Cast<UClass>(Type.PinSubCategoryObject.Get());
+			if (Class && Class->IsChildOf(AActor::StaticClass()))
+			{
+				Variable.PropertyFlags |= CPF_DisableEditOnTemplate;
+			}
+		}
+		Variable.ReplicationCondition = COND_None;
+		Variable.Category = UEdGraphSchema_K2::VR_DefaultCategory;
+		Variable.DefaultValue = Default;
+		Variable.VarType.bIsConst = false;
+		Variable.VarType.bIsWeakPointer = false;
+		Variable.VarType.bIsReference = false;
+		if (Type.PinCategory == UEdGraphSchema_K2::PC_String || Type.PinCategory == UEdGraphSchema_K2::PC_Text)
+		{
+			Variable.SetMetaData(TEXT("MultiLine"), TEXT("true"));
+		}
+		Blueprint->NewVariables.Add(MoveTemp(Variable));
+		FBlueprintEditorUtils::ValidateBlueprintChildVariables(Blueprint, Name);
+		return true;
+	}
+
 	static void DabGenAddVariables(FDabGenContext& Ctx)
 	{
 		UAnimBlueprint* Blueprint = Ctx.Blueprint;
@@ -399,7 +441,7 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 			}
 
 			const FName Name(*Variable.Name);
-			if (!FBlueprintEditorUtils::AddMemberVariable(Blueprint, Name, Type, Default))
+			if (!DabGenAddMemberVariable(Blueprint, Name, Type, Default))
 			{
 				Ctx.Sink.Error(TEXT("DAB7005"), FDabSpan(), FString::Printf(TEXT("%s: the variable cannot be added (the name is taken)"), *Location));
 				continue;
@@ -416,7 +458,9 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 				const FString Value = DabGenMetaString(*Meta.Value);
 				if (Meta.Name == TEXT("Group") || Meta.Name == TEXT("Category"))
 				{
-					FBlueprintEditorUtils::SetBlueprintVariableCategory(Blueprint, Name, nullptr, FText::FromString(Value), true);
+					// The skeleton is regenerated after all variables are present, so set the description directly.
+					const int32 Index = FBlueprintEditorUtils::FindNewVariableIndex(Blueprint, Name);
+					Blueprint->NewVariables[Index].Category = Value.IsEmpty() ? UEdGraphSchema_K2::VR_DefaultCategory : FText::FromString(Value);
 				}
 				else
 				{
@@ -453,12 +497,12 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 				continue;
 			}
 			const FString Default = (SetVariable == UDreamAnimLibrary::ActiveSetVariable && DefaultSet) ? DefaultSet->GetPathName() : FString();
-			if (!FBlueprintEditorUtils::AddMemberVariable(Blueprint, SetVariable, SetType, Default))
+			if (!DabGenAddMemberVariable(Blueprint, SetVariable, SetType, Default))
 			{
 				Ctx.Sink.Error(TEXT("DAB7005"), FDabSpan(), FString::Printf(TEXT("Assets: the variable %s cannot be added (the name is taken)"), *SetVariable.ToString()));
 				continue;
 			}
-			FBlueprintEditorUtils::SetBlueprintVariableCategory(Blueprint, SetVariable, nullptr, FText::FromString(TEXT("DreamAnim")), true);
+			Blueprint->NewVariables.Last().Category = FText::FromString(TEXT("DreamAnim"));
 		}
 	}
 
@@ -728,7 +772,7 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 		return true;
 	}
 
-	static FDabGenerateResult DabGenGenerate(const FDabModel& Model, FDabDiagnosticSink& Sink, const FDabGenerateOptions& Options)
+	static FDabGenerateResult DabGenGenerate(const FDabModel& Model, FDabDiagnosticSink& Sink, const FDabGenerateOptions& Options, bool bPreview = false)
 	{
 		FDabGenerateResult Result;
 		const int32 ErrorsBefore = Sink.NumErrors();
@@ -745,12 +789,15 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 		{
 			return Result;
 		}
-		UAnimBlueprint* Blueprint = DabGenFindOrCreateAsset(Model, Sink, Options, ParentClass, Skeleton);
+		UAnimBlueprint* Blueprint = DabGenFindOrCreateAsset(Model, Sink, Options, ParentClass, Skeleton, bPreview);
 		if (!Blueprint)
 		{
 			return Result;
 		}
 		Blueprint->Modify();
+		// Do not reinstance child classes against a temporarily empty parent layout.
+		const bool bWasSuppressing = Blueprint->bSuppressStructurallyModified;
+		Blueprint->bSuppressStructurallyModified = true;
 		DabGenClearBlueprint(Blueprint);
 
 		FDabGenContext Ctx(Model, Sink, Blueprint);
@@ -765,6 +812,7 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 		{
 			DabGenPrepareAnimGraph(Ctx);
 		}
+		Blueprint->bSuppressStructurallyModified = bWasSuppressing;
 		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 
 		// Every graph's nodes; state machines append their states' graphs while this runs.
@@ -806,7 +854,6 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 		{
 			DabGenLayoutGraph(*Graph);
 		}
-		UDreamAnimSet* SyncedSet = DabGenSyncAnimSet(Ctx);
 
 		// Bindings resolve their types against the final skeleton class.
 		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
@@ -859,9 +906,14 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 		}
 
 		const bool bModelClean = Sink.NumErrors() == ErrorsBefore;
-		if (!Options.SourceText.IsEmpty())
+		UDreamAnimSet* SyncedSet = nullptr;
+		if (!bPreview && bModelClean && Result.CompilerErrors.IsEmpty())
 		{
-			SetDabGeneratedText(*Blueprint, Options.SourceText);
+			SyncedSet = DabGenSyncAnimSet(Ctx);
+			if (!Options.SourceText.IsEmpty())
+			{
+				SetDabGeneratedText(*Blueprint, Options.SourceText);
+			}
 		}
 		if (Options.bSave && bModelClean && Result.CompilerErrors.IsEmpty())
 		{
@@ -983,6 +1035,50 @@ namespace UE::DreamAnim::Compiler
 
 	FDabGenerateResult GenerateDabBlueprint(const Model::FDabModel& Model, Lang::FDabDiagnosticSink& Sink, const FDabGenerateOptions& Options)
 	{
+		const FString TargetPackage = Options.OverridePackageName.IsEmpty()
+			? FPackageName::ObjectPathToPackageName(Model.AssetPath) : Options.OverridePackageName;
+		const FString TargetObject = TargetPackage + TEXT(".") + FPackageName::GetShortName(TargetPackage);
+		if (!FindObject<UObject>(nullptr, *TargetObject) && !FPackageName::DoesPackageExist(TargetPackage))
+		{
+			// Nothing to protect yet: a new asset that fails to compile is never saved.
+			return GeneratePrivate::DabGenGenerate(Model, Sink, Options);
+		}
+
+		// Compile an isolated candidate before touching a live asset or its animation set. Keep the short
+		// asset name: generated function names and animation-set group keys depend on it.
+		FDabGenerateOptions PreviewOptions = Options;
+		PreviewOptions.bSave = false;
+		PreviewOptions.OverridePackageName = TEXT("/Temp/DreamAnimPreview/") + FGuid::NewGuid().ToString(EGuidFormats::Digits)
+			+ TEXT("/") + FPackageName::GetShortName(TargetPackage);
+		// The candidate reports to a sink of its own: when it compiles, the real build reports the same again.
+		Lang::FDabDiagnosticSink PreviewSink(Sink.GetFilePath());
+		FDabGenerateResult Preview = GeneratePrivate::DabGenGenerate(Model, PreviewSink, PreviewOptions, true);
+		const bool bValid = Preview.Succeeded() && !PreviewSink.HasErrors();
+		if (Preview.Blueprint)
+		{
+			// Keep graph outers intact until collection, and invalidate deferred editor callbacks on the nodes.
+			TArray<UK2Node_AnimGetter*> Getters;
+			FBlueprintEditorUtils::GetAllNodesOfClass(Preview.Blueprint, Getters);
+			for (UK2Node_AnimGetter* Getter : Getters)
+			{
+				Getter->ConditionalBeginDestroy();
+			}
+			UPackage* Package = Preview.Blueprint->GetPackage();
+			TArray<UObject*> Objects;
+			GetObjectsWithOuter(Package, Objects, EGetObjectsFlags::IncludeNestedObjects);
+			for (UObject* Object : Objects)
+			{
+				Object->ClearFlags(RF_Public | RF_Standalone);
+				Object->MarkAsGarbage();
+			}
+			Package->SetDirtyFlag(false);
+		}
+		if (!bValid)
+		{
+			Sink.Append(MoveTemp(PreviewSink));
+			Preview.Blueprint = nullptr;
+			return Preview;
+		}
 		return GeneratePrivate::DabGenGenerate(Model, Sink, Options);
 	}
 }

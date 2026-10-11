@@ -83,6 +83,8 @@ namespace UE::DreamAnim::Compiler
 
 	/**
 	 * Creates the asset, or rebuilds it in place when it exists (its graphs, functions, variables and
+	 * settings are validated by compiling an isolated candidate first). Failed validation leaves the
+	 * existing asset and animation set unchanged. On success its graphs, functions, variables and
 	 * interface layers are replaced; the asset object and its generated class stay, so references to them
 	 * survive). Every node gets a GUID derived from the asset path and the node's place in the model, so
 	 * generating the same model twice gives the same GUIDs. Assets the model references (linked graph
