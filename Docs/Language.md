@@ -717,7 +717,7 @@ A rule is a named condition for the machine's transitions and conduits.
   name. All such transitions share one rule graph.
 - A rule name inside a larger condition is replaced by the rule's expression.
 - Rules may use other rules. A rule that uses itself is DAB6013.
-- Inside `StateWeight(...)` and `MachineWeight(...)` a name is a state or machine, never a rule:
+- Inside `StateWeight(...)`, `TimeRemaining(...)`, `TimeRemainingRatio(...)` and `MachineWeight(...)` a name is a state or machine, never a rule:
   `StateWeight(Move)` reads the state `Move` even when a rule is named `Move`.
 
 ### Transitions

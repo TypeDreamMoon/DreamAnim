@@ -90,7 +90,7 @@ namespace UE::DreamAnim::Compiler::LowerNamesPrivate
 			{
 				if (FDabNameExpr* Arg = Call->Args[0]->Value->As<FDabNameExpr>())
 				{
-					if (Callee->Name == TEXT("StateWeight"))
+					if (Callee->Name == TEXT("StateWeight") || Callee->Name == TEXT("TimeRemaining") || Callee->Name == TEXT("TimeRemainingRatio"))
 					{
 						Arg->Name = States.Lookup(Arg->Name);
 					}

@@ -1300,7 +1300,8 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 				return nullptr;
 			}
 			const FDabNameExpr* CalleeName = SkipParens(*Call.Callee).As<FDabNameExpr>();
-			const bool bGetter = CalleeName && (CalleeName->Name == TEXT("StateWeight") || CalleeName->Name == TEXT("MachineWeight"));
+			const bool bGetter = CalleeName && (CalleeName->Name == TEXT("StateWeight") || CalleeName->Name == TEXT("MachineWeight")
+				|| CalleeName->Name == TEXT("TimeRemaining") || CalleeName->Name == TEXT("TimeRemainingRatio"));
 			// A function's own name is never a rule or an alias.
 			FDabExprPtr Callee = CalleeName && !Aliases.Contains(CalleeName->Name) ? MakeNameExpr(CalleeName->Name) : Resolve(*Call.Callee, Rules, bInGetter);
 			if (!Callee)

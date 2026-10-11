@@ -113,6 +113,53 @@ namespace UE::DreamAnim::Tests::MachineGetterPrivate
 	}
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDabTimeGetterRoundTripTest, "DreamAnim.Generate.TimeGetterRoundTrip",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+/** A transition reading the time left in another state than its source: the state survives decompiling. */
+bool FDabTimeGetterRoundTripTest::RunTest(const FString& Parameters)
+{
+	using namespace UE::DreamAnim::Tests::MachineGetterPrivate;
+
+	UAnimBlueprint* Blueprint = Build(*this, MakeSource(TEXT("AB_TimeTargets"),
+		TEXT("    Graph = { Output = M; }\n"
+			"    StateMachine M { Entry = A; State A { Pose = LocalRefPose(); } State B { Pose = LocalRefPose(); }\n"
+			"        Transitions = { A -> B : TimeRemaining(B) < 0.1 && TimeRemainingRatio(B) < 0.1; } }")));
+	if (!Blueprint)
+	{
+		return false;
+	}
+	ExpectTimeTargets(*this, *Blueprint, TEXT("Built"), TEXT("B"), 2);
+	if (UAnimBlueprint* Rebuilt = Build(*this, Decompile(*this, *Blueprint)))
+	{
+		ExpectTimeTargets(*this, *Rebuilt, TEXT("Rebuilt"), TEXT("B"), 2);
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDabTimeGetterNodeBindingTest, "DreamAnim.Generate.TimeGetterNodeBinding",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+/** A node argument inside a state reading the time left in that state: the state survives decompiling. */
+bool FDabTimeGetterNodeBindingTest::RunTest(const FString& Parameters)
+{
+	using namespace UE::DreamAnim::Tests::MachineGetterPrivate;
+
+	UAnimBlueprint* Blueprint = Build(*this, MakeSource(TEXT("AB_TimeBinding"),
+		TEXT("    Graph = { Output = M; }\n"
+			"    StateMachine M { Entry = A; State A { Pose = TwoWayBlend(A = LocalRefPose(), B = LocalRefPose(), Alpha = TimeRemaining(A)); } }")));
+	if (!Blueprint)
+	{
+		return false;
+	}
+	ExpectTimeTargets(*this, *Blueprint, TEXT("Built"), TEXT("A"), 1);
+	if (UAnimBlueprint* Rebuilt = Build(*this, Decompile(*this, *Blueprint)))
+	{
+		ExpectTimeTargets(*this, *Rebuilt, TEXT("Rebuilt"), TEXT("A"), 1);
+	}
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDabStateNameScopesTest, "DreamAnim.Generate.StateNameScopes",
 	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
 

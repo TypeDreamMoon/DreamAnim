@@ -273,13 +273,17 @@ namespace UE::DreamAnim::Compiler::ExtractPrivate
 				Args.Add(MakeName(*MachineName));
 				return MakeCall(MakeName(TEXT("MachineWeight")), MoveTemp(Args));
 			}
-			if (Function == TEXT("GetRelevantAnimTimeRemaining"))
+			if (Function == TEXT("GetRelevantAnimTimeRemaining") || Function == TEXT("GetRelevantAnimTimeRemainingFraction"))
 			{
-				return MakeCall(MakeName(TEXT("TimeRemaining")), TArray<FDabExprPtr>());
-			}
-			if (Function == TEXT("GetRelevantAnimTimeRemainingFraction"))
-			{
-				return MakeCall(MakeName(TEXT("TimeRemainingRatio")), TArray<FDabExprPtr>());
+				const FString State = GetStateNodeName(Node.SourceStateNode.Get());
+				if (State.IsEmpty())
+				{
+					Lowering.Fail(&Node, TEXT("a remaining-time getter without a state"));
+					return MakePlaceholder(Function);
+				}
+				TArray<FDabExprPtr> Args;
+				Args.Add(MakeName(State));
+				return MakeCall(MakeName(Function == TEXT("GetRelevantAnimTimeRemaining") ? TEXT("TimeRemaining") : TEXT("TimeRemainingRatio")), MoveTemp(Args));
 			}
 			Lowering.Fail(&Node, FString::Printf(TEXT("the anim getter %s has no counterpart in the language"), *Function));
 			return MakePlaceholder(Function);
