@@ -19,6 +19,8 @@ namespace UE::DreamAnim::Compiler::WriteBackPrivate
 
 	void FWriteBack::Refuse(const TCHAR* Code, const FDabSpan& Span, const FString& Message, const FString& Hint)
 	{
+		// DAB8004 reports a successful template expansion; every other refusal loses information.
+		Result.bRefused |= FCString::Strcmp(Code, TEXT("DAB8004")) != 0;
 		FDabDiagnostic& Diagnostic = Result.Diagnostics.AddDefaulted_GetRef();
 		Diagnostic.Code = Code;
 		Diagnostic.Severity = EDabSeverity::Warning;

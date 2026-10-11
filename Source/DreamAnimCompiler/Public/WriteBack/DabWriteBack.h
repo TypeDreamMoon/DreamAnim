@@ -52,6 +52,15 @@ namespace UE::DreamAnim::Compiler
 		bool bCompared = false;
 		/** The new text checks to the Blueprint's model: text and asset agree again. */
 		bool bFixedPoint = false;
+		/** Something in the Blueprint was refused (any DAB8xxx but DAB8004): the text cannot hold all of it. */
+		bool bRefused = false;
+
+		/** Everything the Blueprint holds is in the text: compared, a fixed point, nothing refused, every change written. */
+		bool IsComplete() const
+		{
+			return bCompared && bFixedPoint && !bRefused
+				&& !Changes.ContainsByPredicate([](const FDabWriteBackChange& Change) { return !Change.bWritten; });
+		}
 
 		bool HasEdits() const
 		{

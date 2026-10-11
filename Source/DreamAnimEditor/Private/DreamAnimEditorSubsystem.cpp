@@ -453,7 +453,7 @@ bool UDreamAnimEditorSubsystem::HasEditorChanges(UAnimBlueprint& Blueprint, TArr
 		return false;
 	}
 	const FDabWriteBackResult Result = WriteBackDabBlueprint(Blueprint, Path, Base);
-	if (!Result.bCompared || (Result.bFixedPoint && Result.Changes.IsEmpty()))
+	if (Result.IsComplete() && Result.Changes.IsEmpty())
 	{
 		return false;
 	}
@@ -463,9 +463,15 @@ bool UDreamAnimEditorSubsystem::HasEditorChanges(UAnimBlueprint& Blueprint, TArr
 		{
 			OutChanges->Add(FString::Printf(TEXT("%s: %s"), *Change.Location, *Change.What));
 		}
+		// What was refused says why: an unexpressible function, a structural change while those are off, ...
+		for (const Lang::FDabDiagnostic& Diagnostic : Result.Diagnostics)
+		{
+			OutChanges->Add(FString::Printf(TEXT("%s: %s"), *Diagnostic.Code, *Diagnostic.Message));
+		}
 		if (OutChanges->IsEmpty())
 		{
-			OutChanges->Add(TEXT("differences write-back cannot place"));
+			OutChanges->Add(Result.bCompared ? FString(TEXT("differences write-back cannot place"))
+				: FString(TEXT("the text the Blueprint was made from no longer checks, so it cannot be compared")));
 		}
 	}
 	return true;
@@ -673,6 +679,12 @@ bool UDreamAnimEditorSubsystem::MergeEditorChanges(UAnimBlueprint& Blueprint)
 	FDabWriteBackOptions Options;
 	Options.bStructure = GetDefault<UDreamAnimEditorSettings>()->bWriteBackStructure;
 	const FDabWriteBackResult Ours = WriteBackDabBlueprint(Blueprint, Path, Base, Options);
+	if (!Ours.IsComplete())
+	{
+		Report(FString::Printf(TEXT("Cannot merge %s into %s"), *Blueprint.GetName(), *FPaths::GetCleanFilename(Path)), Ours.Diagnostics);
+		Notify(LOCTEXT("MergeIncomplete", "Some Blueprint changes cannot be written to text; nothing was merged. Resolve those changes before merging."), false, true);
+		return false;
+	}
 	FString Merged;
 	TArray<FDabMergeConflict> MergeConflicts;
 	if (!MergeDabTexts(Base, Ours.Text, Theirs, Merged, MergeConflicts))

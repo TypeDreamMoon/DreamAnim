@@ -96,7 +96,17 @@ waits for your choice:
 - **Merge Both** writes the Blueprint's changes into the text it was last in step with. It then merges
   that, line by line, with the file as it is now, writes the result and rebuilds the Blueprint from it.
   Changes on the same or neighbouring lines are not merged. Then nothing is written, the log shows both
-  versions of each place, and you can edit the text by hand or use it as it is.
+  versions of each place, and you can edit the text by hand or use it as it is. Nothing is merged
+  either when part of the Blueprint's changes cannot be written (a refusal such as DAB8006): merging
+  the rest would drop it. The conflict stays until you choose Use the Text or make the change in the
+  text yourself.
+
+A refused change counts as a change of the Blueprint's own: a text saved on disk after a refusal is a
+conflict, not a rebuild that would drop it. So is a text the Blueprint can no longer be compared with,
+for instance after a library it includes changed the meaning of a template. One case is not caught: a
+change to a library the Blueprint includes, when nothing in this editor session marked the Blueprint as
+edited (after a restart, say), rebuilds it and drops what the text never held. A changed library makes
+the old text a different Blueprint, so it cannot tell such changes apart.
 
 Until you choose, the Blueprint's changes are not written back.
 

@@ -10,6 +10,7 @@
 #include "DreamAnimEditorSettings.h"
 #include "DreamAnimEditorSubsystem.h"
 #include "Editor.h"
+#include "EdGraphSchema_K2.h"
 #include "Generate/DabGenerate.h"
 #include "HAL/FileManager.h"
 #include "Kismet2/BlueprintEditorUtils.h"
@@ -181,6 +182,24 @@ bool FDreamAnimEditorSyncTest::RunTest(const FString& Parameters)
 	const FString SavedText = Plain.Replace(TEXT("PlayRate = 2.5"), TEXT("PlayRate = 0.75"));
 	TestEqualSensitive(TEXT("saving writes the untransacted change"), Load(Path), SavedText);
 	TestEqualSensitive(TEXT("and the Blueprint is in step with it"), GetDabGeneratedText(*Blueprint), SavedText);
+
+	// A user function has no text representation. The watcher and Merge Both must preserve it.
+	UEdGraph* UserGraph = FBlueprintEditorUtils::CreateNewGraph(Blueprint, TEXT("UserLogic"), UEdGraph::StaticClass(), UEdGraphSchema_K2::StaticClass());
+	FBlueprintEditorUtils::AddFunctionGraph(Blueprint, UserGraph, false, static_cast<UClass*>(nullptr));
+	TestTrue(TEXT("unsupported editor content counts as a change"), Subsystem->HasEditorChanges(*Blueprint));
+	const FString RefusedText = SavedText.Replace(TEXT("float Speed = 4;"), TEXT("float Speed = 5;"));
+	Save(Path, RefusedText);
+	Subsystem->HandleChangedSources({ Path });
+	TestTrue(TEXT("unsupported changes retain a conflict"), Subsystem->IsInConflict(*Blueprint));
+	TestFalse(TEXT("an incomplete write-back cannot merge"), Subsystem->MergeEditorChanges(*Blueprint));
+	TestEqualSensitive(TEXT("a refused merge preserves the file"), Load(Path), RefusedText);
+	TestEqualSensitive(TEXT("a refused merge preserves the baseline"), GetDabGeneratedText(*Blueprint), SavedText);
+	TestTrue(TEXT("the user function survives"), Blueprint->FunctionGraphs.Contains(UserGraph));
+	TestTrue(TEXT("the refused conflict stays open"), Subsystem->IsInConflict(*Blueprint));
+	SetDabGeneratedText(*Blueprint, TEXT("invalid source"));
+	TestTrue(TEXT("comparison failure also protects editor changes"), Subsystem->HasEditorChanges(*Blueprint));
+	SetDabGeneratedText(*Blueprint, SavedText);
+	Subsystem->UseText(*Blueprint);
 	return true;
 }
 
