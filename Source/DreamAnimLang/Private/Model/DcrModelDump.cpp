@@ -295,8 +295,34 @@ namespace UE::DreamAnim::Model
 				InEdges[*To].Add(Edges.Num() - 1);
 			}
 
+			// Nodes alike in themselves, told apart by what they link to and from (before their own names, which differ
+			// between two models of one rig).
+			TArray<FString> Around;
+			Around.SetNum(Count);
+			for (int32 Index = 0; Index < Count; ++Index)
+			{
+				TArray<FString> Parts;
+				for (const int32 EdgeIndex : InEdges[Index])
+				{
+					const FEdge& Edge = Edges[EdgeIndex];
+					Parts.Add(FString::Printf(TEXT("<%s<%s<%s"), *Edge.ToPin, *Edge.FromPin, *Signatures[Edge.From]));
+				}
+				for (const int32 EdgeIndex : OutEdges[Index])
+				{
+					const FEdge& Edge = Edges[EdgeIndex];
+					Parts.Add(FString::Printf(TEXT(">%s>%s>%s"), *Edge.FromPin, *Edge.ToPin, *Signatures[Edge.To]));
+				}
+				Parts.Sort([](const FString& A, const FString& B) { return CompareText(A, B) < 0; });
+				Around[Index] = FString::Printf(TEXT("%08x"), FCrc::StrCrc32(*FString::Join(Parts, TEXT(";"))));
+			}
+			auto LessAlike = [&Around, &Nodes](int32 A, int32 B)
+			{
+				const int32 Result = CompareText(Around[A], Around[B]);
+				return Result != 0 ? Result < 0 : LessText(Nodes[A]->Name, Nodes[B]->Name);
+			};
+
 			// By the pin an edge leaves, the pin it enters, and then what is on the other end.
-			auto LessOut = [&Edges, &Signatures, &Nodes](int32 A, int32 B)
+			auto LessOut = [&Edges, &Signatures, &LessAlike](int32 A, int32 B)
 			{
 				const FEdge& EdgeA = Edges[A];
 				const FEdge& EdgeB = Edges[B];
@@ -311,11 +337,11 @@ namespace UE::DreamAnim::Model
 				}
 				if (Result == 0)
 				{
-					Result = CompareText(Nodes[EdgeA.To]->Name, Nodes[EdgeB.To]->Name);
+					return LessAlike(EdgeA.To, EdgeB.To);
 				}
 				return Result < 0;
 			};
-			auto LessIn = [&Edges, &Signatures, &Nodes](int32 A, int32 B)
+			auto LessIn = [&Edges, &Signatures, &LessAlike](int32 A, int32 B)
 			{
 				const FEdge& EdgeA = Edges[A];
 				const FEdge& EdgeB = Edges[B];
@@ -330,7 +356,7 @@ namespace UE::DreamAnim::Model
 				}
 				if (Result == 0)
 				{
-					Result = CompareText(Nodes[EdgeA.From]->Name, Nodes[EdgeB.From]->Name);
+					return LessAlike(EdgeA.From, EdgeB.From);
 				}
 				return Result < 0;
 			};
@@ -389,11 +415,16 @@ namespace UE::DreamAnim::Model
 
 			TArray<int32> Entries;
 			TArray<int32> Events;
+			TArray<int32> Returns;
 			for (int32 Index = 0; Index < Count; ++Index)
 			{
 				if (Nodes[Index]->Kind == EDcrNodeKind::Entry)
 				{
 					Entries.Add(Index);
+				}
+				else if (Nodes[Index]->Kind == EDcrNodeKind::Return)
+				{
+					Returns.Add(Index);
 				}
 				else if (Nodes[Index]->Kind == EDcrNodeKind::Unit && IsEventStruct(Nodes[Index]->StructPath))
 				{
@@ -403,7 +434,12 @@ namespace UE::DreamAnim::Model
 			Entries.StableSort([&](int32 A, int32 B)
 			{
 				const int32 Result = CompareText(Signatures[A], Signatures[B]);
-				return Result != 0 ? Result < 0 : LessText(Nodes[A]->Name, Nodes[B]->Name);
+				return Result != 0 ? Result < 0 : LessAlike(A, B);
+			});
+			Returns.StableSort([&](int32 A, int32 B)
+			{
+				const int32 Result = CompareText(Signatures[A], Signatures[B]);
+				return Result != 0 ? Result < 0 : LessAlike(A, B);
 			});
 			Events.StableSort([&](int32 A, int32 B)
 			{
@@ -427,6 +463,12 @@ namespace UE::DreamAnim::Model
 				NameFrom(Index);
 			}
 			Drain();
+			// A pure graph is reached from what it gives back.
+			for (const int32 Index : Returns)
+			{
+				NameFrom(Index);
+				Drain();
+			}
 
 			// What nothing reaches, then the comments.
 			for (const bool bComments : { false, true })
@@ -442,7 +484,7 @@ namespace UE::DreamAnim::Model
 				Rest.StableSort([&](int32 A, int32 B)
 				{
 					const int32 Result = CompareText(Signatures[A], Signatures[B]);
-					return Result != 0 ? Result < 0 : LessText(Nodes[A]->Name, Nodes[B]->Name);
+					return Result != 0 ? Result < 0 : LessAlike(A, B);
 				});
 				for (const int32 Index : Rest)
 				{
@@ -481,6 +523,7 @@ namespace UE::DreamAnim::Model
 				}
 				break;
 			case EDcrNodeKind::LocalCall:
+			case EDcrNodeKind::InvokeEntry:
 				Head += TEXT(" ") + Quote(Node.Function);
 				break;
 			case EDcrNodeKind::ExternalCall:
@@ -639,8 +682,47 @@ namespace UE::DreamAnim::Model
 		DumpValues(Out, 1, TEXT("ModuleSetting"), Model.ModuleSettings);
 		DumpValues(Out, 1, TEXT("Setting"), Model.Settings);
 
-		for (const FDcrModelElement& Element : Model.Hierarchy)
+		// Parents before children, siblings by kind and name: the order of siblings changes nothing a rig does.
+		TArray<const FDcrModelElement*> Elements;
 		{
+			auto KeyOf = [](EDcrElementKind Kind, const FString& Name) { return FString::Printf(TEXT("%s(%s)"), LexToString(Kind), *Name); };
+			TMap<FString, TArray<const FDcrModelElement*>> Children;
+			TArray<const FDcrModelElement*> Roots;
+			TSet<FString> Known;
+			for (const FDcrModelElement& Element : Model.Hierarchy)
+			{
+				Known.Add(KeyOf(Element.Kind, Element.Name));
+			}
+			for (const FDcrModelElement& Element : Model.Hierarchy)
+			{
+				const FString ParentKey = KeyOf(Element.ParentKind, Element.Parent);
+				if (Element.Parent.IsEmpty() || !Known.Contains(ParentKey))
+				{
+					Roots.Add(&Element);
+				}
+				else
+				{
+					Children.FindOrAdd(ParentKey).Add(&Element);
+				}
+			}
+			auto BySiblingOrder = [&KeyOf](const FDcrModelElement& A, const FDcrModelElement& B) { return KeyOf(A.Kind, A.Name) < KeyOf(B.Kind, B.Name); };
+			TFunction<void(TArray<const FDcrModelElement*>&)> Visit = [&](TArray<const FDcrModelElement*>& Siblings)
+			{
+				Siblings.StableSort(BySiblingOrder);
+				for (const FDcrModelElement* Element : Siblings)
+				{
+					Elements.Add(Element);
+					if (TArray<const FDcrModelElement*>* Below = Children.Find(KeyOf(Element->Kind, Element->Name)))
+					{
+						Visit(*Below);
+					}
+				}
+			};
+			Visit(Roots);
+		}
+		for (const FDcrModelElement* ElementPtr : Elements)
+		{
+			const FDcrModelElement& Element = *ElementPtr;
 			FString Text = FString::Printf(TEXT("Element %s %s"), LexToString(Element.Kind), *Quote(Element.Name));
 			if (!Element.Parent.IsEmpty())
 			{
