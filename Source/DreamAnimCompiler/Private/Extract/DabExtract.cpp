@@ -13,6 +13,7 @@
 #include "Extract/DabExtractPrivate.h"
 #include "K2Node_FunctionEntry.h"
 #include "K2Node_FunctionResult.h"
+#include "K2Node_CallFunction.h"
 #include "UObject/UnrealType.h"
 
 namespace UE::DreamAnim::Compiler::ExtractPrivate
@@ -111,7 +112,6 @@ namespace UE::DreamAnim::Compiler::ExtractPrivate
 					continue;
 				}
 				Model::FDabModelAssetSlot Slot;
-				Slot.Name = FunctionName.RightChop(GetterPrefix.Len());
 				for (const UEdGraphNode* Node : Function.Value->Nodes)
 				{
 					if (const UK2Node_FunctionEntry* Entry = Cast<UK2Node_FunctionEntry>(Node))
@@ -128,7 +128,24 @@ namespace UE::DreamAnim::Compiler::ExtractPrivate
 						const UClass* ReturnClass = ReturnPin ? Cast<UClass>(ReturnPin->PinType.PinSubCategoryObject.Get()) : nullptr;
 						Slot.Type = ReturnClass ? ReturnClass->GetName() : TEXT("AnimationAsset");
 					}
+					else if (const UK2Node_CallFunction* Call = Cast<UK2Node_CallFunction>(Node))
+					{
+						const UFunction* Target = Call->GetTargetFunction();
+						const FName Name = Target ? Target->GetFName() : NAME_None;
+						const UEdGraphPin* SlotPin = Call->FindPin(TEXT("Slot"), EGPD_Input);
+						if (Target && Target->GetOwnerClass() == UDreamAnimLibrary::StaticClass()
+							&& (Name == TEXT("GetAnimSetSequence") || Name == TEXT("GetAnimSetMontage") || Name == TEXT("GetAnimSetBlendSpace") || Name == TEXT("GetAnimSetAsset"))
+							&& SlotPin && SlotPin->LinkedTo.IsEmpty())
+						{
+							Slot.Name = SlotPin->DefaultValue;
+						}
+					}
 				}
+				if (Slot.Name.IsEmpty())
+				{
+					continue;
+				}
+				Ctx.AssetSlotFunctions.Add(Function.Key, Slot.Name);
 				Ctx.UsedFunctions.Add(Function.Key);
 				Ctx.OutModel.AssetSlots.Add(MoveTemp(Slot));
 			}

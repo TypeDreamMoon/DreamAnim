@@ -797,12 +797,11 @@ namespace UE::DreamAnim::Compiler::ExtractPrivate
 		}
 
 		// The generator reads a slot through its getter, in a forwarder's argument as in a pin's binding.
-		FString Slot;
-		if (Segments.Num() == 1 && Ctx.FunctionGraphs.Contains(FName(*Segments[0]))
-			&& Segments[0].Split(TEXT("DreamAnimAsset_"), nullptr, &Slot, ESearchCase::CaseSensitive) && !Slot.IsEmpty())
+		const FString* Slot = Segments.Num() == 1 ? Ctx.AssetSlotFunctions.Find(FName(*Segments[0])) : nullptr;
+		if (Slot)
 		{
 			Ctx.UsedFunctions.Add(FName(*Segments[0]));
-			return MakeMember(MakeName(TEXT("Assets")), Slot);
+			return MakeMember(MakeName(TEXT("Assets")), *Slot);
 		}
 
 		const UStruct* Scope = Ctx.InstanceClass;

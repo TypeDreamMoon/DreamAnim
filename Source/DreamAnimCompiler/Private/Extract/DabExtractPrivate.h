@@ -48,6 +48,8 @@ namespace UE::DreamAnim::Compiler::ExtractPrivate
 		TSet<FName> BlueprintVariables;
 		/** The Blueprint's K2 function graphs by name, for forwarder recognition. */
 		TMap<FName, const UEdGraph*> FunctionGraphs;
+		/** Validated generated getter -> logical slot, independent of function-name collision suffixes. */
+		TMap<FName, FString> AssetSlotFunctions;
 		/** Function graphs some state or node function referred to. */
 		TSet<FName> UsedFunctions;
 		/** Every state machine graph -> its name in the model, unique across the Blueprint. */

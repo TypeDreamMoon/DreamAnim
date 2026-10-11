@@ -333,11 +333,10 @@ namespace UE::DreamAnim::Compiler::ExtractPrivate
 			{
 				return nullptr;
 			}
-			FString Slot;
-			if (FunctionName.ToString().Split(TEXT("DreamAnimAsset_"), nullptr, &Slot) && !Slot.IsEmpty())
+			if (const FString* Slot = Ctx.AssetSlotFunctions.Find(FunctionName))
 			{
 				Ctx.UsedFunctions.Add(FunctionName);
-				return MakeMember(MakeName(TEXT("Assets")), Slot);
+				return MakeMember(MakeName(TEXT("Assets")), *Slot);
 			}
 
 			const UK2Node_FunctionResult* Result = nullptr;
