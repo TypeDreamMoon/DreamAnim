@@ -64,7 +64,7 @@ namespace UE::DreamAnim::Compiler::DriverPrivate
 				}
 			}
 		}
-		if (Model.AssetSlots.IsEmpty())
+		if (Migration.bPreview)
 		{
 			return true;
 		}

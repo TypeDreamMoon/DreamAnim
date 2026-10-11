@@ -126,6 +126,8 @@ namespace UE::DreamAnim::Compiler
 		FString AnimSetPath;
 		/** Save the set when it changed; false leaves it dirty in memory. */
 		bool bSave = true;
+		/** Produce the migrated text without creating, modifying or saving an animation set. */
+		bool bPreview = false;
 	};
 
 	struct FDabDecompileResult

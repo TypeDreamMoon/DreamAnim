@@ -563,10 +563,11 @@ namespace UE::DreamAnim::Compiler::CommandletPrivate
 			ObjectPaths.Reset();
 		}
 
-		// Every Blueprint of the run moves its animations into the same set; a printed preview leaves it unsaved.
+		// Preview first: refusing or failing to write the text must not change the animation set.
 		FDabAnimSetMigration Migration;
 		Migration.AnimSetPath = Run.AnimSet;
 		Migration.bSave = !Run.bStdout;
+		Migration.bPreview = true;
 
 		int32 NumDone = 0;
 		int32 NumUnchanged = 0;
@@ -581,7 +582,6 @@ namespace UE::DreamAnim::Compiler::CommandletPrivate
 				continue;
 			}
 			const FDabDecompileResult Decompiled = DecompileDabBlueprint(*Blueprint, FDabLowerOptions(), Run.AnimSet.IsEmpty() ? nullptr : &Migration);
-			NumSlots += Decompiled.LiftedAssets.Num();
 			const int32 ErrorsBefore = Run.NumErrors;
 			for (const Lang::FDabDiagnostic& Diagnostic : Decompiled.Diagnostics)
 			{
@@ -599,6 +599,7 @@ namespace UE::DreamAnim::Compiler::CommandletPrivate
 
 			if (Run.bStdout)
 			{
+				NumSlots += Decompiled.LiftedAssets.Num();
 				PrintDabTextBlock(Blueprint->GetPathName(), Decompiled.Text);
 				++NumDone;
 				continue;
@@ -610,33 +611,54 @@ namespace UE::DreamAnim::Compiler::CommandletPrivate
 					+ DriverPrivate::GetDabDecompileExtension(*Blueprint)));
 			FString Text = Decompiled.Text;
 			FString Existing;
+			bool bUnchanged = false;
 			if (IFileManager::Get().FileExists(*Target) && FFileHelper::LoadFileToString(Existing, *Target))
 			{
 				Text = WithDabLineEnds(Text, DetectDabLineEnd(Existing));
 				if (Text.Equals(Existing, ESearchCase::CaseSensitive))
 				{
-					++NumUnchanged;
-					UE_LOG(LogDreamAnimCommandlet, Display, TEXT("Unchanged %s"), *Target);
-					continue;
+					bUnchanged = true;
 				}
 				// The default place is DAnim/, where the sources live: never replace one without being told to.
-				if (!Run.bForce)
+				if (!bUnchanged && !Run.bForce)
 				{
 					Run.Fail(FString::Printf(TEXT("%s exists and differs from %s decompiled; -Force overwrites it (it may be a source written by hand)."),
 						*Target, *ObjectPath));
 					continue;
 				}
 			}
-			if (!FFileHelper::SaveStringToFile(Text, *Target, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+			if (!bUnchanged && !FFileHelper::SaveStringToFile(Text, *Target, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
 			{
 				Run.Fail(FString::Printf(TEXT("Cannot write %s."), *Target));
+				continue;
+			}
+			if (!Run.AnimSet.IsEmpty())
+			{
+				FDabAnimSetMigration Commit = Migration;
+				Commit.bPreview = false;
+				const FDabDecompileResult Applied = DecompileDabBlueprint(*Blueprint, FDabLowerOptions(), &Commit);
+				for (const Lang::FDabDiagnostic& Diagnostic : Applied.Diagnostics)
+				{
+					Run.Report(Diagnostic);
+				}
+				if (!Applied.bSucceeded)
+				{
+					continue;
+				}
+				NumSlots += Applied.LiftedAssets.Num();
+			}
+			if (bUnchanged)
+			{
+				++NumUnchanged;
+				UE_LOG(LogDreamAnimCommandlet, Display, TEXT("Unchanged %s"), *Target);
 				continue;
 			}
 			++NumDone;
 			UE_LOG(LogDreamAnimCommandlet, Display, TEXT("Wrote %s (%d unsupported construct(s))"), *Target, Decompiled.NumUnsupported);
 		}
 
-		const FString Slots = Run.AnimSet.IsEmpty() ? FString() : FString::Printf(TEXT(", %d animation(s) moved into %s"), NumSlots, *Run.AnimSet);
+		const FString Slots = Run.AnimSet.IsEmpty() ? FString() : FString::Printf(TEXT(", %d animation(s) %s %s"), NumSlots,
+			Run.bStdout ? TEXT("previewed for") : TEXT("moved into"), *Run.AnimSet);
 		UE_LOG(LogDreamAnimCommandlet, Display, TEXT("DreamAnim decompile: %d asset(s), %d %s, %d unchanged, %d unsupported construct(s)%s, %d error(s), %d warning(s)"),
 			ObjectPaths.Num(), NumDone, Run.bStdout ? TEXT("printed") : TEXT("written"), NumUnchanged, NumUnsupported, *Slots, Run.NumErrors, Run.NumWarnings);
 	}

@@ -267,7 +267,8 @@ Assets = {
 - **Slot types:** the asset's own class: `AnimSequence`, `BlendSpace`, `AnimMontage`, ...
 - **The set:** created when it does not exist, with the Blueprint's skeleton. A Blueprint's group is
   added to it, or brought up to date. A slot that already holds another animation keeps it (DAB8103).
-  The set is saved, except with `-Stdout`, which prints a preview and leaves it in memory.
+  The set is changed and saved only after the output text is accepted and written successfully.
+  `-Stdout` prints a preview without creating or modifying the set.
 - All the Blueprints of a run go into the same set: one set per character, one group per Blueprint.
 - A Blueprint that already reads its animations from slots has nothing left to move. Decompiling it
   into a set again changes neither the text nor the set.

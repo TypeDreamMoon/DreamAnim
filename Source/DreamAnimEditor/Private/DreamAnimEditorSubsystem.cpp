@@ -751,6 +751,7 @@ FString UDreamAnimEditorSubsystem::Decompile(UAnimBlueprint& Blueprint, bool bOv
 	const FString Path = NormalizeSourcePath(GetDefaultDecompilePath(Blueprint));
 	FDabAnimSetMigration Migration;
 	Migration.AnimSetPath = AnimSetPath;
+	Migration.bPreview = true;
 	const FDabDecompileResult Result = DecompileDabBlueprint(Blueprint, FDabLowerOptions(), AnimSetPath.IsEmpty() ? nullptr : &Migration);
 	Report(FString::Printf(TEXT("Writing %s as text"), *Blueprint.GetName()), Result.Diagnostics);
 	if (!Result.bSucceeded)
@@ -768,6 +769,16 @@ FString UDreamAnimEditorSubsystem::Decompile(UAnimBlueprint& Blueprint, bool bOv
 	if (!SaveSource(Path, Result.Text))
 	{
 		return FString();
+	}
+	if (!AnimSetPath.IsEmpty())
+	{
+		Migration.bPreview = false;
+		const FDabDecompileResult Applied = DecompileDabBlueprint(Blueprint, FDabLowerOptions(), &Migration);
+		Report(FString::Printf(TEXT("Migrating %s animations"), *Blueprint.GetName()), Applied.Diagnostics);
+		if (!Applied.bSucceeded)
+		{
+			return FString();
+		}
 	}
 	RefreshSources();
 
