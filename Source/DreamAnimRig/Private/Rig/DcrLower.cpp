@@ -20,8 +20,6 @@
 #include "RigVMTypeUtils.h"
 #include "Rigs/RigHierarchyElements.h"
 #include "Rigs/RigModuleDefines.h"
-#include "Units/Modules/RigUnit_ConnectionCandidates.h"
-#include "Units/Modules/RigUnit_ConnectorExecution.h"
 #include "UObject/StructOnScope.h"
 
 namespace UE::DreamAnim::Rig
@@ -2519,7 +2517,6 @@ namespace UE::DreamAnim::Rig
 			}
 
 			FDabExprPtr Callee;
-			FString Placeholder;
 			if (Struct)
 			{
 				// Float math is written as its double twin, as the text builds it (an operator picks the twin too).
@@ -2527,15 +2524,16 @@ namespace UE::DreamAnim::Rig
 				const FString TypeName = GetDcrNodeTypeName(*Written);
 				// A rig function of the same name would be found first: then the struct's full name.
 				Callee = MakeDcrName(File.FindFunction(TypeName) ? Written->GetName() : TypeName);
-				// The engine takes these into a module rig only; older rigs and libraries hold them all the same.
-				const bool bModuleOnly = Struct == FRigUnit_ConnectorExecution::StaticStruct() || Struct == FRigUnit_GetCandidates::StaticStruct()
-					|| Struct == FRigUnit_DiscardMatches::StaticStruct();
-				if (bModuleOnly && !File.Model.bModule)
+			}
+			else if (Node.Kind == EDcrNodeKind::Unit && !Node.Notation.IsEmpty())
+			{
+				// A template node no type was picked for: by the template's name, its wildcards left out.
+				FString TemplateName;
+				if (!Node.Notation.Split(TEXT("::"), &TemplateName, nullptr))
 				{
-					File.AddUnsupported(Location + TEXT("/") + Node.Name, FString::Printf(TEXT("a %s node, which only a module rig can hold"), *TypeName));
-					Placeholder = FString::Printf(TEXT("a %s node"), *TypeName);
-					Callee = MakeDcrName(TEXT("Unsupported"));
+					TemplateName = Node.Notation;
 				}
+				Callee = MakeDcrName(TemplateName);
 			}
 			else if (Node.Kind == EDcrNodeKind::LocalCall)
 			{
@@ -2658,10 +2656,6 @@ namespace UE::DreamAnim::Rig
 			if (Struct && Struct->GetPathName() == DcrUserEventStructPath)
 			{
 				return MakeDcrUnsupported(TEXT("a user event used as a value"));
-			}
-			if (!Placeholder.IsEmpty())
-			{
-				Positional.Insert(MakeDcrString(Placeholder), 0);
 			}
 			FDabExprPtr Call = MakeDcrCall(MoveTemp(Callee), MoveTemp(Positional), MoveTemp(Named));
 			if (!Node.InjectedOn.IsEmpty() && !Node.bInjectedAsInput)

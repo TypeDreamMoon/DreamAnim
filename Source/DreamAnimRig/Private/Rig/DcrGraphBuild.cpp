@@ -28,6 +28,9 @@
 #include "RigVMModel/RigVMLink.h"
 #include "RigVMModel/RigVMNode.h"
 #include "RigVMModel/RigVMPin.h"
+#include "Rigs/RigModuleDefines.h"
+#include "Units/Modules/RigUnit_ConnectionCandidates.h"
+#include "Units/Modules/RigUnit_ConnectorExecution.h"
 #include "UObject/StructOnScope.h"
 
 namespace UE::DreamAnim::Rig::Gen
@@ -472,6 +475,16 @@ namespace UE::DreamAnim::Rig::Gen
 						}
 						return Controller->AddUnitNodeWithDefaults(Struct, FRigStructScope(Defaults), TEXT("Execute"), Node.Position, Node.Name, false, false);
 					}
+				}
+				// The engine takes these into a module rig only, and older rigs and libraries hold them all the same: the
+				// rig is a module while the node goes in.
+				const bool bModuleOnly = Struct == FRigUnit_ConnectorExecution::StaticStruct() || Struct == FRigUnit_GetCandidates::StaticStruct()
+					|| Struct == FRigUnit_DiscardMatches::StaticStruct();
+				if (bModuleOnly && !Ctx.Rig.ControlRig->IsControlRigModule())
+				{
+					FRigModuleSettings& ModuleSettings = Ctx.Rig.ControlRig->GetRigModuleSettings();
+					TGuardValue<FString> AsModule(ModuleSettings.Identifier.Name, TEXT("DreamAnim"));
+					return Controller->AddUnitNodeFromStructPath(Node.StructPath, TEXT("Execute"), Node.Position, Node.Name, false, false);
 				}
 				return Controller->AddUnitNodeFromStructPath(Node.StructPath, TEXT("Execute"), Node.Position, Node.Name, false, false);
 			}
