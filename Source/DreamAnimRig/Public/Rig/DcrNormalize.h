@@ -32,4 +32,11 @@ namespace UE::DreamAnim::Rig
 	};
 
 	DREAMANIMRIG_API FDcrNormalizeReport NormalizeDcrModel(Model::FDcrModel& Model);
+
+	/**
+	 * A normalized rig's model as its text's model holds the same rig: a getter that feeds several pins becomes
+	 * one getter per pin (each use of a variable in the text is one), a function's input read through a getter
+	 * becomes a link from the entry, and empty graphs go. For comparing a rig with the model of its text.
+	 */
+	DREAMANIMRIG_API void MakeDcrModelAsTextHoldsIt(Model::FDcrModel& Model);
 }

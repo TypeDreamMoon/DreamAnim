@@ -979,6 +979,147 @@ namespace UE::DreamAnim::Rig
 		}
 	}
 
+	namespace AsTextPrivate
+	{
+		FString NodeOfPath(const FString& PinPath)
+		{
+			int32 Dot = INDEX_NONE;
+			return PinPath.FindChar(TEXT('.'), Dot) ? PinPath.Left(Dot) : PinPath;
+		}
+
+		/** A getter that feeds several pins becomes one getter per link, the way each use of a variable in the text is one. */
+		void SplitSharedGetters(FDcrModelGraph& Graph)
+		{
+			for (FDcrModelNode& Node : Graph.Nodes)
+			{
+				if (Node.Contained.IsValid())
+				{
+					SplitSharedGetters(*Node.Contained);
+				}
+			}
+			TArray<FDcrModelNode> Added;
+			for (const FDcrModelNode& Node : Graph.Nodes)
+			{
+				if (Node.Kind != EDcrNodeKind::VariableGet)
+				{
+					continue;
+				}
+				TArray<int32> LinkIndices;
+				for (int32 Index = 0; Index < Graph.Links.Num(); ++Index)
+				{
+					if (NodeOfPath(Graph.Links[Index].Source) == Node.Name)
+					{
+						LinkIndices.Add(Index);
+					}
+				}
+				for (int32 Count = 1; Count < LinkIndices.Num(); ++Count)
+				{
+					FDcrModelNode Copy;
+					Copy.Name = FString::Printf(TEXT("%s_split_%d"), *Node.Name, Count);
+					Copy.Kind = Node.Kind;
+					Copy.Variable = Node.Variable;
+					Copy.VariableType = Node.VariableType;
+					Copy.bLocalVariable = Node.bLocalVariable;
+					Copy.Values = Node.Values;
+					FDcrModelLink& Link = Graph.Links[LinkIndices[Count]];
+					Link.Source = Copy.Name + Link.Source.Mid(Node.Name.Len());
+					Added.Add(MoveTemp(Copy));
+				}
+			}
+			for (FDcrModelNode& Node : Added)
+			{
+				Graph.Nodes.Add(MoveTemp(Node));
+			}
+		}
+
+		/** A function's input read through a getter node is a link from the Entry node's pin. */
+		void FoldInputGetters(FDcrModelGraph& Graph, const TArray<FString>& InputNames)
+		{
+			const FDcrModelNode* Entry = Graph.Nodes.FindByPredicate([](const FDcrModelNode& Node) { return Node.Kind == EDcrNodeKind::Entry; });
+			if (!Entry)
+			{
+				return;
+			}
+			const FString EntryName = Entry->Name;
+			TArray<FString> Folded;
+			for (const FDcrModelNode& Node : Graph.Nodes)
+			{
+				if (Node.Kind == EDcrNodeKind::VariableGet && !Node.bLocalVariable && InputNames.Contains(Node.Variable))
+				{
+					for (FDcrModelLink& Link : Graph.Links)
+					{
+						if (NodeOfPath(Link.Source) == Node.Name)
+						{
+							// `Getter.Value.Sub` -> `Entry.Input.Sub`
+							FString Rest = Link.Source.Mid(Node.Name.Len() + 1);
+							int32 Dot = INDEX_NONE;
+							Rest = Rest.FindChar(TEXT('.'), Dot) ? Rest.Mid(Dot) : FString();
+							Link.Source = EntryName + TEXT(".") + Node.Variable + Rest;
+						}
+					}
+					Folded.Add(Node.Name);
+				}
+			}
+			Graph.Nodes.RemoveAll([&Folded](const FDcrModelNode& Node) { return Folded.Contains(Node.Name); });
+		}
+
+		void FoldInputGettersIn(FDcrModelGraph& Graph, const TArray<FString>& InputNames)
+		{
+			for (FDcrModelNode& Node : Graph.Nodes)
+			{
+				if (Node.Contained.IsValid())
+				{
+					TArray<FString> Inner;
+					for (const FDcrModelNode& Pin : Node.Contained->Nodes)
+					{
+						if (Pin.Kind == EDcrNodeKind::Entry)
+						{
+							for (const TPair<FString, FDcrType>& Resolved : Pin.ResolvedTypes)
+							{
+								Inner.Add(Resolved.Key);
+							}
+						}
+					}
+					FoldInputGettersIn(*Node.Contained, Inner);
+				}
+			}
+			FoldInputGetters(Graph, InputNames);
+		}
+
+		/** The model of a rig made as alike to its text's model as the text allows. */
+		void MakeAsTextHoldsItImpl(FDcrModel& Model)
+		{
+			for (FDcrModelGraph& Graph : Model.Graphs)
+			{
+				SplitSharedGetters(Graph);
+				FoldInputGettersIn(Graph, TArray<FString>());
+			}
+			for (FDcrModelFunction& Function : Model.Functions)
+			{
+				SplitSharedGetters(Function.Graph);
+				TArray<FString> Inputs;
+				for (const FDcrModelFunctionPin& Input : Function.Inputs)
+				{
+					Inputs.Add(Input.Name);
+				}
+				FoldInputGettersIn(Function.Graph, Inputs);
+			}
+			// An empty graph holds nothing the text can say (the default graph left empty included).
+			for (int32 Index = Model.Graphs.Num() - 1; Index >= 0 && Model.Graphs.Num() > 1; --Index)
+			{
+				if (Model.Graphs[Index].Nodes.IsEmpty())
+				{
+					Model.Graphs.RemoveAt(Index);
+				}
+			}
+		}
+	}
+
+	void MakeDcrModelAsTextHoldsIt(FDcrModel& Model)
+	{
+		AsTextPrivate::MakeAsTextHoldsItImpl(Model);
+	}
+
 	FDcrNormalizeReport NormalizeDcrModel(FDcrModel& InModel)
 	{
 		FDcrNormalizeReport Report;
