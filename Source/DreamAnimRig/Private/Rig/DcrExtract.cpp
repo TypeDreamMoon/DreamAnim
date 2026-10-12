@@ -85,6 +85,7 @@ namespace UE::DreamAnim::Rig
 		};
 
 		void ExtractGraphInto(FExtractContext& Context, URigVMGraph* Graph, FDcrModelGraph& Out, const FString& Location);
+		FDcrModelVariable MakeVariable(FExtractContext& Context, const FRigVMGraphVariableDescription& Description, const FString& Location);
 
 		FDcrType MakeType(const FString& CPPType, const UObject* TypeObject, const FName& TypeObjectPath = NAME_None)
 		{
@@ -558,6 +559,10 @@ namespace UE::DreamAnim::Rig
 			{
 				Out.Contained = MakeUnique<FDcrModelGraph>();
 				Out.Contained->Name = Out.Name;
+				for (const FRigVMGraphVariableDescription& Local : Contained->GetLocalVariables(false))
+				{
+					Out.Contained->Locals.Add(MakeVariable(Context, Local, Location + TEXT("/") + Local.Name.ToString()));
+				}
 				ExtractGraphInto(Context, Contained, *Out.Contained, Location);
 				FillCollapseInterface(Context, Collapse, *Out.Contained, Location);
 			}

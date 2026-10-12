@@ -2066,7 +2066,7 @@ namespace UE::DreamAnim::Rig
 
 		bool FBodyLowering::HasVariable(const FString& Name) const
 		{
-			// The rig's, any function's, or (for an Inline body) the inline function's own inputs.
+			// The rig's, any function's, or (for an Inline body) the inline function's own inputs and locals.
 			return File.VariableNames.Contains(Name)
 				|| (Function && (Function->Inputs.ContainsByPredicate([&Name](const FDcrModelFunctionPin& Input) { return Input.Name == Name; })
 					|| Function->Locals.ContainsByPredicate([&Name](const FDcrModelVariable& Local) { return Local.Name == Name; })));
@@ -2841,6 +2841,8 @@ namespace UE::DreamAnim::Rig
 			GlobalNames.Add(Name);
 			Inline->Name = Name;
 			Inline->bMutable = !Collapse.ExecuteIn.IsEmpty() || !Collapse.ExecuteOut.IsEmpty();
+			// Older rigs' collapse graphs can hold local variables of their own.
+			Inline->Locals = Collapse.Contained->Locals;
 			for (const FDcrModelNode& Node : Collapse.Contained->Nodes)
 			{
 				if (Node.Kind != EDcrNodeKind::Entry && Node.Kind != EDcrNodeKind::Return)

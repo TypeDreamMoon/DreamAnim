@@ -1193,16 +1193,12 @@ namespace UE::DreamAnim::Rig::Sem
 		{
 			return MakeAbsent(Call.Span);
 		}
-		if (!Decl.Locals.IsEmpty())
-		{
-			Sink.Error(TEXT("DAB9004"), Decl.Stmt ? Decl.Stmt->NameSpan : Call.Span, FString::Printf(TEXT("The Inline function `%s` has local variables; a collapse node has none."), *Decl.Name));
-			return MakeAbsent(Call.Span);
-		}
-
 		// The collapse node goes by the Inline function's name (the text names the function after the node), not by a let's.
 		FNodeRec& Rec = NewRec(Decl.Name, Decl.Name);
 		TUniquePtr<FDcrModelGraph> Inner = MakeUnique<FDcrModelGraph>();
 		Inner->Name = Rec.Node.Name;
+		// An Inline function's locals are its collapse graph's own.
+		Inner->Locals = Decl.Locals;
 		{
 			FBody InnerBody(G, *Inner, &Decl, Where + TEXT("/") + Decl.Name);
 			InnerBody.Outer = this;

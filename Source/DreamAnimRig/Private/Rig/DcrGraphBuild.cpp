@@ -184,6 +184,9 @@ namespace UE::DreamAnim::Rig::Gen
 			return PinPath.FindChar(TEXT('.'), Dot) ? PinPath.Left(Dot) : PinPath;
 		}
 
+		void BuildGraphPart(FContext& Ctx, URigVMGraph* Graph, const FDcrModelGraph& Source, const FString& Where, EGraphRole Role,
+			TFunction<bool(const FDcrModelNode&)> Wanted, bool bAppend);
+
 		class FGraphBuilder
 		{
 		public:
@@ -195,6 +198,13 @@ namespace UE::DreamAnim::Rig::Gen
 				, Role(InRole)
 			{
 			}
+
+			/**
+			 * Only the nodes Wanted takes are made, and the links whose two nodes are there. With bAppend the graph has
+			 * the others already: its interface and its execute links are left as they are.
+			 */
+			TFunction<bool(const FDcrModelNode&)> Wanted;
+			bool bAppend = false;
 
 			void Run()
 			{
@@ -249,13 +259,16 @@ namespace UE::DreamAnim::Rig::Gen
 					}
 				}
 
-				if (Role == EGraphRole::Collapse)
+				if (Role == EGraphRole::Collapse && !bAppend)
 				{
 					InferInterface();
 				}
 				ApplyValues();
 				AddLinks();
-				LinkEmptyExecution();
+				if (!bAppend)
+				{
+					LinkEmptyExecution();
+				}
 				Arrange();
 			}
 
@@ -309,6 +322,10 @@ namespace UE::DreamAnim::Rig::Gen
 
 			void AddNode(const FDcrModelNode& Node)
 			{
+				if (Wanted && !Wanted(Node))
+				{
+					return;
+				}
 				const FString Here = NodeWhere(Node);
 				if (!Node.InjectedOn.IsEmpty() && Node.Kind != EDcrNodeKind::Unit)
 				{
@@ -631,6 +648,16 @@ namespace UE::DreamAnim::Rig::Gen
 				}
 
 				const FInterface Interface = ReadInterface(*Node.Contained);
+				TSet<FString> LocalNames;
+				for (const FDcrModelVariable& Local : Node.Contained->Locals)
+				{
+					LocalNames.Add(Local.Name);
+				}
+				const bool bHasLocals = !LocalNames.IsEmpty();
+				auto OnLocal = [&LocalNames](const FDcrModelNode& Inner)
+				{
+					return (Inner.Kind == EDcrNodeKind::VariableGet || Inner.Kind == EDcrNodeKind::VariableSet) && Inner.bLocalVariable && LocalNames.Contains(Inner.Variable);
+				};
 				URigVMLibraryNode* Temporary = LibraryController->AddFunctionToLibrary(FName(*(TEXT("DcrCollapse_") + Node.Name)), Interface.bMutable, FVector2D::ZeroVector, false, false);
 				if (!Temporary)
 				{
@@ -650,8 +677,27 @@ namespace UE::DreamAnim::Rig::Gen
 					ApplyExecutePinName(Ctx, ContentController, ContentGraph, *Node.Contained, Here);
 					// The execute link a new function comes with is the model's to make.
 					ClearGraph(Ctx, ContentGraph, Here);
-					BuildGraph(Ctx, ContentGraph, *Node.Contained, Here, EGraphRole::Collapse);
+					// Locals the collapse graph holds itself (older rigs). The engine checks a collapse node's variable nodes
+					// against what its graph holds, and the graph holds nothing while it is made: their nodes come after.
+					for (const FDcrModelVariable& Local : Node.Contained->Locals)
+					{
+						const FRigVMGraphVariableDescription Added = ContentController->AddLocalVariableFromObjectPath(FName(*Local.Name), Local.Type.CPPType,
+							Local.Type.ObjectPath, MakeDcrEngineDefault(Local.Type, Local.Default), false);
+						if (Added.Name != FName(*Local.Name))
+						{
+							Ctx.Error(Here + TEXT("/") + Local.Name, TEXT("the local variable could not be added"));
+						}
+					}
+					if (bHasLocals)
+					{
+						BuildGraphPart(Ctx, ContentGraph, *Node.Contained, Here, EGraphRole::Collapse, [&OnLocal](const FDcrModelNode& Inner) { return !OnLocal(Inner); }, false);
+					}
+					else
+					{
+						BuildGraph(Ctx, ContentGraph, *Node.Contained, Here, EGraphRole::Collapse);
+					}
 				}
+				const TArray<FRigVMGraphVariableDescription> Locals = ContentGraph ? ContentGraph->GetLocalVariables(false) : TArray<FRigVMGraphVariableDescription>();
 
 				URigVMNode* Collapsed = nullptr;
 				URigVMLibraryNode* Definition = Library->FindFunction(TemporaryName);
@@ -661,6 +707,13 @@ namespace UE::DreamAnim::Rig::Gen
 					{
 						const FName CollapsedName = Controller->PromoteFunctionReferenceNodeToCollapseNode(Reference->GetFName(), false, false, true);
 						Collapsed = CollapsedName.IsNone() ? nullptr : Graph->FindNodeByName(CollapsedName);
+						// Promoting clears the collapse graph's locals: they are given back, and their nodes made.
+						URigVMGraph* CollapsedGraph = Collapsed ? CastChecked<URigVMCollapseNode>(Collapsed)->GetContainedGraph() : nullptr;
+						if (TArray<FRigVMGraphVariableDescription>* CollapsedLocals = bHasLocals ? GetGraphLocals(CollapsedGraph) : nullptr)
+						{
+							*CollapsedLocals = Locals;
+							BuildGraphPart(Ctx, CollapsedGraph, *Node.Contained, Here, EGraphRole::Collapse, OnLocal, true);
+						}
 					}
 				}
 				if (!Collapsed)
@@ -673,6 +726,13 @@ namespace UE::DreamAnim::Rig::Gen
 					LibraryController->RemoveFunctionFromLibrary(TemporaryName, false, false);
 				}
 				return Collapsed;
+			}
+
+			/** A graph's own local variables, which the engine lets only its controller's function-graph calls change. */
+			static TArray<FRigVMGraphVariableDescription>* GetGraphLocals(URigVMGraph* InGraph)
+			{
+				static const FArrayProperty* Property = FindFProperty<FArrayProperty>(URigVMGraph::StaticClass(), TEXT("LocalVariables"));
+				return Property && InGraph ? Property->ContainerPtrToValuePtr<TArray<FRigVMGraphVariableDescription>>(InGraph) : nullptr;
 			}
 
 			/** The type a reroute carries is the type of what it is linked to. */
@@ -705,7 +765,7 @@ namespace UE::DreamAnim::Rig::Gen
 				TArray<const FDcrModelNode*> Pending;
 				for (const FDcrModelNode& Node : Source.Nodes)
 				{
-					if (Node.Kind == EDcrNodeKind::Reroute)
+					if (Node.Kind == EDcrNodeKind::Reroute && (!Wanted || Wanted(Node)))
 					{
 						Pending.Add(&Node);
 					}
@@ -905,6 +965,11 @@ namespace UE::DreamAnim::Rig::Gen
 					{
 						continue;
 					}
+					// Building a part of the graph: a link waits for both of its nodes.
+					if (Wanted && (!Find(NodeOfPin(Link.Source)) || !Find(NodeOfPin(Link.Target))))
+					{
+						continue;
+					}
 					URigVMPin* Output = Graph->FindPin(Link.Source);
 					URigVMPin* Input = FindOrGrowPin(Link.Target);
 					if (!Output || !Input)
@@ -960,6 +1025,11 @@ namespace UE::DreamAnim::Rig::Gen
 				}
 				for (const TPair<FString, FVector2D>& Entry : Positions)
 				{
+					const FDcrModelNode* Placed = Wanted ? Source.FindNode(Entry.Key) : nullptr;
+					if (Placed && !Wanted(*Placed))
+					{
+						continue;
+					}
 					URigVMNode* Existing = Find(Entry.Key);
 					if (Existing && Existing->GetPosition() != Entry.Value)
 					{
@@ -1062,6 +1132,18 @@ namespace UE::DreamAnim::Rig::Gen
 	{
 		FGraphBuilder Builder(Ctx, Graph, Source, Where, Role);
 		Builder.Run();
+	}
+
+	namespace
+	{
+		void BuildGraphPart(FContext& Ctx, URigVMGraph* Graph, const FDcrModelGraph& Source, const FString& Where, EGraphRole Role,
+			TFunction<bool(const FDcrModelNode&)> Wanted, bool bAppend)
+		{
+			FGraphBuilder Builder(Ctx, Graph, Source, Where, Role);
+			Builder.Wanted = MoveTemp(Wanted);
+			Builder.bAppend = bAppend;
+			Builder.Run();
+		}
 	}
 
 	void ApplyExecutePinName(FContext& Ctx, URigVMController* FunctionController, URigVMGraph* FunctionGraph, const FDcrModelGraph& Source, const FString& Where)

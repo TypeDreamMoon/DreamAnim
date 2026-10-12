@@ -153,17 +153,6 @@ namespace UE::DreamAnim::Model
 		FString Target;
 	};
 
-	struct FDcrModelGraph
-	{
-		/** A top-level graph's name (`RigVMModel`, `ConstructionGraph`); a function's name; a collapse node's name. */
-		FString Name;
-		TArray<FDcrModelNode> Nodes;
-		TArray<FDcrModelLink> Links;
-
-		DREAMANIMLANG_API const FDcrModelNode* FindNode(const FString& NodeName) const;
-		DREAMANIMLANG_API FDcrModelNode* FindNode(const FString& NodeName);
-	};
-
 	struct FDcrModelVariable
 	{
 		FString Name;
@@ -174,6 +163,22 @@ namespace UE::DreamAnim::Model
 		bool bReadOnly = false;
 		FString Category;
 		FString Tooltip;
+	};
+
+	struct FDcrModelGraph
+	{
+		/** A top-level graph's name (`RigVMModel`, `ConstructionGraph`); a function's name; a collapse node's name. */
+		FString Name;
+		TArray<FDcrModelNode> Nodes;
+		TArray<FDcrModelLink> Links;
+		/**
+		 * A collapse node's graph: the local variables it holds itself. Older rigs have these (a function made into
+		 * a collapse node kept its locals); a function's locals are on the function.
+		 */
+		TArray<FDcrModelVariable> Locals;
+
+		DREAMANIMLANG_API const FDcrModelNode* FindNode(const FString& NodeName) const;
+		DREAMANIMLANG_API FDcrModelNode* FindNode(const FString& NodeName);
 	};
 
 	struct FDcrModelFunctionPin

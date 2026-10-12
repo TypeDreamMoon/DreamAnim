@@ -504,6 +504,7 @@ namespace UE::DreamAnim::Model
 		// ---- Printing ------------------------------------------------------------------------------------------
 
 		void DumpGraphBody(FString& Out, int32 Depth, const FDcrModelGraph& Graph, const FDcrDumpOptions& Options);
+		FString VariableText(const TCHAR* Word, const FDcrModelVariable& Variable, bool bFloatAsDouble);
 
 		void DumpNode(FString& Out, int32 Depth, const FDcrModelNode& Node, const FNaming& Naming, const FDcrDumpOptions& Options)
 		{
@@ -579,6 +580,10 @@ namespace UE::DreamAnim::Model
 
 		void DumpGraphBody(FString& Out, int32 Depth, const FDcrModelGraph& Graph, const FDcrDumpOptions& Options)
 		{
+			for (const FDcrModelVariable& Local : Graph.Locals)
+			{
+				Line(Out, Depth, VariableText(TEXT("Local"), Local, Options.bFloatAsDouble));
+			}
 			const FNaming Naming = NameNodes(Graph, Options);
 			for (const FDcrModelNode* Node : Naming.Order)
 			{
