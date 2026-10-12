@@ -967,6 +967,12 @@ namespace UE::DreamAnim::Rig
 
 			ApplyModule(Ctx, Model);
 			BuildHierarchy(Ctx, Model);
+			// A module lists the connectors it shows a modular rig in its settings, from its hierarchy: the engine
+			// keeps that list on hierarchy changes, which are not reported while the rig is built.
+			if (Model.bModule)
+			{
+				Rig.ControlRig->UpdateExposedModuleConnectors();
+			}
 			SyncVariables(Ctx, Model);
 			ApplySettings(Ctx, Model);
 			SyncFunctions(Ctx, Model);
