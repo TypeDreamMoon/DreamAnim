@@ -72,12 +72,13 @@ Postfix     = Primary { "." Name | "(" [ Arguments ] ")" | "[" Expr "]" } ;   (*
 Primary     = Number | String | "true" | "false" | Name
             | "(" Expr ")"                                       (* grouping *)
             | "(" Arguments ")"                                  (* tuple: none, two or more items, or any named item; `()` is a struct at its defaults *)
-            | "[" [ Expr { "," Expr } [ "," ] ] "]"              (* list *)
+            | "[" [ ListItem { "," ListItem } [ "," ] ] "]"      (* list *)
             | Block                                              (* map: statements *)
             | Stack ;
 Stack       = "{" Expr ";" { Expr ";" } "}" ;
 Arguments   = Argument { "," Argument } [ "," ] ;
 Argument    = [ Key "=" ] Expr ;
+ListItem    = [ Name "=" ] Expr ;                                 (* `Name = Item`: a named item, see Notes *)
 ```
 
 ### Control Rig documents
@@ -100,11 +101,11 @@ CodeStmt    = Let | Typed | Local | Set | ExprStmt | If | For | Return | Detache
 Let         = "let" Name "=" Expr ";" ;
 Typed       = Type Name "=" Expr ";" ;                            (* a let with its type written *)
 Local       = "local" Type Name [ "=" Expr ] ";" ;
-Set         = Postfix "=" Expr ";" ;                              (* a name, a member or an element *)
+Set         = Expr "=" Expr ";" ;                                 (* the target is a name or an element; the checker refuses any other (DAB9006) *)
 ExprStmt    = Expr ";" ;
 If          = "if" "(" Expr ")" CodeBlock { "else" "if" "(" Expr ")" CodeBlock } [ "else" CodeBlock ] ;
 For         = "for" "(" Name { "," Name } "in" Expr ")" CodeBlock ;   (* one to four names *)
-Return      = "return" [ "(" Argument { "," Argument } ")" ] ";" ;    (* every item named *)
+Return      = "return" [ "(" Argument { "," Argument } ")" ] ";" ;    (* every item named; `return;` gives no outputs *)
 DetachedStmt = "Detached" CodeBlock ;
 ```
 
@@ -121,6 +122,31 @@ DetachedStmt = "Detached" CodeBlock ;
   A `return` gives its outputs as a tuple of named items (DAB2018).
 - The value of a function written `= Expr;` is code in this respect: `[` after an expression is an index.
 - `#Region` / `#EndRegion` pair up inside one code block like inside a block.
+- A `Detached` at the top of the document, or in any block, is told from a declaration by what follows it: a
+  `{` or a `[`. `Event` and `Function` need a name; an `Event` takes no parameter list.
+- A function's parameters are `Type Name` with an optional default; its outputs, after `->`, are `Type Name`
+  and take none. A name twice in either list is DAB2014.
+
+### Telling the statements of code apart
+
+The parser looks at the first tokens of a statement in a code block:
+
+| The statement begins with | It is |
+|---|---|
+| `#Region` / `#EndRegion` | a region marker |
+| `let` | a let |
+| `local` | a local |
+| `if` | an `if` |
+| `else` | an error: DAB2016 (an `else` follows the block of an `if`) |
+| `for` | a `for` |
+| `return` | a return |
+| `Detached` | a Detached block |
+| `Type Name`: a name, its type arguments if it has some, then another name | a typed let |
+| anything else | an expression; an assignment when a `=` follows it |
+
+The words `let`, `local`, `if`, `else`, `for`, `return` and `Detached` count only when they are not written in
+backticks. A typed let is told from an expression by the second name: `float Scale = 1;` is a typed let,
+`Scale = 1;` an assignment.
 
 ### Telling a block from a stack
 
@@ -146,6 +172,10 @@ assignment, is DAB2010.
 - A `[` right after a complete expression opens the statement's metadata. The index operator `a[i]` exists
   only inside code blocks, where statements take no metadata (see "Control Rig documents").
 - Positional arguments come before named ones (DAB2012). A name used twice in one argument list is DAB2011.
+- An item of a list may be named: `[ Modules_Arm = Path(Plugin.ControlRigModules, "Modules/Arm") ]`. The name
+  is an identifier or a name in backticks, followed by `=`; the other items of the list may stay unnamed. The
+  parser reads a named item in every document; in a `ControlRig` the `Uses` setting gives it a meaning (the
+  name the calls into that rig go by).
 - `#include` lines come before the document. One document per file (DAB2003).
 - `#Region` / `#EndRegion` pair up inside one block; an unpaired one is a warning (DAB2008).
 
@@ -174,7 +204,8 @@ once, and the canonical text parses to the same tree.
       LoopDuration     = 0.15
   );
   ```
-- Lists and tuples print on one line when they fit, otherwise one item per line like arguments.
+- Lists and tuples print on one line when they fit, otherwise one item per line like arguments. A named list
+  item prints as `Name = Item`.
 - Alignment inside a block, over each run of consecutive single-line statements of the same kind
   (a blank line, a comment line or a multi-line statement ends the run):
   - assignments: the `=` signs line up;

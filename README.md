@@ -1,6 +1,6 @@
 # DreamAnim
 
-Animation Blueprints written as text, for Unreal Engine 5.8.
+Animation Blueprints and Control Rigs written as text, for Unreal Engine 5.8.
 
 All logic stays in the C++ anim instance a Blueprint derives from. The anim graph, its state machines,
 cached poses, layers and linked graphs are written in `.dab` files. A file only reads C++ state and calls
@@ -13,6 +13,7 @@ graphs with what the text says.
 | `.dab` | `AnimBlueprint(...)` | an Animation Blueprint |
 | `.dai` | `AnimLayerInterface(...)` | an Animation Layer Interface |
 | `.dat` | `AnimTemplates(...)` | nothing; a library of templates other files include |
+| `.dcr` | `ControlRig(...)` | a Control Rig; see [Control Rigs](#control-rigs) |
 
 ## Example
 
@@ -53,6 +54,42 @@ AnimBlueprint(Name="ALS/Character/AnimationInstances/AB_Als_Head", Root="Plugin.
 `Main.HeadState.YawAmount` binds a pin to C++ state. `Call(...)` calls a C++ function while the graph
 runs. `Additive` is a named pose: a stack of three nodes.
 
+## Control Rigs
+
+A `.dcr` file is the source of a Control Rig. It works beside `.dab` files and uses the same header, blocks,
+comments, `#include` and templates, but it has a different job: a Control Rig's graph is its logic, so the
+logic stays in the text. The bodies of events and functions are code. Each call is a node, each statement a
+node on the execute chain, and `let` names a node so that many places read it.
+
+```dcr
+ControlRig(Name="Rigs/CR_Example", Root="Game")
+{
+    Variables = {
+        double Speed = 1;
+        RigElementKey Target [ Public ];
+    }
+
+    Function Scale(double Value, double Factor = 2) -> (double Result) = Value * Factor;
+
+    Event Forward
+    {
+        let Doubled = Scale(Speed);
+        Speed = Doubled + Doubled;
+        if (Speed > 10)
+        {
+            Speed = 10;
+        }
+        SetTransform(Item = Target, Value = (Translation = (Z = Speed)));
+    }
+}
+```
+
+The file has sections for the settings, the hierarchy (bones, nulls, controls, curves, connectors and sockets,
+or `Import` of a mesh), the variables, the events and the functions. A build makes the Control Rig asset, or
+rebuilds it in place, and compiles it. An existing Control Rig becomes text with **Write as DreamAnim Text** in
+the Content Browser or `Tools/dab.ps1 decompile`. See [ControlRig.md](Docs/ControlRig.md) for the language and
+[Decompiling.md](Docs/Decompiling.md#writing-control-rigs-as-text) for turning a rig into text.
+
 ## Status
 
 Measured by the automated tests against ALS-Refactored:
@@ -83,7 +120,8 @@ The plugin is beta (version 0.1.0).
 - Unreal Engine 5.8.
 - Windows and PowerShell for `Tools/dab.ps1`.
 - The plugin is not enabled by default. Enable it in the project's `.uproject`. It enables
-  `PropertyAccessEditor`, which the generated bindings use.
+  `PropertyAccessEditor`, which the generated bindings use, and `ControlRig`, which the Control Rig front end
+  builds on.
 
 ## Modules
 
@@ -94,6 +132,8 @@ The plugin is beta (version 0.1.0).
 | `DreamAnimCompiler` | UncookedOnly | The checker, the generator, the decompiler, write-back, the driver the command line and the editor share, and the `-run=DreamAnim` commandlet. |
 | `DreamAnimEditor` | Editor | Keeping Blueprints and their sources in step (rebuild on save, write-back, conflicts), the Content Browser and Tools menu entries, the Dream Anim message log, and the Dream Anim Set asset type with its slot editing. |
 | `DreamAnimTests` | UncookedOnly | Automation tests, including the ALS-Refactored round trip. UncookedOnly so they also load under `-game`. |
+| `DreamAnimRig` | Editor | The Control Rig front end: the checker for `.dcr` files, the generator that builds Control Rig assets, and the decompiler that reads them. It registers itself with the driver when the editor starts. |
+| `DreamAnimRigTests` | Editor | Automation tests of the Control Rig front end, including rebuilding the engine's own Control Rigs from their text. |
 
 ## Quick start
 
@@ -142,11 +182,11 @@ Sources live in the project's `DAnim/` folder, or in `DAnim/` of an enabled plug
 | Command | What it does |
 |---|---|
 | `make` | Builds the test host's editor target: the plugin's C++. |
-| `test [-Preset P] [-Filter F] [-NoBuild]` | Runs `make`, then the automation tests headless in the test host. Presets: `Quick` (the default: language, checker corpus, driver, write-back, editor), `RoundTrip` (every ALS Blueprint decompiled, checked, generated and compared, also with an animation set), `Behavior` (the ALS character and generated Blueprints run, poses compared), `All`. `-Filter` replaces the preset's tests. |
-| `build [-File F] [-Root R] [-NoSave] [-Json J]` | Compiles the `.dab` and `.dai` sources into Animation Blueprint assets and saves them. `-NoSave` keeps them in memory only. |
+| `test [-Preset P] [-Filter F] [-NoBuild]` | Runs `make`, then the automation tests headless in the test host. Presets: `Quick` (the default: language, checker corpus, driver, write-back, editor), `RoundTrip` (every ALS Blueprint decompiled, checked, generated and compared, also with an animation set), `Behavior` (the ALS character and generated Blueprints run, poses compared), `Rig` (the `.dcr` front end, the engine's Control Rigs read and written as text, and write-back), `RigRoundTrip` (those rigs rebuilt from their text and compared as text and as models), `RigBehavior` (rebuilt rigs, a modular biped among them, run side by side with the originals), `All`. `-Filter` replaces the preset's tests. |
+| `build [-File F] [-Root R] [-NoSave] [-Json J]` | Compiles the `.dab` and `.dai` sources into Animation Blueprint assets, and the `.dcr` sources into Control Rig assets, and saves them. `-NoSave` keeps them in memory only. |
 | `check [-File F] [-Root R] [-Json J]` | Parses and checks: includes, templates, names. Nothing is generated. |
 | `fmt [-File F] [-Root R] [-Write \| -Verify] [-Json J]` | Prints the canonical text. `-Write` rewrites the files that differ, keeping their line ends. `-Verify` writes nothing and fails on any file that is not canonical. |
-| `decompile (-Asset A[,B] \| -Under /Game/Folder) [-AnimSet S] [-Out O] [-Stdout] [-Force] [-Json J]` | Animation Blueprints to text, under the project's `DAnim/` unless `-Out`. `-Stdout` prints instead. A file that exists and differs is replaced only with `-Force`. `-AnimSet` moves their animations into slots of that animation set. |
+| `decompile (-Asset A[,B] \| -Under /Game/Folder) [-AnimSet S] [-Out O] [-Stdout] [-Force] [-Json J]` | Animation Blueprints and Control Rigs to text, under the project's `DAnim/` unless `-Out`. `-Stdout` prints instead. A file that exists and differs is replaced only with `-Force`. `-AnimSet` moves their animations into slots of that animation set. |
 
 - `build`, `check`, `fmt` and `decompile` run `UnrealEditor-Cmd <project> -run=DreamAnim`. The project
   is `-Project`, else the project above `-File`, else the plugin's test host. `make` and `test` use the
@@ -183,7 +223,8 @@ engine association; `Tools/TestHost/New-DreamAnimTestHost.ps1 -EngineAssociation
 |---|---|
 | [Language.md](Docs/Language.md) | Writing `.dab` files: every section, node, state machine rule and value. |
 | [AnimSet.md](Docs/AnimSet.md) | Animation sets: slots, the set asset, swapping at run time. |
-| [Decompiling.md](Docs/Decompiling.md) | Turning existing Blueprints into text, and migrating a character. |
+| [ControlRig.md](Docs/ControlRig.md) | Writing `.dcr` files: every section, statement, expression and value. |
+| [Decompiling.md](Docs/Decompiling.md) | Turning existing Blueprints and Control Rigs into text, and migrating a character. |
 | [WriteBack.md](Docs/WriteBack.md) | Working in the editor: rebuilds, write-back, conflicts, node positions, settings. |
 | [Diagnostics.md](Docs/Diagnostics.md) | Every `DABnnnn` code and how to fix it. |
 | [Grammar.md](Docs/Grammar.md) | The formal grammar and the canonical format. |
@@ -193,7 +234,7 @@ engine association; `Tools/TestHost/New-DreamAnimTestHost.ps1 -EngineAssociation
 
 | Path | What |
 |---|---|
-| `Source/` | The five modules. |
+| `Source/` | The seven modules. |
 | `Docs/` | The pages above. |
 | `Tests/Corpus/` | Parser, formatter and template cases, and the decompiled ALS-Refactored Blueprints the tests compare against. |
 | `Tools/dab.ps1` | The command line. |

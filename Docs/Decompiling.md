@@ -1,7 +1,8 @@
 # Decompiling an Animation Blueprint
 
 The decompiler reads an Animation Blueprint, or an Animation Layer Interface, and writes the text that
-builds it. Use it to bring an existing character to DreamAnim; from then on the text is the source.
+builds it. Use it to bring an existing character to DreamAnim; from then on the text is the source. It also reads Control
+Rigs; that is described in [Writing Control Rigs as text](#writing-control-rigs-as-text).
 
 - [Running it](#running-it)
 - [What you get](#what-you-get)
@@ -12,6 +13,7 @@ builds it. Use it to bring an existing character to DreamAnim; from then on the 
 - [Moving the animations into a set](#moving-the-animations-into-a-set)
 - [Checking the result](#checking-the-result)
 - [Migrating a character safely](#migrating-a-character-safely)
+- [Writing Control Rigs as text](#writing-control-rigs-as-text)
 
 ## Running it
 
@@ -337,3 +339,115 @@ generated Blueprints update in about the time the originals take, within a few p
 
 After migrating, the text is the source. Changes made in the editor are written back into it; see
 [WriteBack.md](WriteBack.md).
+
+## Writing Control Rigs as text
+
+The decompiler reads Control Rig assets too and writes `.dcr` files, the language described in
+[ControlRig.md](ControlRig.md). It takes both kinds of Control Rig asset, the Blueprint-based rig and the
+independent one, and reads them the same way: the hierarchy, the member variables, the function library, every
+graph, the asset's settings and, for a module, its module settings.
+
+```
+Tools/dab.ps1 decompile -Asset /Game/Rigs/CR_Hero
+Tools/dab.ps1 decompile -Asset /ControlRigModules/Modules58/Hinge -Stdout
+Tools/dab.ps1 decompile -Under /Game/Rigs
+```
+
+In the editor, **Write as DreamAnim Text** on Control Rig assets in the Content Browser does the same for the
+selected ones. When a file it would write exists already, the editor lists the files and asks whether to
+replace them. It opens the first file it wrote. Anything the text could not hold is reported in the Dream
+Anim message log, with the number of items and the file. Then it asks whether to rebuild the rigs from their new
+text: changes made to a rig in the editor are written into its text only once the rig has been built from it
+(see [WriteBack.md](WriteBack.md#control-rigs)).
+
+The options are those of [Running it](#running-it), with two differences. `-Under` finds Control Rigs as well
+as Animation Blueprints, and a run may mix the two. `-AnimSet` goes with Animation Blueprints; giving it for a
+Control Rig is an error.
+
+Each file goes under the project's `DAnim/` folder, mirroring the package path, with the extension `.dcr`.
+Content of a plugin keeps its mount name:
+
+| Control Rig | Text |
+|---|---|
+| `/Game/Rigs/CR_Hero` | `DAnim/Rigs/CR_Hero.dcr` |
+| `/ControlRigModules/Modules58/Hinge` | `DAnim/ControlRigModules/Modules58/Hinge.dcr` |
+
+The header's `Name` and `Root` are the rig's own path (`Name="Modules58/Hinge", Root="Plugin.ControlRigModules"`),
+so building the file without changing them rebuilds that very asset, in the kind it has. A file that exists and
+differs is replaced only with `-Force`, as for Animation Blueprints. A rig that cannot be read is DAB9104.
+
+### What you get
+
+The sections come in this order: `Settings`, `Module` (for a module), `Hierarchy`, `Variables`, the functions,
+the events, then the `Inline` functions. What stands in the rig is written as it is; names are not changed.
+Variables, functions, pins, events and elements keep the names they have, written in backticks when they are not
+identifiers, because other assets and the rig's code find them by name.
+
+A list of the used rigs is made from the function calls that go into other rigs. Two used rigs that share an
+asset name are each named in `Uses` for the calls into them (`Modules56_Arm = Path(...)`).
+
+### What decompiling normalizes
+
+The text keeps what the rig does, not every detail of how the graph was drawn. These are changed on the way
+and a build of the text makes a rig that does the same:
+
+- **Reroutes are folded.** A reroute becomes a direct link.
+- **Sequence nodes are flattened.** The outputs of a Sequence node run one after the other, so their code is
+  written as statements in that order.
+- **Getters nothing reads are dropped.** A variable getter whose value goes nowhere is not written.
+- **Values under links are reset.** A pin that is linked keeps the value it held in the asset, but the value
+  does nothing; the text does not have it.
+- **Bones and curves of the mesh become `Import`.** When the rig's hierarchy holds exactly the bones and
+  curves that importing its preview mesh gives, they are written as `Import = Mesh;`, and only the elements
+  the rig added come after it. An imported element whose properties differ a little from a fresh import is
+  written after `Import` with only the properties that differ. When most of the imported elements would need
+  that, or the rig has no preview mesh, every element is written out with its `Parent`.
+- **A float math node is written as its double version.** A build makes the double node. Float and double
+  values link to each other, so the rest of the graph is unchanged.
+- **Data nodes become expressions.** A data node used once is written where it is used. One used more than once
+  becomes a `let`, named after the node.
+- **Types are written only where they are needed.** A typed `let` stands where the node's types cannot be told
+  from its arguments or from where its result goes.
+- **Collapse nodes become `Inline` functions.** Each is written once, after the events, and called where the
+  node was.
+- **Nodes nothing executes are kept under `Detached`.** They stay in the graph and never run.
+
+Comment boxes become comments:
+
+- A box that encloses two or more consecutive statements of one block becomes a `#Region` around them, with the
+  box's text as its label.
+- Any other box becomes `//` lines above the first statement it touches. A second box on the same statement is
+  written as a `/* */` comment, so that the two read back as two.
+- A box that touches no statement is written above the first event of its graph, or above the function it
+  belongs to.
+
+Node positions, sizes and colors are not kept, and neither is the expansion state of pins. A build lays the
+nodes out again, so the rig looks different in the editor than the original did.
+
+### What cannot be expressed
+
+What the text cannot hold is listed in a comment at the top of the file, one line for each item, with its
+place in the rig:
+
+```dcr
+// Not expressible in the text; kept out of it:
+//   RigVMModel/Branch_1: two execute paths lead into this node; it is written once, where the first one reaches it
+ControlRig(Name="Rigs/CR_Example", Root="Game")
+```
+
+As for Animation Blueprints, there are two kinds of loss. When the lost thing was a value, the text holds
+`Unsupported("...")` in its place, and the file does not check (DAB9001) until you replace it. When the lost
+thing was a part of the graph's structure, the text does not have it, and a rebuilt rig does not have it
+either. The kinds of item are listed in [ControlRig.md](ControlRig.md#what-the-text-cannot-hold).
+
+### Checking the result
+
+```
+Tools/dab.ps1 check -File DAnim/Rigs/CR_Hero.dcr
+Tools/dab.ps1 build -File DAnim/Rigs/CR_Hero.dcr -NoSave
+```
+
+`check` loads the assets the file names (the preview mesh, shape libraries, the rigs in `Uses`) and reports
+what does not resolve. `build -NoSave` builds the rig and compiles it in memory. Building a decompiled file
+rebuilds the original asset in place: its hierarchy, member variables and graphs are replaced. Commit or back up
+the content first.
