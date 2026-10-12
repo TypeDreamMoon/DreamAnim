@@ -336,6 +336,8 @@ namespace UE::DreamAnim::Lang
 			{
 				Result->Items.Add(DabAstPrivate::CloneOptionalExpr(Item));
 			}
+			Result->ItemNames = Source.ItemNames;
+			Result->ItemNameSpans = Source.ItemNameSpans;
 			return Result;
 		}
 		case EDabNodeKind::TupleExpr:

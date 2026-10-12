@@ -2807,6 +2807,16 @@ namespace UE::DreamAnim::Lang
 					}
 
 					FAnchorStart Anchor = BeginAnchor(Carry);
+					// `Name = Item`: an item the list names.
+					FString ItemName;
+					FDabSpan ItemNameSpan;
+					if (Check(EDabTokenKind::Identifier) && Peek(1).Is(EDabTokenKind::Assign))
+					{
+						const FDabToken& Key = Advance();
+						ItemName = Key.Text;
+						ItemNameSpan = Key.Span;
+						Advance(); // =
+					}
 					FDabExprPtr Item = ParseExpression();
 					bool bRecover = !Item;
 					if (Item && !Match(EDabTokenKind::Comma) && !Check(EDabTokenKind::RightBracket))
@@ -2820,6 +2830,16 @@ namespace UE::DreamAnim::Lang
 					EndAnchor(MoveTemp(Anchor), Item.Get(), Carry);
 					if (Item)
 					{
+						if (!ItemName.IsEmpty() && !List->HasItemNames())
+						{
+							List->ItemNames.SetNum(List->Items.Num());
+							List->ItemNameSpans.SetNum(List->Items.Num());
+						}
+						if (List->HasItemNames())
+						{
+							List->ItemNames.Add(ItemName);
+							List->ItemNameSpans.Add(ItemNameSpan);
+						}
 						List->Items.Add(MoveTemp(Item));
 					}
 

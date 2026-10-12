@@ -160,6 +160,19 @@ namespace UE::DreamAnim::Lang
 		FDabListExpr() : FDabExpr(StaticKind) {}
 
 		TArray<FDabExprPtr> Items;
+		/**
+		 * The names of items written `Name = Item` (`Uses = [ Arm56 = "/ControlRigModules/Modules56/Arm" ]`): as long
+		 * as Items when one is named, an empty name for the others; empty when none is.
+		 */
+		TArray<FString> ItemNames;
+		TArray<FDabSpan> ItemNameSpans;
+
+		bool HasItemNames() const { return !ItemNames.IsEmpty(); }
+		const FString& GetItemName(int32 Index) const
+		{
+			static const FString None;
+			return ItemNames.IsValidIndex(Index) ? ItemNames[Index] : None;
+		}
 	};
 
 	/** `(a, b)` or `(Min = 0, Max = 1)`. A single unnamed item in parentheses is a ParenExpr instead. */

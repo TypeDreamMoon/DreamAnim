@@ -794,11 +794,12 @@ namespace UE::DreamAnim::Lang
 				const FDabListExpr& List = static_cast<const FDabListExpr&>(Expr);
 				TArray<FString> Parts;
 				Parts.Reserve(List.Items.Num());
-				for (const FDabExprPtr& Item : List.Items)
+				for (int32 Index = 0; Index < List.Items.Num(); ++Index)
 				{
-					if (Item)
+					if (const FDabExpr* Item = List.Items[Index].Get())
 					{
-						Parts.Add(Flat(*Item));
+						const FString& Name = List.GetItemName(Index);
+						Parts.Add(Name.IsEmpty() ? Flat(*Item) : Name + TEXT(" = ") + Flat(*Item));
 					}
 				}
 				return Parts.Num() == 0 ? FString(TEXT("[]")) : FString(TEXT("[ ")) + FString::Join(Parts, TEXT(", ")) + TEXT(" ]");
@@ -1091,6 +1092,10 @@ namespace UE::DreamAnim::Lang
 
 				const bool bLast = Index == LastIndex;
 				FString Line = MakeIndent(ItemLevel);
+				if (!List.GetItemName(Index).IsEmpty())
+				{
+					Line += List.GetItemName(Index) + TEXT(" = ");
+				}
 				const int32 ItemColumn = Line.Len();
 				Line += FormatExpr(*Item, ItemLevel, ItemColumn, bLast ? 0 : 1);
 				if (!bLast)
