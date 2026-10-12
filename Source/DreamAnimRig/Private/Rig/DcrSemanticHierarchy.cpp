@@ -320,6 +320,29 @@ namespace UE::DreamAnim::Rig::Sem
 				return true;
 			}
 
+			/** The limit array a new control of its type gets is what the engine gives it anyway: no value (as extraction holds it). */
+			void DropNewControlLimits(FDcrModelElement& Control)
+			{
+				const int32 Limits = Control.Properties.IndexOfByPredicate([](const FDcrValue& Value) { return Value.Name == TEXT("LimitEnabled"); });
+				if (Limits == INDEX_NONE)
+				{
+					return;
+				}
+				ERigControlType Type = FRigControlSettings().ControlType;
+				if (const FDcrValue* TypeValue = Control.Properties.FindByPredicate([](const FDcrValue& Value) { return Value.Name == TEXT("ControlType"); }))
+				{
+					const int64 Found = StaticEnum<ERigControlType>()->GetValueByNameString(TypeValue->Value);
+					if (Found != INDEX_NONE)
+					{
+						Type = ERigControlType(Found);
+					}
+				}
+				if (Control.Properties[Limits].Value == GetDcrNewControlLimitsText(Type))
+				{
+					Control.Properties.RemoveAt(Limits);
+				}
+			}
+
 			void SetProperty(FDcrModelElement& Element, const FString& Key, const FString& Text, bool bRemove, const FDabSpan& Span = FDabSpan())
 			{
 				const int32 Existing = Element.Properties.IndexOfByPredicate([&Key](const FDcrValue& Value) { return Value.Name == Key; });
@@ -458,6 +481,10 @@ namespace UE::DreamAnim::Rig::Sem
 					{
 						SetProperty(G.Model.Hierarchy[ElementIndex], Assign->Name, Text, bRemove, Assign->Value ? Assign->Value->Span : FDabSpan());
 					}
+				}
+				if (Kind == EDcrElementKind::Control)
+				{
+					DropNewControlLimits(G.Model.Hierarchy[ElementIndex]);
 				}
 
 				for (const FDabNamedBlockStmt* Child : Children)
@@ -656,7 +683,8 @@ namespace UE::DreamAnim::Rig::Sem
 				Type.CPPType = TEXT("TArray<TSoftObjectPtr<UControlRigShapeLibrary>>");
 				Type.ObjectPath = TEXT("/Script/ControlRig.ControlRigShapeLibrary");
 				FString Text;
-				if (ReadConstantText(G, Type, *Stmt->Value, Text) && !Text.IsEmpty() && Text != TEXT("()"))
+				// `[]` is a rig with no shape library; leaving the setting out keeps the default one.
+				if (ReadConstantText(G, Type, *Stmt->Value, Text))
 				{
 					FDcrValue& Setting = G.Model.Settings.AddDefaulted_GetRef();
 					Setting.Name = TEXT("ShapeLibraries");

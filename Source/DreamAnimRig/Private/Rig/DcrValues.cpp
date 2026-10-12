@@ -12,6 +12,7 @@
 #include "RigVMCore/RigVMTrait.h"
 #include "RigVMTypeUtils.h"
 #include "Rigs/RigHierarchyDefines.h"
+#include "Rigs/RigHierarchyElements.h"
 #include "StructUtils/UserDefinedStruct.h"
 #include "TransformNoScale.h"
 #include "UObject/SoftObjectPtr.h"
@@ -899,6 +900,15 @@ namespace UE::DreamAnim::Rig
 	// ------------------------------------------------------------------------------------------
 	// Literal -> value
 	// ------------------------------------------------------------------------------------------
+
+	FString GetDcrNewControlLimitsText(ERigControlType Type)
+	{
+		FRigControlSettings Settings;
+		Settings.ControlType = Type;
+		Settings.SetupLimitArrayForType();
+		const FProperty* Limits = FRigControlSettings::StaticStruct()->FindPropertyByName(TEXT("LimitEnabled"));
+		return Limits ? ExportDcrValueText(*Limits, Limits->ContainerPtrToValuePtr<void>(&Settings)) : FString();
+	}
 
 	bool WriteDcrValueExpr(const FProperty& Property, void* Value, const FDabExpr& InExpr,
 		TFunctionRef<bool(const FDabExpr&, const FProperty&)> IsConstant, FDcrAssetResolver ResolveAsset,

@@ -31,6 +31,7 @@
 #include "RigVMModel/RigVMPin.h"
 #include "RigVMTypeUtils.h"
 #include "Rigs/RigModuleDefines.h"
+#include "Settings/ControlRigSettings.h"
 #include "UObject/Package.h"
 #include "UObject/UnrealType.h"
 
@@ -410,6 +411,15 @@ namespace UE::DreamAnim::Rig
 
 			void ApplySettings(FContext& Ctx, const FDcrModel& Model)
 			{
+#if WITH_EDITORONLY_DATA
+				// What a new rig starts with, unless the model names its libraries (an existing rig is rebuilt the same).
+				if (!Model.Settings.ContainsByPredicate([](const FDcrValue& Setting) { return Setting.Name == TEXT("ShapeLibraries"); }))
+				{
+					TArray<TSoftObjectPtr<UControlRigShapeLibrary>>& Libraries = Ctx.Rig.ControlRig->GetShapeLibraries();
+					Libraries.Reset();
+					Libraries.Add(UControlRigSettings::Get()->DefaultShapeLibrary);
+				}
+#endif
 				for (const FDcrValue& Setting : Model.Settings)
 				{
 					const FString Here = TEXT("Settings/") + Setting.Name;

@@ -95,6 +95,12 @@ namespace UE::DreamAnim::Rig
 	 */
 	FString MakeDcrEngineDefault(const Model::FDcrType& Type, const FString& Text);
 
+	/**
+	 * The limit array a new control of the type gets (URigHierarchyController::AddControl sets it up when the
+	 * settings bring none), as LimitEnabled's export text: no limits, one entry per channel of the type.
+	 */
+	FString GetDcrNewControlLimitsText(ERigControlType Type);
+
 	/** The model's spelling of a property's type: RigVM's CPP type and the type object's path. */
 	Model::FDcrType GetDcrType(const FProperty& Property);
 

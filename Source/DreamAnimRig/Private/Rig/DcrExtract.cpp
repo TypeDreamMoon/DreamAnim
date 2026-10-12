@@ -26,6 +26,7 @@
 #include "Rigs/RigHierarchy.h"
 #include "Rigs/RigHierarchyElements.h"
 #include "Rigs/RigModuleDefines.h"
+#include "Settings/ControlRigSettings.h"
 #include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
 
@@ -873,7 +874,12 @@ namespace UE::DreamAnim::Rig
 
 		void ExtractControlProperties(FValueContext& Context, const FString& Location, URigHierarchy* Hierarchy, FRigControlElement* Control, FDcrModelElement& Out)
 		{
-			const FRigControlSettings Defaults;
+			// A control the text adds gets the limit array of its type (URigHierarchyController::AddControl): no limits.
+			FRigControlSettings Defaults;
+			FRigControlSettings Typed;
+			Typed.ControlType = Control->Settings.ControlType;
+			Typed.SetupLimitArrayForType();
+			Defaults.LimitEnabled = Typed.LimitEnabled;
 			AddStructDifferences(Context, Location, FRigControlSettings::StaticStruct(), &Control->Settings, &Defaults, TSet<FName>(), Out.Properties);
 
 			const FTransform Offset = Hierarchy->GetControlOffsetTransform(Control, ERigTransformType::InitialLocal);
@@ -1140,9 +1146,12 @@ namespace UE::DreamAnim::Rig
 					Libraries = TEXT("(") + FString::Join(Paths, TEXT(",")) + TEXT(")");
 				}
 			}
-			if (!Libraries.IsEmpty() && Libraries != TEXT("()"))
+			// A new rig starts with the default shape library: that is no setting. None at all is one.
+			const TArray<TSoftObjectPtr<UControlRigShapeLibrary>>& Current = Rig.ControlRig->GetShapeLibraries();
+			const bool bDefault = Current.Num() == 1 && Current[0].ToSoftObjectPath() == UControlRigSettings::Get()->DefaultShapeLibrary.ToSoftObjectPath();
+			if (!bDefault)
 			{
-				AddValue(Context.Out.Settings, TEXT("ShapeLibraries"), Libraries);
+				AddValue(Context.Out.Settings, TEXT("ShapeLibraries"), Libraries.IsEmpty() ? FString(TEXT("()")) : Libraries);
 			}
 		}
 
