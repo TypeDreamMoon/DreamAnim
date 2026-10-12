@@ -20,6 +20,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Lang/DabSource.h"
 
 namespace UE::DreamAnim::Model
 {
@@ -40,6 +41,8 @@ namespace UE::DreamAnim::Model
 	{
 		FString Name;
 		FString Value;
+		/** From text: where the value is written, when one literal says all of it (write-back replaces it there). */
+		Lang::FDabSpan Span;
 	};
 
 	/** A trait on a unit node (RigVM's FRigVMTrait): a named root pin of the trait's struct, added past the unit's own. */
@@ -159,6 +162,8 @@ namespace UE::DreamAnim::Model
 		FDcrType Type;
 		/** Export text; empty for the type's default. */
 		FString Default;
+		/** From text: where the default is written. */
+		Lang::FDabSpan DefaultSpan;
 		bool bPublic = false;
 		bool bReadOnly = false;
 		FString Category;

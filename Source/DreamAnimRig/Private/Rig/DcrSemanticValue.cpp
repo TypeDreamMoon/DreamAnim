@@ -130,16 +130,18 @@ namespace UE::DreamAnim::Rig::Sem
 			Parts, Error);
 	}
 
-	void FBody::SetPinValue(FNodeRec& Rec, const FString& PinName, const FString& Text)
+	void FBody::SetPinValue(FNodeRec& Rec, const FString& PinName, const FString& Text, const FDabSpan& Span)
 	{
 		if (FDcrValue* Existing = Rec.Node.Values.FindByPredicate([&PinName](const FDcrValue& Value) { return Value.Name == PinName; }))
 		{
 			Existing->Value = Text;
+			Existing->Span = Span;
 			return;
 		}
 		FDcrValue& Value = Rec.Node.Values.AddDefaulted_GetRef();
 		Value.Name = PinName;
 		Value.Value = Text;
+		Value.Span = Span;
 	}
 
 	void FBody::LinkValue(const FVal& Value, const FString& TargetPath, const FDcrType& TargetType, const FDabSpan& Span)
@@ -301,7 +303,8 @@ namespace UE::DreamAnim::Rig::Sem
 		const FString Text = Slot.ExportText();
 		if (Pin.bWildcard || Text != DefaultSlot.ExportText())
 		{
-			SetPinValue(Rec, Pin.Name, Text);
+			// A literal that says all of the value is where write-back changes it; one with links in it is not.
+			SetPinValue(Rec, Pin.Name, Text, LinkedPaths.IsEmpty() ? Expr.Span : FDabSpan());
 		}
 	}
 

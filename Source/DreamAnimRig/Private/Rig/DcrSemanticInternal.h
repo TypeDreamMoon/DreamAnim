@@ -410,7 +410,8 @@ namespace UE::DreamAnim::Rig::Sem
 		void ApplyValue(FNodeRec& Rec, const FPin& Pin, FVal Value, const Lang::FDabSpan& Span);
 		void ApplyLiteral(FNodeRec& Rec, const FPin& Pin, const Lang::FDabExpr& Expr);
 		void ApplyDefault(FNodeRec& Rec, const FPin& Pin);
-		void SetPinValue(FNodeRec& Rec, const FString& PinName, const FString& Text);
+		/** Span: where one literal in the text says all of the value, for write-back; empty otherwise. */
+		void SetPinValue(FNodeRec& Rec, const FString& PinName, const FString& Text, const Lang::FDabSpan& Span = Lang::FDabSpan());
 		void LinkValue(const FVal& Value, const FString& TargetPath, const Model::FDcrType& TargetType, const Lang::FDabSpan& Span);
 		bool IsConstantLeaf(const Lang::FDabExpr& Expr, const FProperty& Property) const;
 		UObject* ResolveAssetLeaf(const Lang::FDabExpr& Expr, const UClass* Expected);

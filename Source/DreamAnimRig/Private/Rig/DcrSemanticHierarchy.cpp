@@ -320,7 +320,7 @@ namespace UE::DreamAnim::Rig::Sem
 				return true;
 			}
 
-			void SetProperty(FDcrModelElement& Element, const FString& Key, const FString& Text, bool bRemove)
+			void SetProperty(FDcrModelElement& Element, const FString& Key, const FString& Text, bool bRemove, const FDabSpan& Span = FDabSpan())
 			{
 				const int32 Existing = Element.Properties.IndexOfByPredicate([&Key](const FDcrValue& Value) { return Value.Name == Key; });
 				if (bRemove)
@@ -339,11 +339,13 @@ namespace UE::DreamAnim::Rig::Sem
 				if (Existing != INDEX_NONE)
 				{
 					Element.Properties[Existing].Value = Text;
+					Element.Properties[Existing].Span = Span;
 					return;
 				}
 				FDcrValue& Value = Element.Properties.AddDefaulted_GetRef();
 				Value.Name = Key;
 				Value.Value = Text;
+				Value.Span = Span;
 			}
 
 			void ReadElement(const FDabNamedBlockStmt& Stmt, EDcrElementKind ParentKind, const FString& ParentName)
@@ -454,7 +456,7 @@ namespace UE::DreamAnim::Rig::Sem
 					const FDcrModelElement Snapshot = G.Model.Hierarchy[ElementIndex];
 					if (ReadProperty(Snapshot, *Assign, Text, bRemove))
 					{
-						SetProperty(G.Model.Hierarchy[ElementIndex], Assign->Name, Text, bRemove);
+						SetProperty(G.Model.Hierarchy[ElementIndex], Assign->Name, Text, bRemove, Assign->Value ? Assign->Value->Span : FDabSpan());
 					}
 				}
 
@@ -780,6 +782,7 @@ namespace UE::DreamAnim::Rig::Sem
 			if (bTypeOk && Decl->Value)
 			{
 				ReadConstantText(G, Variable.Type, *Decl->Value, Variable.Default);
+				Variable.DefaultSpan = Decl->Value->Span;
 			}
 			if (Decl->Meta)
 			{
