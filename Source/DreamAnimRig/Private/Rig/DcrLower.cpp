@@ -5,6 +5,8 @@
 #include "Algo/AllOf.h"
 #include "Algo/AnyOf.h"
 #include "Lang/DabPrinter.h"
+#include "Misc/PackageName.h"
+#include "Misc/Paths.h"
 #include "Misc/ScopeExit.h"
 #include "Rig/DcrAsset.h"
 #include "Rig/DcrHierarchyImport.h"
@@ -615,7 +617,7 @@ namespace UE::DreamAnim::Rig
 					}
 					for (FString Host : Hosts)
 					{
-						LibraryNameCounts.FindOrAdd(GetLibraryName(Host))++;
+						LibraryNameCounts.FindOrAdd(GetLibraryAssetName(Host))++;
 						Host.RemoveFromEnd(TEXT("_C"));
 						const FDcrRig Rig = LoadDcrRig(Host);
 						URigVMFunctionLibrary* Library = Rig.IsValid() ? Rig.RigVM->GetLocalFunctionLibrary() : nullptr;
@@ -680,7 +682,9 @@ namespace UE::DreamAnim::Rig
 				return Text;
 			}
 
-			FString GetLibraryName(const FString& HostPath) const;
+			/** The name calls into a used rig go by: its asset's, or with its folder's in front when two used rigs share one (`Modules56_Arm`). */
+			FString GetLibraryName(const FString& HostPath);
+			static FString GetLibraryAssetName(const FString& HostPath);
 
 			/** The inline function a collapse node is written as (made on first use); null when its graph is missing. */
 			const FDcrModelFunction* GetInline(const FDcrModelNode& Collapse);
@@ -951,11 +955,30 @@ namespace UE::DreamAnim::Rig
 			return Signature;
 		}
 
-		FString FFileLowering::GetLibraryName(const FString& HostPath) const
+		FString FFileLowering::GetLibraryAssetName(const FString& HostPath)
 		{
 			FString Path = HostPath;
 			Path.RemoveFromEnd(TEXT("_C"));
 			return FSoftObjectPath(Path).GetAssetName();
+		}
+
+		FString FFileLowering::GetLibraryName(const FString& HostPath)
+		{
+			CountLibraryFunctions(FString());
+			const FString AssetName = GetLibraryAssetName(HostPath);
+			if (LibraryNameCounts.FindRef(AssetName) <= 1)
+			{
+				return AssetName;
+			}
+			FString Path = HostPath;
+			Path.RemoveFromEnd(TEXT("_C"));
+			const FString Folder = FPaths::GetCleanFilename(FPackageName::GetLongPackagePath(FSoftObjectPath(Path).GetLongPackageName()));
+			FString Alias;
+			for (const TCHAR Char : Folder + TEXT("_") + AssetName)
+			{
+				Alias.AppendChar(FChar::IsAlnum(Char) || Char == TEXT('_') ? Char : TEXT('_'));
+			}
+			return Alias;
 		}
 
 		// ------------------------------------------------------------------------------------------
@@ -2553,18 +2576,7 @@ namespace UE::DreamAnim::Rig
 				const bool bQualify = File.FindFunction(Node.Function) || !FindDcrUnits(Node.Function).IsEmpty()
 					|| !FindDcrDispatches(Node.Function).IsEmpty() || !FindDcrTemplateNotations(Node.Function).IsEmpty()
 					|| File.CountLibraryFunctions(Node.Function) > 1;
-				if (bQualify && File.LibraryNameCounts.FindRef(File.GetLibraryName(Host)) > 1)
-				{
-					// Its arguments are still written, inside the placeholder: what they call is still called.
-					File.AddUnsupported(Location + TEXT("/") + Node.Name, FString::Printf(TEXT("a call of `%s` in one of several rigs in Uses named %s"),
-						*Node.Function, *File.GetLibraryName(Host)));
-					Placeholder = FString::Printf(TEXT("a call of %s in %s"), *Node.Function, *Host);
-					Callee = MakeDcrName(TEXT("Unsupported"));
-				}
-				else
-				{
-					Callee = bQualify ? MakeDcrMember(MakeDcrName(File.GetLibraryName(Host)), Node.Function) : MakeDcrName(Node.Function);
-				}
+				Callee = bQualify ? MakeDcrMember(MakeDcrName(File.GetLibraryName(Host)), Node.Function) : MakeDcrName(Node.Function);
 			}
 			else
 			{
@@ -3464,12 +3476,24 @@ namespace UE::DreamAnim::Rig
 			}
 			if (!UsedLibraries.IsEmpty())
 			{
-				TArray<FDabExprPtr> Items;
+				// Two rigs of one name are each named for the calls into them: `Modules56_Arm = "/ControlRigModules/Modules56/Arm"`.
+				TUniquePtr<FDabListExpr> List = MakeUnique<FDabListExpr>();
 				for (const FString& Library : UsedLibraries)
 				{
-					Items.Add(MakeDcrAssetExpr(FSoftObjectPath(Library)));
+					const FString Name = GetLibraryName(Library);
+					if (Name != GetLibraryAssetName(Library) && !List->HasItemNames())
+					{
+						List->ItemNames.SetNum(List->Items.Num());
+						List->ItemNameSpans.SetNum(List->Items.Num());
+					}
+					if (List->HasItemNames())
+					{
+						List->ItemNames.Add(Name != GetLibraryAssetName(Library) ? Name : FString());
+						List->ItemNameSpans.AddDefaulted();
+					}
+					List->Items.Add(MakeDcrAssetExpr(FSoftObjectPath(Library)));
 				}
-				Block->Statements.Add(MakeAssign(TEXT("Uses"), MakeDcrList(MoveTemp(Items))));
+				Block->Statements.Add(MakeAssign(TEXT("Uses"), MoveTemp(List)));
 			}
 			return Block->Statements.IsEmpty() ? nullptr : MoveTemp(Block);
 		}

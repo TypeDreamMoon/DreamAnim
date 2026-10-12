@@ -552,12 +552,15 @@ namespace UE::DreamAnim::Rig::Sem
 				G.Sink.Error(TEXT("DAB9004"), Stmt.Span, TEXT("`Uses` takes a list of the rigs whose public functions are called: [ Library, ... ]."));
 				return;
 			}
-			for (const FDabExprPtr& Item : List->Items)
+			for (int32 Index = 0; Index < List->Items.Num(); ++Index)
 			{
+				const FDabExprPtr& Item = List->Items[Index];
 				if (!Item)
 				{
 					continue;
 				}
+				// `Alias = Rig`: the name calls go by (`Alias.Function`), for two rigs of one name.
+				const FString& Alias = List->GetItemName(Index);
 				FString Problem;
 				bool bAmbiguous = false;
 				const FString ObjectPath = G.ResolveAssetPath(*Item, nullptr, Problem, bAmbiguous);
@@ -580,7 +583,13 @@ namespace UE::DreamAnim::Rig::Sem
 				}
 				TUniquePtr<FLibrary> Library = MakeUnique<FLibrary>();
 				Library->Host = ObjectPath;
-				Library->Name = FSoftObjectPath(ObjectPath).GetAssetName();
+				Library->Name = Alias.IsEmpty() ? FSoftObjectPath(ObjectPath).GetAssetName() : Alias;
+				if (G.Libraries.ContainsByPredicate([&Library](const TUniquePtr<FLibrary>& Other) { return Other->Name == Library->Name; }))
+				{
+					G.Sink.Error(TEXT("DAB9002"), Item->Span, FString::Printf(TEXT("Two rigs in `Uses` are called `%s`."), *Library->Name),
+						FString::Printf(TEXT("Name one for the calls into it: `Other%s = %s`."), *Library->Name, *ObjectPath));
+					continue;
+				}
 				for (FDcrModelFunction& Function : LibraryModel.Functions)
 				{
 					if (!Function.bPublic)
