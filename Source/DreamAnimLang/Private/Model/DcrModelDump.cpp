@@ -537,8 +537,8 @@ namespace UE::DreamAnim::Model
 			}
 			Line(Out, Depth, Head);
 
-			// A unit is its struct; the notation belongs to dispatches.
-			if (Node.Kind == EDcrNodeKind::Dispatch && !Node.Notation.IsEmpty())
+			// A unit is its struct; the notation belongs to dispatches, and to a template node no type was picked for.
+			if ((Node.Kind == EDcrNodeKind::Dispatch || Node.StructPath.IsEmpty()) && !Node.Notation.IsEmpty())
 			{
 				Line(Out, Depth + 1, TEXT("Notation ") + Node.Notation);
 			}

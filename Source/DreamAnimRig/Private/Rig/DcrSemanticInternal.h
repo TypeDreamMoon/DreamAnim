@@ -391,6 +391,9 @@ namespace UE::DreamAnim::Rig::Sem
 		FVal BuildDispatch(const Lang::FDabCallExpr& Call, const UScriptStruct& Struct, const Model::FDcrType* Expected, const FString& Preferred);
 		FVal BuildDispatchFrom(const UScriptStruct& Struct, TArray<TPair<FString, FVal>> Args, const Model::FDcrType* Expected, const FString& Preferred, const Lang::FDabSpan& Span);
 		FVal BuildTemplate(const Lang::FDabCallExpr& Call, const FCallee& Callee, const Model::FDcrType* Expected, const FString& Preferred);
+		/** A template call whose arguments every version takes: the template node, no type picked (a warning says so). */
+		FVal BuildUnresolvedTemplate(const Lang::FDabCallExpr& Call, const FName& Notation, const UScriptStruct& First, const TArray<TPair<FString, FVal>>& Args,
+			const FString& Preferred);
 		FVal BuildFunction(const Lang::FDabCallExpr& Call, const FCallee& Callee, const Model::FDcrType* Expected, const FString& Preferred);
 		FVal BuildInline(const Lang::FDabCallExpr& Call, FFunctionDecl& Decl, const FString& Preferred);
 		void BuildInjected(const Lang::FDabCallExpr& Wrapper, FNodeRec& Host, const FPin& HostPin);

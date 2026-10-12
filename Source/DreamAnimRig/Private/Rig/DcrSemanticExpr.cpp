@@ -981,6 +981,12 @@ namespace UE::DreamAnim::Rig::Sem
 		const UScriptStruct* Best = nullptr;
 		int32 BestSwaps = MAX_int32;
 		int32 BestDoubles = -1;
+		int32 Fitting = 0;
+		bool bTyped = Expected && Expected->IsSet();
+		for (const TPair<FString, FVal>& Arg : Values)
+		{
+			bTyped |= Arg.Value.IsPin() && Arg.Value.Type.IsSet();
+		}
 		for (const UScriptStruct* Candidate : Candidates)
 		{
 			const FSignature Sig = MakeUnitSignature(*Candidate);
@@ -1023,12 +1029,19 @@ namespace UE::DreamAnim::Rig::Sem
 					break;
 				}
 			}
+			Fitting += bFits ? 1 : 0;
 			if (bFits && (Swaps < BestSwaps || (Swaps == BestSwaps && Doubles > BestDoubles)))
 			{
 				Best = Candidate;
 				BestSwaps = Swaps;
 				BestDoubles = Doubles;
 			}
+		}
+		if (Best && !bTyped && Candidates.Num() > 1 && Fitting == Candidates.Num() && Callee.Notations.Num() == 1)
+		{
+			// Every version takes these arguments and nothing says which: the node stays a template no type is picked
+			// for, as the editor leaves one that nothing is linked to yet.
+			return BuildUnresolvedTemplate(Call, Callee.Notations[0], *Candidates[0], Values, Preferred);
 		}
 		if (!Best)
 		{
@@ -1042,6 +1055,52 @@ namespace UE::DreamAnim::Rig::Sem
 			AddAggregates(*Result.Rec, *Best, MakeUnitSignature(*Best), Extra);
 		}
 		return Result;
+	}
+
+	FVal FBody::BuildUnresolvedTemplate(const FDabCallExpr& Call, const FName& Notation, const UScriptStruct& First, const TArray<TPair<FString, FVal>>& Args,
+		const FString& Preferred)
+	{
+		const FRigVMTemplate* Template = FRigVMRegistry::Get().FindTemplate(Notation);
+		FString TemplateName;
+		if (!Notation.ToString().Split(TEXT("::"), &TemplateName, nullptr))
+		{
+			TemplateName = Notation.ToString();
+		}
+		FNodeRec& Rec = NewRec(Preferred, TemplateName);
+		// The pins every version has; a wildcard has no type, so nothing gives it a value or reads it yet.
+		Rec.Sig = MakeUnitSignature(First);
+		for (FPin& Pin : Rec.Sig.Pins)
+		{
+			const FRigVMTemplateArgument* Argument = Template ? Template->FindArgument(FName(*Pin.Name)) : nullptr;
+			if (Argument && !Argument->IsSingleton())
+			{
+				Pin.bWildcard = true;
+				Pin.Type = FDcrType();
+				Pin.Property = nullptr;
+				Pin.Default.Reset();
+			}
+		}
+		Rec.Node.Kind = EDcrNodeKind::Unit;
+		Rec.Node.Notation = Notation.ToString();
+		Rec.Node.ExecuteIn = Rec.Sig.ExecIn;
+		Rec.Node.ExecuteOut = Rec.Sig.ExecOut;
+		for (const TPair<FString, FVal>& Arg : Args)
+		{
+			const FPin* Pin = Rec.Sig.Find(Arg.Key);
+			if (Pin && !Pin->bWildcard)
+			{
+				ApplyValue(Rec, *Pin, Arg.Value, Arg.Value.Span);
+			}
+			else
+			{
+				Sink.Error(TEXT("DAB9003"), Arg.Value.Span, FString::Printf(TEXT("`%s` takes several types here, and nothing says which."), *Arg.Key),
+					TEXT("Give an argument a type, or write the node by its struct name."));
+			}
+		}
+		Sink.Warning(TEXT("DAB9003"), Call.Span, FString::Printf(TEXT("Nothing says which version of `%s` this is; it is left a template with no type picked, and does nothing."), *TemplateName),
+			TEXT("Give an argument a type, or write the node by its struct name."));
+		Sequence(Rec);
+		return MakeOutput(Rec, Call.Span);
 	}
 
 	// ------------------------------------------------------------------------------------------

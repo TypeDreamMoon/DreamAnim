@@ -6,6 +6,7 @@
 #include "DcrNodeDefaults.h"
 #include "DcrValues.h"
 #include "Engine/SkeletalMesh.h"
+#include "RigVMCore/RigVMTemplate.h"
 #include "RigVMModel/Nodes/RigVMAggregateNode.h"
 #include "RigVMModel/Nodes/RigVMCollapseNode.h"
 #include "RigVMModel/Nodes/RigVMCommentNode.h"
@@ -332,20 +333,47 @@ namespace UE::DreamAnim::Rig
 		void ExtractUnit(FExtractContext& Context, URigVMUnitNode* Unit, FDcrModelNode& Out, const FString& Location)
 		{
 			UScriptStruct* Struct = Unit->GetScriptStruct();
-			if (!Struct)
+			const FName Notation = Unit->GetNotation();
+			if (!Struct && Notation.IsNone())
 			{
 				Out.Kind = EDcrNodeKind::Unknown;
-				Context.AddUnsupported(Location, TEXT("unit node without a struct (an unresolved template, or a struct the engine does not have)"));
+				Context.AddUnsupported(Location, TEXT("unit node without a struct or a template (a struct the engine does not have)"));
 				return;
 			}
+			// A template node no type was picked for has its notation and no struct.
 			Out.Kind = EDcrNodeKind::Unit;
-			Out.StructPath = Struct->GetPathName();
-			const FName Notation = Unit->GetNotation();
+			Out.StructPath = Struct ? Struct->GetPathName() : FString();
 			if (!Notation.IsNone())
 			{
 				Out.Notation = Notation.ToString();
 			}
 			FDcrNodeDefaults::CollectValues(Unit, TSet<FName>(), Out);
+			const FRigVMTemplate* Template = Struct ? nullptr : Unit->GetTemplate();
+			const FRigVMFunction* First = Template && Template->NumPermutations() > 0 ? Template->GetPermutation(0) : nullptr;
+			if (First && First->Struct)
+			{
+				// No version picked: a value is kept where it differs from what the versions start with, as the text
+				// writes the node (the pins they all have hold the same defaults).
+				FStructOnScope Defaults(First->Struct);
+				for (int32 Index = Out.Values.Num() - 1; Index >= 0; --Index)
+				{
+					const FProperty* Property = First->Struct->FindPropertyByName(*Out.Values[Index].Name);
+					FDcrValueSlot Value;
+					if (!Property || !Value.Init(*Property) || !Value.ImportText(Out.Values[Index].Value))
+					{
+						continue;
+					}
+					if (AreDcrValuesSame(*Property, Value.GetMemory(), Property->ContainerPtrToValuePtr<void>(Defaults.GetStructMemory())))
+					{
+						Out.Values.RemoveAt(Index);
+					}
+					else
+					{
+						Out.Values[Index].Value = Value.ExportText();
+					}
+				}
+			}
+			ExtractTraits(Context, Unit, Out, Location);
 		}
 
 		void ExtractDispatch(FExtractContext& Context, URigVMDispatchNode* Dispatch, FDcrModelNode& Out, const FString& Location)
