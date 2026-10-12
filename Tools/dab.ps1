@@ -9,9 +9,10 @@
 #                                 editor; the default), RoundTrip (every ALS Blueprint decompiled, checked,
 #                                 generated and compared, plain and with an animation set), Behavior (the
 #                                 ALS character and generated Blueprints run and their poses compared), Rig
-#                                 (the .dcr front end, and the engine's Control Rigs read and written as
-#                                 text), RigRoundTrip (those rigs rebuilt from their text, compared as text
-#                                 and run side by side with the originals), All.
+#                                 (the .dcr front end, the engine's Control Rigs read and written as text,
+#                                 and write-back), RigRoundTrip (those rigs rebuilt from their text and
+#                                 compared as text and as models), RigBehavior (rebuilt rigs run side by
+#                                 side with the originals, a modular rig with rebuilt modules included), All.
 #                                 -Filter replaces the preset's tests.
 #
 #   dab.ps1 build [-File F] [-Root R] [-NoSave] [-Json J]
@@ -52,7 +53,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)][ValidateSet('make', 'test', 'build', 'check', 'fmt', 'decompile')][string]$Command = 'test',
-    [ValidateSet('Quick', 'RoundTrip', 'Behavior', 'Rig', 'RigRoundTrip', 'All')][string]$Preset = 'Quick',
+    [ValidateSet('Quick', 'RoundTrip', 'Behavior', 'Rig', 'RigRoundTrip', 'RigBehavior', 'All')][string]$Preset = 'Quick',
     [string]$Filter,
     [switch]$NoBuild,
     [string]$Project,
@@ -87,6 +88,7 @@ $Presets = @{
     Behavior  = @{ Filter = 'DreamAnim.Corpus.Als.PoseHarness+DreamAnim.Corpus.Als.PoseDiff+DreamAnim.Corpus.Als.AnimSetPoseDiff+DreamAnim.Corpus.Als.AnimSetSwap+DreamAnim.Generate'; MinTests = 5; Timeout = 60 }
     Rig       = @{ Filter = 'DreamAnim.Lang.Dcr+DreamAnim.Rig.Extract+DreamAnim.Rig.Decompile+DreamAnim.Rig.Semantic+DreamAnim.Rig.WriteBack'; MinTests = 50; Timeout = 30 }
     RigRoundTrip = @{ Filter = 'DreamAnim.Rig.Generate+DreamAnim.Rig.RoundTrip'; MinTests = 45; Timeout = 90 }
+    RigBehavior  = @{ Filter = 'DreamAnim.Rig.Behavior+DreamAnim.Rig.Generate.RoundTrip.Standalone'; MinTests = 2; Timeout = 60 }
     All       = @{ Filter = 'DreamAnim.'; MinTests = 200; Timeout = 90 }
 }
 

@@ -23,6 +23,7 @@ public class DreamAnimRigTests : ModuleRules
 			"RigVMDeveloper",
 			"ControlRig",
 			"ControlRigDeveloper",
+			"ControlRigEditor",
 			"DreamAnimLang",
 			"DreamAnimCompiler",
 			"DreamAnimRig",
