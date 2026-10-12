@@ -85,7 +85,7 @@ $Presets = @{
     Quick     = @{ Filter = 'DreamAnim.Lang+DreamAnim.Driver+DreamAnim.Runtime+DreamAnim.WriteBack+DreamAnim.Editor'; MinTests = 100; Timeout = 30 }
     RoundTrip = @{ Filter = 'DreamAnim.Corpus.Als.Compiles+DreamAnim.Corpus.Als.Decompile+DreamAnim.Corpus.Als.Semantic+DreamAnim.Corpus.Als.Generate+DreamAnim.Corpus.Als.AnimSet.'; MinTests = 100; Timeout = 60 }
     Behavior  = @{ Filter = 'DreamAnim.Corpus.Als.PoseHarness+DreamAnim.Corpus.Als.PoseDiff+DreamAnim.Corpus.Als.AnimSetPoseDiff+DreamAnim.Corpus.Als.AnimSetSwap+DreamAnim.Generate'; MinTests = 5; Timeout = 60 }
-    Rig       = @{ Filter = 'DreamAnim.Lang.Dcr+DreamAnim.Rig.Extract+DreamAnim.Rig.Decompile+DreamAnim.Rig.Semantic'; MinTests = 50; Timeout = 30 }
+    Rig       = @{ Filter = 'DreamAnim.Lang.Dcr+DreamAnim.Rig.Extract+DreamAnim.Rig.Decompile+DreamAnim.Rig.Semantic+DreamAnim.Rig.WriteBack'; MinTests = 50; Timeout = 30 }
     RigRoundTrip = @{ Filter = 'DreamAnim.Rig.Generate+DreamAnim.Rig.RoundTrip'; MinTests = 45; Timeout = 90 }
     All       = @{ Filter = 'DreamAnim.'; MinTests = 200; Timeout = 90 }
 }
