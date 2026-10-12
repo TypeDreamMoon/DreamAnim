@@ -144,6 +144,43 @@ read into slots of an animation set you name or pick in a save dialog. Picking a
 Blueprints' groups to it; the dialog's warning about replacing it does not apply, nothing in it is
 replaced. See [Moving the animations into a set](Decompiling.md#moving-the-animations-into-a-set).
 
+## Control Rigs
+
+A Control Rig made from a `.dcr` source is kept in step the same way: saving the text rebuilds the rig,
+and a change made to the rig in the editor is written into the text once your edits pause, and before the
+rig is saved. **Write Changes to DreamAnim Source**, on the rig in the Content Browser, writes them at once.
+The settings above apply to rigs too.
+
+The editor reads the rig again and compares it with the model its text builds to. Nodes are matched by the
+names the text gives them (a `let`'s name, or the name the checker made), so a rig must have been built
+from its text once before its changes can be written back. What is written, and how:
+
+| Change in the editor | What changes in the text |
+|---|---|
+| A value the text writes: a pin's argument (`Weight = 0.5`), a variable's default, a control's setting, shape transform, offset or initial value, an element's transform | Just that value, written the way the decompiler writes it. |
+| A value the text leaves at its default, nodes or links added or removed, an element added, removed or given another parent, a variable added or removed | The block it is in, rewritten from the rig: the `Event`, the `Function`, the `Detached` block, or the `Hierarchy`, `Variables`, `Settings` or `Module` section. |
+| An event or function added, or one removed | Added at the end of the document, or removed. |
+
+In a rewritten block, the comments are the rig's comment boxes, as decompiling writes them; comments above
+the block and everything outside it stay as you wrote them. Moving or editing a comment box, and moving
+nodes, are not written back. With **Write Back Structure** turned off, what would rewrite a block is refused
+(DAB8003).
+
+After writing, the new text is checked: it must build to exactly what the rig holds. If it does not, nothing
+is written (DAB8009).
+
+When the source changed on disk while the rig has changes not yet in it, neither is overwritten and the log
+says so. **Rebuild from DreamAnim Source** takes the text. To keep the rig's changes, undo the text's change
+and use **Write Changes to DreamAnim Source**. Rigs have no line merge.
+
+**Write as DreamAnim Text**, on Control Rigs not made from text, writes each one under the project's `DAnim/`
+folder ([Decompiling.md](Decompiling.md)) and then offers to rebuild them from their new text, which
+write-back needs.
+
+From code: `WriteBackDcrRig` (`Rig/DcrWriteBack.h`, in the DreamAnimRig module) compares a rig with its text
+and returns the new text, the changes and the refusals; it reads and writes no files.
+`GetDcrGeneratedText` reads the text a rig was last built from or written to.
+
 ## Settings
 
 **Editor Preferences > Plugins > Dream Anim**:
