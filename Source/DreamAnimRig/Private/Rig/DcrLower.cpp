@@ -425,8 +425,13 @@ namespace UE::DreamAnim::Rig
 			/** Nodes this body wrote, for the detached search. */
 			TSet<FString> Visited;
 
+			/** One pin's value as a call of the node writes it (forced: the default when nothing differs); null when it cannot be. */
+			FDabExprPtr PinValueExpr(const FDcrModelNode& Node, const FString& PinName);
+
 		private:
 			struct FSkelBlock;
+			/** `TraitType(Member = value, ...)`: a trait's argument. */
+			FDabExprPtr TraitExpr(const FDcrModelNode& Node, const FDcrModelTrait& Trait, const FDcrPin& Pin, const FSignature& Signature, bool bForce);
 
 			/** One statement of the skeleton: a node on the chain and the blocks under it. */
 			struct FSkel
@@ -2496,6 +2501,43 @@ namespace UE::DreamAnim::Rig
 			return nullptr;
 		}
 
+		FDabExprPtr FBodyLowering::TraitExpr(const FDcrModelNode& Node, const FDcrModelTrait& Trait, const FDcrPin& Pin, const FSignature& Signature, bool bForce)
+		{
+			const UScriptStruct* TraitStruct = File.FindStruct(Trait.StructPath);
+			TUniquePtr<FDabCallExpr> TraitCall = MakeUnique<FDabCallExpr>();
+			TraitCall->Callee = MakeDcrName(TraitStruct ? GetDcrTraitTypeName(*TraitStruct) : Trait.StructPath);
+			if (FDabExprPtr Value = InputExpr(Node, Pin, Signature, bForce))
+			{
+				if (FDabTupleExpr* Members = Value->As<FDabTupleExpr>())
+				{
+					TraitCall->Args = MoveTemp(Members->Items);
+				}
+				else
+				{
+					// The whole trait from elsewhere: its one positional argument.
+					FDabArgumentPtr Whole = MakeUnique<FDabArgument>();
+					Whole->Value = MoveTemp(Value);
+					TraitCall->Args.Add(MoveTemp(Whole));
+				}
+			}
+			return TraitCall;
+		}
+
+		FDabExprPtr FBodyLowering::PinValueExpr(const FDcrModelNode& Node, const FString& PinName)
+		{
+			const FSignature& Signature = File.GetSignature(Node, Function);
+			const FDcrPin* Pin = Signature.bKnown ? Signature.Find(PinName) : nullptr;
+			if (!Pin || !Pin->bInput)
+			{
+				return nullptr;
+			}
+			if (const FDcrModelTrait* Trait = Node.Traits.FindByPredicate([&PinName](const FDcrModelTrait& Candidate) { return Candidate.Name == PinName; }))
+			{
+				return TraitExpr(Node, *Trait, *Pin, Signature, true);
+			}
+			return InputExpr(Node, *Pin, Signature, true);
+		}
+
 		FDabExprPtr FBodyLowering::NodeExpr(const FDcrModelNode& Node)
 		{
 			Visited.Add(Node.Name);
@@ -2608,26 +2650,9 @@ namespace UE::DreamAnim::Rig
 				// A trait: `Name = TraitType(Member = value, ...)`, written whatever it holds (it is there or not).
 				if (const FDcrModelTrait* Trait = Node.Traits.FindByPredicate([&Pin](const FDcrModelTrait& Candidate) { return Candidate.Name == Pin.Name; }))
 				{
-					const UScriptStruct* TraitStruct = File.FindStruct(Trait->StructPath);
-					TUniquePtr<FDabCallExpr> TraitCall = MakeUnique<FDabCallExpr>();
-					TraitCall->Callee = MakeDcrName(TraitStruct ? GetDcrTraitTypeName(*TraitStruct) : Trait->StructPath);
-					if (FDabExprPtr Value = InputExpr(Node, Pin, Signature, false))
-					{
-						if (FDabTupleExpr* Members = Value->As<FDabTupleExpr>())
-						{
-							TraitCall->Args = MoveTemp(Members->Items);
-						}
-						else
-						{
-							// The whole trait from elsewhere: its one positional argument.
-							FDabArgumentPtr Whole = MakeUnique<FDabArgument>();
-							Whole->Value = MoveTemp(Value);
-							TraitCall->Args.Add(MoveTemp(Whole));
-						}
-					}
 					bStillPositional = false;
 					++InputIndex;
-					Named.Emplace(Pin.Name, MoveTemp(TraitCall));
+					Named.Emplace(Pin.Name, TraitExpr(Node, *Trait, Pin, Signature, false));
 					continue;
 				}
 				FDabExprPtr Arg = &Pin == TypingPin ? TypedLetFor(Node, Pin, Signature) : InputExpr(Node, Pin, Signature, bAggregate);
@@ -3726,6 +3751,21 @@ namespace UE::DreamAnim::Rig
 			}
 			return Document;
 		}
+	}
+
+	FString PrintDcrPinValue(const FDcrModel& Model, const FDcrModelGraph& Graph, const FDcrModelFunction* Enclosing, const FDcrModelNode& Node,
+		const FString& PinName)
+	{
+		FDabFile File;
+		TArray<FDcrModelUnsupported> Unsupported;
+		const FDcrLowerOptions Options;
+		LowerPrivate::FFileLowering Lowering(Model, Options, File, Unsupported);
+		LowerPrivate::FGraphIndex Index;
+		Index.Build(Graph);
+		LowerPrivate::FBodyLowering Body(Lowering, Index, Enclosing, Graph.Name);
+		// A value that comes through a link, or that reads back wrong, has no literal to print.
+		const FDabExprPtr Expr = Body.PinValueExpr(Node, PinName);
+		return Expr && Unsupported.Num() == Model.Unsupported.Num() ? PrintDabExpr(*Expr) : FString();
 	}
 
 	FDcrLowerResult LowerDcrModel(const FDcrModel& Model, const FDcrLowerOptions& Options)

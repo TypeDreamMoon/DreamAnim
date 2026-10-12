@@ -36,4 +36,13 @@ namespace UE::DreamAnim::Rig
 
 	/** The syntax tree of a model; print it with PrintDab. The model should be normalized first (NormalizeDcrModel). */
 	DREAMANIMRIG_API FDcrLowerResult LowerDcrModel(const Model::FDcrModel& Model, const FDcrLowerOptions& Options = FDcrLowerOptions());
+
+	/**
+	 * One input pin's value as a call of Node writes it, printed on one line: what Lower writes for the pin, or
+	 * the pin's default when nothing differs from it. Empty when the value comes through a link or cannot be
+	 * written. Graph holds Node; Enclosing is the library function it is in, if any. For write-back, which
+	 * replaces a value where the text has it.
+	 */
+	DREAMANIMRIG_API FString PrintDcrPinValue(const Model::FDcrModel& Model, const Model::FDcrModelGraph& Graph, const Model::FDcrModelFunction* Enclosing,
+		const Model::FDcrModelNode& Node, const FString& PinName);
 }
