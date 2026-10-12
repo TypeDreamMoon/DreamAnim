@@ -21,6 +21,7 @@
 #include "RigVMModel/RigVMGraph.h"
 #include "RigVMModel/RigVMLink.h"
 #include "RigVMModel/RigVMPin.h"
+#include "RigVMTypeUtils.h"
 #include "Rigs/RigHierarchy.h"
 #include "Rigs/RigHierarchyElements.h"
 #include "Rigs/RigModuleDefines.h"
@@ -94,6 +95,18 @@ namespace UE::DreamAnim::Rig
 			else if (!TypeObjectPath.IsNone())
 			{
 				Type.ObjectPath = TypeObjectPath.ToString();
+			}
+			// A user enum's CPP type is made up by the engine from its name and path, and older assets kept an
+			// earlier spelling (its bare name): the one the engine makes now.
+			const UEnum* Enum = Cast<UEnum>(TypeObject);
+			if (!Enum && !Type.ObjectPath.IsEmpty())
+			{
+				Enum = Cast<UEnum>(RigVMTypeUtils::FindObjectFromCPPTypeObjectPath(Type.ObjectPath));
+			}
+			if (Enum && Enum->CppType.IsEmpty())
+			{
+				const FString EnumType = RigVMTypeUtils::CPPTypeFromEnum(Enum);
+				Type.CPPType = RigVMTypeUtils::IsArrayType(CPPType) ? RigVMTypeUtils::ArrayTypeFromBaseType(EnumType) : EnumType;
 			}
 			return Type;
 		}
