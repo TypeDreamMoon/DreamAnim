@@ -6,6 +6,7 @@
 #include "Animation/AnimBlueprint.h"
 #include "DirectoryWatcherModule.h"
 #include "DreamAnimEditorSettings.h"
+#include "Driver/DabDocumentHandler.h"
 #include "Editor.h"
 #include "Engine/Blueprint.h"
 #include "Framework/Application/SlateApplication.h"
@@ -136,10 +137,28 @@ void UDreamAnimEditorSubsystem::Tick(float DeltaTime)
 
 	// Edits are written once they pause, never in the middle of a transaction or a drag.
 	const UDreamAnimEditorSettings* Settings = GetDefault<UDreamAnimEditorSettings>();
-	if (EditedBlueprints.IsEmpty() || !Settings->bWriteBackEditorChanges || (GEditor && GEditor->IsTransactionActive())
+	if ((EditedBlueprints.IsEmpty() && EditedAssets.IsEmpty()) || !Settings->bWriteBackEditorChanges || (GEditor && GEditor->IsTransactionActive())
 		|| (FSlateApplication::IsInitialized() && FSlateApplication::Get().GetPressedMouseButtons().Num() > 0))
 	{
 		return;
+	}
+	TArray<UObject*> DueAssets;
+	for (auto It = EditedAssets.CreateIterator(); It; ++It)
+	{
+		UObject* Asset = It.Key().Get();
+		if (!Asset)
+		{
+			It.RemoveCurrent();
+		}
+		else if (Now - It.Value() >= Settings->WriteBackDelay)
+		{
+			DueAssets.Add(Asset);
+			It.RemoveCurrent();
+		}
+	}
+	for (UObject* Asset : DueAssets)
+	{
+		WriteBackAsset(*Asset);
 	}
 	TArray<UAnimBlueprint*> Due;
 	for (auto It = EditedBlueprints.CreateIterator(); It; ++It)
@@ -301,6 +320,18 @@ void UDreamAnimEditorSubsystem::HandleChangedSource(const FString& FilePath, boo
 			return;
 		}
 	}
+	// An asset of another kind with editor changes not yet in the text: the file is not built over them.
+	const FDabSourceEntry* Entry = Index.FindByFile(FilePath);
+	UObject* Asset = Entry && !Entry->AssetPath.IsEmpty() ? FindObject<UObject>(nullptr, *Entry->AssetPath) : nullptr;
+	if (Asset && EditedAssets.Contains(Asset))
+	{
+		EditedAssets.Remove(Asset);
+		FMessageLog(LogName).Warning(FText::Format(LOCTEXT("AssetConflict",
+			"{0} changed on disk while {1} has changes in the editor that are not in it. Neither was overwritten: Rebuild from DreamAnim Source takes the text, Write Changes to DreamAnim Source the asset (after the text's change is undone)."),
+			FileText(FilePath), FText::FromString(Asset->GetName())));
+		Notify(FText::Format(LOCTEXT("AssetConflictShort", "{0} and its text both changed; the log says how to choose."), FText::FromString(Asset->GetName())), false, true);
+		return;
+	}
 	RebuildSource(FilePath, true);
 }
 
@@ -425,6 +456,18 @@ UAnimBlueprint* UDreamAnimEditorSubsystem::FindOwningBlueprint(UObject* Object)
 	return nullptr;
 }
 
+UObject* UDreamAnimEditorSubsystem::FindOwningHandlerAsset(UObject* Object)
+{
+	// The asset is the package's top-level object; a Blueprint's generated class default object leads to it too.
+	UObject* Asset = Object ? Object->GetOutermostObject() : nullptr;
+	if (Object && Object->HasAnyFlags(RF_ClassDefaultObject))
+	{
+		Asset = UBlueprint::GetBlueprintFromClass(Object->GetClass());
+	}
+	const IDabDocumentHandler* Handler = Asset ? FindDabDecompileHandler(*Asset) : nullptr;
+	return Handler && Handler->SupportsWriteBack() ? Asset : nullptr;
+}
+
 void UDreamAnimEditorSubsystem::OnObjectTransacted(UObject* Object, const FTransactionObjectEvent& Event)
 {
 	if (RebuildDepth > 0 || !Object)
@@ -435,12 +478,23 @@ void UDreamAnimEditorSubsystem::OnObjectTransacted(UObject* Object, const FTrans
 	if (Blueprint && !FindSource(*Blueprint).IsEmpty())
 	{
 		EditedBlueprints.Add(Blueprint, FPlatformTime::Seconds());
+		return;
+	}
+	if (UObject* Asset = FindOwningHandlerAsset(Object); Asset && !FindSource(*Asset).IsEmpty())
+	{
+		EditedAssets.Add(Asset, FPlatformTime::Seconds());
 	}
 }
 
 void UDreamAnimEditorSubsystem::OnObjectPreSave(UObject* Object, FObjectPreSaveContext Context)
 {
 	// Not the generator's own save, not a cook, not a command line build.
+	if (Object && !Cast<UAnimBlueprint>(Object) && RebuildDepth == 0 && !Context.IsProceduralSave() && !IsRunningCommandlet()
+		&& GetDefault<UDreamAnimEditorSettings>()->bWriteBackEditorChanges && FindOwningHandlerAsset(Object) == Object && !FindSource(*Object).IsEmpty())
+	{
+		WriteBackAsset(*Object);
+		return;
+	}
 	UAnimBlueprint* Blueprint = Cast<UAnimBlueprint>(Object);
 	if (!Blueprint || RebuildDepth > 0 || Context.IsProceduralSave() || IsRunningCommandlet()
 		|| !GetDefault<UDreamAnimEditorSettings>()->bWriteBackEditorChanges || IsInConflict(*Blueprint) || FindSource(*Blueprint).IsEmpty())
@@ -449,6 +503,57 @@ void UDreamAnimEditorSubsystem::OnObjectPreSave(UObject* Object, FObjectPreSaveC
 	}
 	// Whatever changed since the last write, transacted or not, goes into the text with the asset.
 	WriteBack(*Blueprint);
+}
+
+bool UDreamAnimEditorSubsystem::WriteBackAsset(UObject& Asset)
+{
+	IDabDocumentHandler* Handler = FindDabDecompileHandler(Asset);
+	const FString Path = FindSource(Asset);
+	FString Text;
+	if (!Handler || !Handler->SupportsWriteBack() || Path.IsEmpty() || !LoadSourceText(Path, Text))
+	{
+		return false;
+	}
+	EditedAssets.Remove(&Asset);
+
+	// The file changed since the two were last in step: writing now would undo that change.
+	const FString Base = Handler->GetGeneratedText(Asset);
+	if (!Base.IsEmpty() && !Base.Equals(Text, ESearchCase::CaseSensitive))
+	{
+		FMessageLog(LogName).Warning(FText::Format(LOCTEXT("AssetTextMoved",
+			"{0} changed on disk since {1} was last built from it, so the asset's changes were not written into it. Rebuild from DreamAnim Source takes the text."),
+			FileText(Path), FText::FromString(Asset.GetName())));
+		Notify(FText::Format(LOCTEXT("AssetTextMovedShort", "{0}'s changes were not written: its text changed on disk."), FText::FromString(Asset.GetName())), false, true);
+		return false;
+	}
+
+	FDabWriteBackOptions Options;
+	Options.bStructure = GetDefault<UDreamAnimEditorSettings>()->bWriteBackStructure;
+	const FDabWriteBackResult Result = Handler->WriteBack(Asset, Path, Text, Options);
+	const bool bWrote = !Result.Text.Equals(Text, ESearchCase::CaseSensitive);
+	if (bWrote)
+	{
+		if (!SaveSource(Path, Result.Text))
+		{
+			return false;
+		}
+		Handler->SetGeneratedText(Asset, Result.Text);
+	}
+	if (bWrote || !Result.Diagnostics.IsEmpty())
+	{
+		Report(FString::Printf(TEXT("Writing %s back to %s"), *Asset.GetName(), *FPaths::GetCleanFilename(Path)), Result.Diagnostics);
+	}
+	if (bWrote)
+	{
+		const int32 NumWritten = Algo::CountIf(Result.Changes, [](const FDabWriteBackChange& Change) { return Change.bWritten; });
+		Notify(FText::Format(LOCTEXT("WroteBackAsset", "Wrote {0} change(s) in {1} to {2}"), NumWritten, FText::FromString(Asset.GetName()), FileText(Path)), true,
+			!Result.Diagnostics.IsEmpty());
+	}
+	else if (Result.bRefused)
+	{
+		Notify(FText::Format(LOCTEXT("NotWrittenAsset", "Some changes in {0} are not in {1}; the log says why."), FText::FromString(Asset.GetName()), FileText(Path)), false, true);
+	}
+	return bWrote;
 }
 
 bool UDreamAnimEditorSubsystem::HasEditorChanges(UAnimBlueprint& Blueprint, TArray<FString>* OutChanges) const

@@ -248,6 +248,23 @@ namespace DreamAnimEditorMenus
 		{
 			Subsystem->OpenSource(First);
 		}
+		// Write-back matches what changed by the names the text gives: an asset is built from its text once first.
+		TArray<FString> Written;
+		for (const FJob& Job : Jobs)
+		{
+			if (Subsystem->GetIndex().FindByFile(Job.Path))
+			{
+				Written.Add(Job.Path);
+			}
+		}
+		if (!Written.IsEmpty() && FMessageDialog::Open(EAppMsgType::YesNo, LOCTEXT("RebuildFromNewText",
+			"Rebuild the assets from their new text now?\n\nChanges made to them in the editor are written into the text only once they are built from it.")) == EAppReturnType::Yes)
+		{
+			for (const FString& Path : Written)
+			{
+				Subsystem->Rebuild(Path);
+			}
+		}
 	}
 
 	/** On an asset a document handler takes: open its source or rebuild it when it has one, write it as text when not. */
@@ -278,6 +295,21 @@ namespace DreamAnimEditorMenus
 							if (const UE::DreamAnim::Compiler::FDabSourceEntry* Entry = Current->GetIndex().FindByAsset(Asset.GetObjectPathString()))
 							{
 								Current->OpenSource(Entry->FilePath);
+							}
+						}
+					}
+				})));
+			Section.AddMenuEntry(TEXT("DreamAnim_WriteBackAsset"), LOCTEXT("WriteBackAsset", "Write Changes to DreamAnim Source"),
+				LOCTEXT("WriteBackAssetTip", "Write what changed in the asset since it was built from its text into the text now."), FSlateIcon(),
+				FUIAction(FExecuteAction::CreateLambda([WithSource]()
+				{
+					if (UDreamAnimEditorSubsystem* Current = GetSubsystem())
+					{
+						for (const FAssetData& Asset : WithSource)
+						{
+							if (UObject* Loaded = Asset.GetAsset())
+							{
+								Current->WriteBackAsset(*Loaded);
 							}
 						}
 					}

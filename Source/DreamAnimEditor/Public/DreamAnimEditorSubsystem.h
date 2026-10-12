@@ -5,7 +5,8 @@
 // Blueprint in the editor is written back into its source once edits pause. Each Blueprint keeps the text
 // it was last built from or written to (GetDabGeneratedText); when the text changed on disk while the
 // Blueprint has changes that are not in it, nothing is overwritten: the conflict is listed and the user
-// picks the text, or a merge of both.
+// picks the text, or a merge of both. Assets of the other kinds a document handler writes back (Control
+// Rigs) are kept in step the same way through their handler; a conflict there is reported, not merged.
 
 #pragma once
 
@@ -62,6 +63,12 @@ public:
 	 */
 	bool WriteBack(UAnimBlueprint& Blueprint, bool bExpandTemplates = false);
 
+	/**
+	 * An asset of a kind a document handler writes back (a Control Rig): its changes into its source now.
+	 * Refused when the file no longer holds the text the asset was last in step with.
+	 */
+	bool WriteBackAsset(UObject& Asset);
+
 	/** The Blueprint has changes that are not in the text it was last in step with. */
 	bool HasEditorChanges(UAnimBlueprint& Blueprint, TArray<FString>* OutChanges = nullptr) const;
 	/** The Blueprint waits for the user to pick between its changes and a text changed on disk. */
@@ -93,6 +100,8 @@ private:
 
 	/** The Blueprint the object belongs to (itself, its graphs and nodes, its class default object). */
 	static UAnimBlueprint* FindOwningBlueprint(UObject* Object);
+	/** The asset of a kind a handler writes back that the object belongs to (the asset, or something inside it). */
+	static UObject* FindOwningHandlerAsset(UObject* Object);
 	UAnimBlueprint* FindLoadedBlueprint(const FString& FilePath) const;
 
 	/** bViaLibrary: the document's own text may be the same; a library it includes changed. */
@@ -111,6 +120,8 @@ private:
 	TMap<FString, double> ChangedSources;
 	/** Blueprints edited in the editor, by when they last were: written back once edits pause. */
 	TMap<TWeakObjectPtr<UAnimBlueprint>, double> EditedBlueprints;
+	/** The same for assets of the kinds a document handler writes back. */
+	TMap<TWeakObjectPtr<UObject>, double> EditedAssets;
 	/** What this subsystem wrote to each file: the watcher's report of it is not a change. */
 	TMap<FString, FString> WrittenTexts;
 	/** Blueprints waiting for the user's choice in a conflict, with its notification. */
