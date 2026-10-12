@@ -30,6 +30,7 @@
 #include "RigVMModel/RigVMGraph.h"
 #include "RigVMModel/RigVMPin.h"
 #include "RigVMTypeUtils.h"
+#include "Rig/DcrWriteBack.h"
 #include "Rigs/RigModuleDefines.h"
 #include "Settings/ControlRigSettings.h"
 #include "UObject/Package.h"
@@ -992,6 +993,10 @@ namespace UE::DreamAnim::Rig
 			Result.Warnings.Add(FString::Printf(TEXT("compile: %d warnings"), CompileWarnings));
 		}
 
+		if (!Options.SourceText.IsEmpty() && Result.Errors.IsEmpty())
+		{
+			SetDcrGeneratedText(*Rig.Asset, Options.SourceText);
+		}
 		Rig.Asset->MarkPackageDirty();
 		if (Options.bSave && Result.Errors.IsEmpty() && !SaveDcrRig(Rig))
 		{

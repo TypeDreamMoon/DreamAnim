@@ -3,8 +3,9 @@
 using UnrealBuildTool;
 
 // The Control Rig front end (.dcr): reading a rig into the model (extract), turning the model into text
-// (lower) and back (semantic), and building rigs from it (generate). Editor: it creates assets through
-// the Control Rig editor's factories, and nothing here runs in a game.
+// (lower) and back (semantic), building rigs from it (generate) and writing a rig's changes into its text
+// (write-back). Editor: it creates assets through the Control Rig editor's factories, and nothing here runs
+// in a game.
 public class DreamAnimRig : ModuleRules
 {
 	public DreamAnimRig(ReadOnlyTargetRules Target) : base(Target)
@@ -17,6 +18,8 @@ public class DreamAnimRig : ModuleRules
 			"CoreUObject",
 			"Engine",
 			"DreamAnimLang",
+			// The driver's document handlers and write-back results are in the public headers.
+			"DreamAnimCompiler",
 			"RigVM",
 			"RigVMDeveloper",
 			"ControlRig",
@@ -29,7 +32,6 @@ public class DreamAnimRig : ModuleRules
 			"AssetRegistry",
 			"AssetTools",
 			"ControlRigEditor",
-			"DreamAnimCompiler",
 			"Projects",
 			"UnrealEd",
 		});

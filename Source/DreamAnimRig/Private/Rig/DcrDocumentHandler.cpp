@@ -13,6 +13,7 @@
 #include "Rig/DcrLower.h"
 #include "Rig/DcrNormalize.h"
 #include "Rig/DcrSemantic.h"
+#include "Rig/DcrWriteBack.h"
 #include "RigVMCore/RigVMRegistry.h"
 
 namespace UE::DreamAnim::Rig
@@ -59,6 +60,8 @@ namespace UE::DreamAnim::Rig
 
 		FDcrGenerateOptions GenerateOptions;
 		GenerateOptions.bSave = Options.bSave;
+		// What the rig is built from, kept with it: write-back compares the file with it.
+		GenerateOptions.SourceText = Text;
 		const FDcrGenerateResult Generated = GenerateDcrRig(Model, GenerateOptions);
 		FDabDiagnosticSink Sink(Result.FilePath);
 		for (const FString& Error : Generated.Errors)
@@ -132,5 +135,28 @@ namespace UE::DreamAnim::Rig
 	FString FDcrDocumentHandler::GetSourceExtension() const
 	{
 		return TEXT(".dcr");
+	}
+
+	FDabWriteBackResult FDcrDocumentHandler::WriteBack(UObject& Asset, const FString& FilePath, const FString& Text, const FDabWriteBackOptions& Options)
+	{
+		ReadyRigVM();
+		const FDcrRig Rig = WrapDcrRig(&Asset);
+		if (!Rig.IsValid())
+		{
+			FDabWriteBackResult Result;
+			Result.Text = Text;
+			return Result;
+		}
+		return WriteBackDcrRig(Rig, FilePath, Text, Options);
+	}
+
+	FString FDcrDocumentHandler::GetGeneratedText(const UObject& Asset) const
+	{
+		return GetDcrGeneratedText(Asset);
+	}
+
+	void FDcrDocumentHandler::SetGeneratedText(UObject& Asset, const FString& Text) const
+	{
+		SetDcrGeneratedText(Asset, Text);
 	}
 }

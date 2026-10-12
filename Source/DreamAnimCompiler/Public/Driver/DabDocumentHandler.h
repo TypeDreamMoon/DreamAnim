@@ -11,6 +11,7 @@
 #include "CoreMinimal.h"
 #include "Driver/DabDriver.h"
 #include "UObject/TopLevelAssetPath.h"
+#include "WriteBack/DabWriteBack.h"
 
 namespace UE::DreamAnim::Compiler
 {
@@ -33,6 +34,20 @@ namespace UE::DreamAnim::Compiler
 		virtual FString GetDefaultDecompilePath(const UObject& Asset) const = 0;
 		/** The extension of this kind's sources, with the dot (`.dcr`). */
 		virtual FString GetSourceExtension() const = 0;
+
+		/** Whether changes made to this kind's assets in the editor are written into their sources (WriteBack). */
+		virtual bool SupportsWriteBack() const { return false; }
+		/**
+		 * What Asset holds that Text (its source at FilePath) does not, written into the text. Nothing is read from
+		 * or written to disk.
+		 */
+		virtual FDabWriteBackResult WriteBack(UObject& Asset, const FString& FilePath, const FString& Text, const FDabWriteBackOptions& Options)
+		{
+			return FDabWriteBackResult();
+		}
+		/** The text Asset was last built from or written to, kept with it; empty when there is none. */
+		virtual FString GetGeneratedText(const UObject& Asset) const { return FString(); }
+		virtual void SetGeneratedText(UObject& Asset, const FString& Text) const {}
 	};
 
 	DREAMANIMCOMPILER_API void RegisterDabDocumentHandler(Lang::EDabDocumentKind Kind, TSharedRef<IDabDocumentHandler> Handler);

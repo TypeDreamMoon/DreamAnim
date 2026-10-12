@@ -27,6 +27,8 @@ namespace UE::DreamAnim::Rig
 		bool bSave = false;
 		/** Lay the nodes out; otherwise each node goes where the model's Position puts it. */
 		bool bAutoLayout = true;
+		/** The text the model was built from, kept with a rig that builds clean (GetDcrGeneratedText); none when empty. */
+		FString SourceText;
 	};
 
 	struct FDcrGenerateResult
