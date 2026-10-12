@@ -9,6 +9,7 @@
 #include "Model/DabModel.h"
 #include "Rig/DcrNames.h"
 #include "Rig/DcrSyntax.h"
+#include "RigVMCore/RigVMTrait.h"
 #include "RigVMTypeUtils.h"
 #include "Rigs/RigHierarchyDefines.h"
 #include "StructUtils/UserDefinedStruct.h"
@@ -916,6 +917,10 @@ namespace UE::DreamAnim::Rig
 		const FDabCallExpr* KeyCall = StructProperty && StructProperty->Struct == FRigElementKey::StaticStruct() ? Expr.As<FDabCallExpr>() : nullptr;
 		const FDabNameExpr* KeyType = KeyCall && KeyCall->Callee ? KeyCall->Callee->As<FDabNameExpr>() : nullptr;
 		const bool bElementKey = KeyType && FindElementType(KeyType->Name) != INDEX_NONE;
+		// `SetDeformerTransformVariable(Value = x)`: a trait's value, written as a call of the trait's struct.
+		const FDabCallExpr* TraitCall = StructProperty && StructProperty->Struct->IsChildOf(FRigVMTrait::StaticStruct()) ? Expr.As<FDabCallExpr>() : nullptr;
+		const FDabNameExpr* TraitType = TraitCall && TraitCall->Callee ? TraitCall->Callee->As<FDabNameExpr>() : nullptr;
+		const bool bTrait = TraitType && FindDcrTraitStruct(TraitType->Name) == StructProperty->Struct;
 		// An asset named where a soft object path goes: `SKM_Manny`, `Path(Plugin.X, "A/B")`, `None`.
 		const bool bSoftPath = StructProperty && StructProperty->Struct->IsChildOf(TBaseStructure<FSoftObjectPath>::Get())
 			&& ((Expr.Is<FDabNameExpr>() && IsConstant(Expr, Property)) || !GetDcrPathExprObjectPath(Expr).IsEmpty());
@@ -943,7 +948,7 @@ namespace UE::DreamAnim::Rig
 			Path.SetPath(ObjectPath);
 			return true;
 		}
-		if (!bTuple && !bList && !bElementKey && !IsConstant(Expr, Property))
+		if (!bTuple && !bList && !bElementKey && !bTrait && !IsConstant(Expr, Property))
 		{
 			OutParts.Add({ SubPath, &Expr });
 			return true;
@@ -1070,25 +1075,32 @@ namespace UE::DreamAnim::Rig
 				return true;
 			}
 			const FDabTupleExpr* Tuple = Expr.As<FDabTupleExpr>();
-			if (!Tuple)
+			if (bTrait && TraitCall->Args.Num() == 1 && !TraitCall->Args[0]->IsNamed() && TraitCall->Args[0]->Value)
+			{
+				// The whole trait from elsewhere.
+				OutParts.Add({ SubPath, TraitCall->Args[0]->Value.Get() });
+				return true;
+			}
+			if (!Tuple && !bTrait)
 			{
 				OutError = FString::Printf(TEXT("%s takes a %s: write a tuple, (A = 1, B = 2)"), *Where, *Struct.GetName());
 				return false;
 			}
-			if (Tuple->Items.IsEmpty())
+			const TArray<FDabArgumentPtr>& Items = bTrait ? TraitCall->Args : Tuple->Items;
+			if (Items.IsEmpty())
 			{
 				Struct.ClearScriptStruct(Value);
 				return true;
 			}
-			const bool bPositional = !Tuple->Items[0]->IsNamed();
+			const bool bPositional = !Items[0]->IsNamed();
 			TArray<const FProperty*> Members;
 			for (TFieldIterator<FProperty> It(&Struct); It; ++It)
 			{
 				Members.Add(*It);
 			}
-			for (int32 Index = 0; Index < Tuple->Items.Num(); ++Index)
+			for (int32 Index = 0; Index < Items.Num(); ++Index)
 			{
-				const FDabArgument& Item = *Tuple->Items[Index];
+				const FDabArgument& Item = *Items[Index];
 				if (Item.IsNamed() == bPositional)
 				{
 					OutError = Where + TEXT(": a tuple names every member or none");

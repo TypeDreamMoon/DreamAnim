@@ -383,6 +383,42 @@ namespace UE::DreamAnim::Rig::Gen
 				{
 					ResolveTypes(Node);
 					AddAggregatePins(Node);
+					AddTraits(Node);
+				}
+			}
+
+			/** A unit's traits, each with its value (a new node has none: the editor's workflows add them). */
+			void AddTraits(const FDcrModelNode& Node)
+			{
+				for (const FDcrModelTrait& Trait : Node.Traits)
+				{
+					const FString Here = NodeWhere(Node) + TEXT(".") + Trait.Name;
+					UScriptStruct* TraitStruct = LoadObject<UScriptStruct>(nullptr, *Trait.StructPath, nullptr, LOAD_NoWarn | LOAD_Quiet);
+					if (!TraitStruct)
+					{
+						Ctx.Error(Here, FString::Printf(TEXT("the trait struct '%s' cannot be found"), *Trait.StructPath));
+						continue;
+					}
+					// The value the model holds, with the trait's own name in its `Name` member.
+					FStructOnScope Value(TraitStruct);
+					if (const FDcrValue* Written = Node.Values.FindByPredicate([&Trait](const FDcrValue& Candidate) { return Candidate.Name == Trait.Name; }))
+					{
+						TraitStruct->ImportText(*Written->Value, Value.GetStructMemory(), nullptr, PPF_None, nullptr, TraitStruct->GetName());
+					}
+					if (const FStrProperty* NameProperty = CastField<FStrProperty>(TraitStruct->FindPropertyByName(TEXT("Name"))))
+					{
+						NameProperty->SetPropertyValue_InContainer(Value.GetStructMemory(), Trait.Name);
+					}
+					const FName Added = Controller->AddTrait(FName(*Node.Name), FName(*Trait.StructPath), FName(*Trait.Name),
+						ExportDcrStructText(*TraitStruct, Value.GetStructMemory()), INDEX_NONE, false, false);
+					if (Added.IsNone())
+					{
+						Ctx.Error(Here, TEXT("the trait could not be added"));
+					}
+					else if (Added != FName(*Trait.Name))
+					{
+						Ctx.Error(Here, FString::Printf(TEXT("the trait was added as '%s'"), *Added.ToString()));
+					}
 				}
 			}
 
@@ -797,7 +833,11 @@ namespace UE::DreamAnim::Rig::Gen
 						}
 						for (const FDcrValue& Value : Node.Values)
 						{
-							SetValue(Node, Value);
+							// A trait's value went in with the trait.
+							if (!Node.Traits.ContainsByPredicate([&Value](const FDcrModelTrait& Trait) { return Trait.Name == Value.Name; }))
+							{
+								SetValue(Node, Value);
+							}
 						}
 					}
 				}

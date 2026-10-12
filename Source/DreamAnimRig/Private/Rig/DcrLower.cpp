@@ -789,6 +789,58 @@ namespace UE::DreamAnim::Rig
 				return Scratch;
 			}
 
+			if (Node.Kind == EDcrNodeKind::Unit && (!Node.Traits.IsEmpty() || Node.StructPath.IsEmpty()))
+			{
+				if (const TUniquePtr<FSignature>* Found = NodeSignatures.Find(&Node))
+				{
+					return **Found;
+				}
+				FSignature& Scratch = *NodeSignatures.Add(&Node, MakeUnique<FSignature>());
+				const UScriptStruct* Struct = GetNodeStruct(Node);
+				const FRigVMTemplate* Template = nullptr;
+				if (!Struct && !Node.Notation.IsEmpty())
+				{
+					// A template node no type was picked for: the pins every version has; its wildcards hold nothing yet.
+					Template = FRigVMRegistry::Get().FindTemplate(FName(*Node.Notation));
+					const FRigVMFunction* First = Template && Template->NumPermutations() > 0 ? Template->GetPermutation(0) : nullptr;
+					Struct = First ? First->Struct : nullptr;
+				}
+				if (!Struct)
+				{
+					return Scratch;
+				}
+				for (const FDcrPin& Pin : GetDcrNodePins(*Struct))
+				{
+					const FRigVMTemplateArgument* Argument = Template ? Template->FindArgument(FName(*Pin.Name)) : nullptr;
+					if (Argument && !Argument->IsSingleton())
+					{
+						continue;
+					}
+					Scratch.Pins.Add(Pin);
+					if (Pin.bInput && Pin.Property)
+					{
+						Scratch.Defaults.Add(Pin.Name, GetUnitDefault(*Struct, *Pin.Property));
+					}
+				}
+				// A trait is an input of its struct, after the unit's own; a new one holds its members' defaults.
+				for (const FDcrModelTrait& Trait : Node.Traits)
+				{
+					const UScriptStruct* TraitStruct = FindStruct(Trait.StructPath);
+					if (!TraitStruct)
+					{
+						return Scratch;
+					}
+					FDcrPin& Pin = Scratch.Pins.AddDefaulted_GetRef();
+					Pin.Name = Trait.Name;
+					Pin.bInput = true;
+					Pin.Type = MakeDcrType(*TraitStruct);
+					FStructOnScope Fresh(TraitStruct);
+					Scratch.Defaults.Add(Trait.Name, ExportDcrStructText(*TraitStruct, Fresh.GetStructMemory()));
+				}
+				Scratch.bKnown = true;
+				return Scratch;
+			}
+
 			if (Node.Kind == EDcrNodeKind::Collapse)
 			{
 				if (const TUniquePtr<FSignature>* Found = NodeSignatures.Find(&Node))
@@ -2541,6 +2593,31 @@ namespace UE::DreamAnim::Rig
 			{
 				if (!Pin.bInput)
 				{
+					continue;
+				}
+				// A trait: `Name = TraitType(Member = value, ...)`, written whatever it holds (it is there or not).
+				if (const FDcrModelTrait* Trait = Node.Traits.FindByPredicate([&Pin](const FDcrModelTrait& Candidate) { return Candidate.Name == Pin.Name; }))
+				{
+					const UScriptStruct* TraitStruct = File.FindStruct(Trait->StructPath);
+					TUniquePtr<FDabCallExpr> TraitCall = MakeUnique<FDabCallExpr>();
+					TraitCall->Callee = MakeDcrName(TraitStruct ? GetDcrTraitTypeName(*TraitStruct) : Trait->StructPath);
+					if (FDabExprPtr Value = InputExpr(Node, Pin, Signature, false))
+					{
+						if (FDabTupleExpr* Members = Value->As<FDabTupleExpr>())
+						{
+							TraitCall->Args = MoveTemp(Members->Items);
+						}
+						else
+						{
+							// The whole trait from elsewhere: its one positional argument.
+							FDabArgumentPtr Whole = MakeUnique<FDabArgument>();
+							Whole->Value = MoveTemp(Value);
+							TraitCall->Args.Add(MoveTemp(Whole));
+						}
+					}
+					bStillPositional = false;
+					++InputIndex;
+					Named.Emplace(Pin.Name, MoveTemp(TraitCall));
 					continue;
 				}
 				FDabExprPtr Arg = &Pin == TypingPin ? TypedLetFor(Node, Pin, Signature) : InputExpr(Node, Pin, Signature, bAggregate);

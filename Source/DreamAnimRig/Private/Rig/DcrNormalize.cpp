@@ -546,7 +546,17 @@ namespace UE::DreamAnim::Rig
 					FDcrValueSlot Current;
 					FDcrValueSlot Fresh;
 					bool bWildcard = false;
-					if (Node.Kind == EDcrNodeKind::Unit)
+					const FDcrModelTrait* Trait = Node.Traits.FindByPredicate([&Value](const FDcrModelTrait& Candidate) { return Candidate.Name == Value.Name; });
+					if (Trait)
+					{
+						// A trait's value: a new trait of its struct holds its members' defaults.
+						const UScriptStruct* TraitStruct = LoadObject<UScriptStruct>(nullptr, *Trait->StructPath, nullptr, LOAD_NoWarn | LOAD_Quiet);
+						if (!TraitStruct || !Current.Init(MakeDcrType(*TraitStruct)) || !Fresh.Init(MakeDcrType(*TraitStruct)))
+						{
+							continue;
+						}
+					}
+					else if (Node.Kind == EDcrNodeKind::Unit)
 					{
 						const UScriptStruct* Struct = LoadObject<UScriptStruct>(nullptr, *Node.StructPath, nullptr, LOAD_NoWarn | LOAD_Quiet);
 						const FProperty* Property = Struct ? Struct->FindPropertyByName(*Value.Name) : nullptr;

@@ -166,6 +166,11 @@ namespace UE::DreamAnim::Rig
 
 	/** A unit's or a dispatch's pins in declaration order. */
 	TArray<FDcrPin> GetDcrNodePins(const UScriptStruct& Struct);
+
+	/** A trait struct's name as the text writes it: `RigVMTrait_SetDeformerTransformVariable` -> `SetDeformerTransformVariable`. */
+	FString GetDcrTraitTypeName(const UScriptStruct& Struct);
+	/** The trait struct (a child of FRigVMTrait) called Name, by its short or its full name; null when none is, or several are. */
+	const UScriptStruct* FindDcrTraitStruct(const FString& Name);
 	/** Whether a unit member is an execute pin (an execute context or execute pin struct). */
 	bool IsDcrExecuteProperty(const FProperty& Property);
 

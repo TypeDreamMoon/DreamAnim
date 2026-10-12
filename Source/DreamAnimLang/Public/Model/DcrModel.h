@@ -42,6 +42,14 @@ namespace UE::DreamAnim::Model
 		FString Value;
 	};
 
+	/** A trait on a unit node (RigVM's FRigVMTrait): a named root pin of the trait's struct, added past the unit's own. */
+	struct FDcrModelTrait
+	{
+		FString Name;
+		/** The trait struct's object path (`/Script/OptimusCore.RigVMTrait_SetDeformerTransformVariable`). */
+		FString StructPath;
+	};
+
 	enum class EDcrNodeKind : uint8
 	{
 		/** A unit (RigUnit_*, RigVMFunction_*) by struct, including a template node resolved to that permutation. Events are units. */
@@ -101,6 +109,11 @@ namespace UE::DreamAnim::Model
 		TArray<FDcrValue> Values;
 		/** Pins added to an aggregate node past its own two (`C`, `D` on a four-input Add or Sequence), in order. */
 		TArray<FString> AggregatePins;
+		/**
+		 * Unit: its traits, in pin order. A trait's value is among Values under the trait's name, as a root pin's, with
+		 * the trait's own `Name` member left out (the trait's name says it); links into its members are links as any.
+		 */
+		TArray<FDcrModelTrait> Traits;
 		/** The node's execute pins by root pin name: those execution comes in by, and those it leaves by (an IO pin is in both). */
 		TArray<FString> ExecuteIn;
 		TArray<FString> ExecuteOut;

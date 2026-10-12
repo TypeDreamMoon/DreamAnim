@@ -108,7 +108,8 @@ namespace UE::DreamAnim::Rig
 		}
 		for (URigVMPin* Pin : Node->GetPins())
 		{
-			if (!Pin || Pin->IsExecuteContext())
+			// A trait's value is read with the trait (see Traits on the model's node).
+			if (!Pin || Pin->IsExecuteContext() || Pin->IsTraitPin())
 			{
 				continue;
 			}

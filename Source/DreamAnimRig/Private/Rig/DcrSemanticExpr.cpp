@@ -14,6 +14,7 @@
 #include "RigVMCore/RigVMTemplate.h"
 #include "RigVMTypeUtils.h"
 #include "Rigs/RigHierarchyDefines.h"
+#include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
 
 namespace UE::DreamAnim::Rig::Sem
@@ -450,14 +451,15 @@ namespace UE::DreamAnim::Rig::Sem
 		return false;
 	}
 
-	bool FBody::BindArgs(const FDabCallExpr& Call, const FSignature& Sig, const FString& What, bool bAggregate, TArray<FBoundArg>& OutArgs, TArray<const FDabExpr*>& OutExtra)
+	bool FBody::BindArgs(const FDabCallExpr& Call, const FSignature& Sig, const FString& What, bool bAggregate, TArray<FBoundArg>& OutArgs, TArray<const FDabExpr*>& OutExtra,
+		const TSet<const FDabArgument*>* Skip)
 	{
 		bool bOk = true;
 		int32 PositionalIndex = 0;
 		TSet<FString> Seen;
 		for (const FDabArgumentPtr& Arg : Call.Args)
 		{
-			if (!Arg || !Arg->Value)
+			if (!Arg || !Arg->Value || (Skip && Skip->Contains(Arg.Get())))
 			{
 				continue;
 			}
@@ -589,10 +591,27 @@ namespace UE::DreamAnim::Rig::Sem
 	FVal FBody::BuildUnit(const FDabCallExpr& Call, const UScriptStruct& Struct, const FDcrType* Expected, const FString& Preferred)
 	{
 		const FSignature Sig = MakeUnitSignature(Struct);
+		// `Name = TraitType(...)` where the unit has no input of that name: a trait put on the node.
+		TArray<TPair<const FDabArgument*, const UScriptStruct*>> Traits;
+		TSet<const FDabArgument*> TraitArgs;
+		for (const FDabArgumentPtr& Arg : Call.Args)
+		{
+			if (!Arg || !Arg->Value || !Arg->IsNamed() || Sig.Find(Arg->Name))
+			{
+				continue;
+			}
+			const FDabCallExpr* TraitCall = StripParens(*Arg->Value).As<FDabCallExpr>();
+			const FDabNameExpr* TraitType = TraitCall && TraitCall->Callee ? TraitCall->Callee->As<FDabNameExpr>() : nullptr;
+			if (const UScriptStruct* TraitStruct = TraitType ? FindDcrTraitStruct(TraitType->Name) : nullptr)
+			{
+				Traits.Emplace(Arg.Get(), TraitStruct);
+				TraitArgs.Add(Arg.Get());
+			}
+		}
 		TArray<FBoundArg> Args;
 		TArray<const FDabExpr*> Extra;
 		const FString What = GetDcrNodeTypeName(Struct);
-		const bool bBound = BindArgs(Call, Sig, What, !GetUnitAggregateSecond(Struct).IsEmpty(), Args, Extra);
+		const bool bBound = BindArgs(Call, Sig, What, !GetUnitAggregateSecond(Struct).IsEmpty(), Args, Extra, &TraitArgs);
 
 		FNodeRec& Rec = NewRec(Preferred, GetDcrShortName(Struct.GetName()));
 		InitUnitRec(Rec, Struct);
@@ -606,6 +625,21 @@ namespace UE::DreamAnim::Rig::Sem
 			{
 				ApplyArg(Rec, *Pin, *Arg.Expr);
 			}
+		}
+		for (const TPair<const FDabArgument*, const UScriptStruct*>& Trait : Traits)
+		{
+			// A trait is an input of its struct past the unit's own; a new one holds its members' defaults.
+			FPin Pin;
+			Pin.Name = Trait.Key->Name;
+			Pin.bInput = true;
+			Pin.Type = MakeDcrType(*Trait.Value);
+			FStructOnScope Fresh(Trait.Value);
+			Pin.Default = ExportDcrStructText(*Trait.Value, Fresh.GetStructMemory());
+			Rec.Sig.Pins.Add(Pin);
+			FDcrModelTrait& Added = Rec.Node.Traits.AddDefaulted_GetRef();
+			Added.Name = Pin.Name;
+			Added.StructPath = Trait.Value->GetPathName();
+			ApplyLiteral(Rec, Pin, StripParens(*Trait.Key->Value));
 		}
 		if (!Extra.IsEmpty() && !AddAggregates(Rec, Struct, Sig, Extra))
 		{

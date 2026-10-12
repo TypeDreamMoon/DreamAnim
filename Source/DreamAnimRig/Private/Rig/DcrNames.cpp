@@ -13,6 +13,7 @@
 #include "RigVMCore/RigVMRegistry.h"
 #include "RigVMCore/RigVMStruct.h"
 #include "RigVMCore/RigVMTemplate.h"
+#include "RigVMCore/RigVMTrait.h"
 #include "RigVMTypeUtils.h"
 #include "StructUtils/UserDefinedStruct.h"
 #include "UObject/ObjectRedirector.h"
@@ -206,6 +207,44 @@ namespace UE::DreamAnim::Rig
 			}
 		}
 		return StructName;
+	}
+
+	const UScriptStruct* FindDcrTraitStruct(const FString& Name)
+	{
+		static const FString TraitPrefix(TEXT("RigVMTrait_"));
+		const UScriptStruct* Found = nullptr;
+		for (TObjectIterator<UScriptStruct> It; It; ++It)
+		{
+			if (!It->IsChildOf(FRigVMTrait::StaticStruct()) || *It == FRigVMTrait::StaticStruct())
+			{
+				continue;
+			}
+			const FString StructName = It->GetName();
+			if (StructName == Name || (StructName.StartsWith(TraitPrefix, ESearchCase::CaseSensitive) && StructName.Mid(TraitPrefix.Len()) == Name))
+			{
+				if (Found)
+				{
+					return nullptr;
+				}
+				Found = *It;
+			}
+		}
+		return Found;
+	}
+
+	FString GetDcrTraitTypeName(const UScriptStruct& Struct)
+	{
+		static const FString TraitPrefix(TEXT("RigVMTrait_"));
+		const FString Name = Struct.GetName();
+		if (Name.StartsWith(TraitPrefix, ESearchCase::CaseSensitive))
+		{
+			const FString Short = Name.Mid(TraitPrefix.Len());
+			if (FindDcrTraitStruct(Short) == &Struct)
+			{
+				return Short;
+			}
+		}
+		return Name;
 	}
 
 	TArray<FDcrNodeType> FindDcrUnits(const FString& Name)

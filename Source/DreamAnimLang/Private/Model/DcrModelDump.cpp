@@ -551,6 +551,10 @@ namespace UE::DreamAnim::Model
 			{
 				Line(Out, Depth + 1, TEXT("Aggregate ") + FString::Join(Node.AggregatePins, TEXT(" ")));
 			}
+			for (const FDcrModelTrait& Trait : Node.Traits)
+			{
+				Line(Out, Depth + 1, FString::Printf(TEXT("Trait %s %s"), *Trait.Name, *Trait.StructPath));
+			}
 			if (!Node.InjectedOn.IsEmpty())
 			{
 				Line(Out, Depth + 1, FString::Printf(TEXT("Injected on %s as %s in %s out %s"), *Naming.Rename(Node.InjectedOn),

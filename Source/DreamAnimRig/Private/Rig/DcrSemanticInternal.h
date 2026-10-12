@@ -380,7 +380,9 @@ namespace UE::DreamAnim::Rig::Sem
 			const Lang::FDabExpr* Expr = nullptr;
 			const Lang::FDabArgument* Source = nullptr;
 		};
-		bool BindArgs(const Lang::FDabCallExpr& Call, const FSignature& Sig, const FString& What, bool bAggregate, TArray<FBoundArg>& OutArgs, TArray<const Lang::FDabExpr*>& OutExtra);
+		/** Skip: arguments another step takes (a unit's traits). */
+		bool BindArgs(const Lang::FDabCallExpr& Call, const FSignature& Sig, const FString& What, bool bAggregate, TArray<FBoundArg>& OutArgs, TArray<const Lang::FDabExpr*>& OutExtra,
+			const TSet<const Lang::FDabArgument*>* Skip = nullptr);
 
 		FVal BuildUnit(const Lang::FDabCallExpr& Call, const UScriptStruct& Struct, const Model::FDcrType* Expected, const FString& Preferred);
 		/** `RunEvent(Backward)`: an InvokeEntry node on the chain. */

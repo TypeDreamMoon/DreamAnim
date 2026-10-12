@@ -25,6 +25,7 @@
 #include "Rigs/RigHierarchy.h"
 #include "Rigs/RigHierarchyElements.h"
 #include "Rigs/RigModuleDefines.h"
+#include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
 
 namespace UE::DreamAnim::Rig
@@ -293,6 +294,38 @@ namespace UE::DreamAnim::Rig
 				}
 				OutWildcardPins.Add(Pin->GetFName());
 				Out.ResolvedTypes.Emplace(Pin->GetName(), MakeType(Pin->GetCPPType(), Pin->GetCPPTypeObject()));
+			}
+		}
+
+		/**
+		 * A unit's traits, in pin order, and each one's value where it differs from a new trait's of the same struct.
+		 * The trait's `Name` member is left out of the value: the trait's name says it.
+		 */
+		void ExtractTraits(FExtractContext& Context, URigVMUnitNode* Unit, FDcrModelNode& Out, const FString& Location)
+		{
+			for (const FString& TraitName : Unit->GetTraitNames())
+			{
+				UScriptStruct* TraitStruct = Unit->GetTraitScriptStruct(FName(*TraitName));
+				TSharedPtr<FStructOnScope> Instance = TraitStruct ? Unit->GetTraitInstance(FName(*TraitName)) : nullptr;
+				if (!TraitStruct || !Instance.IsValid())
+				{
+					Context.AddUnsupported(Location + TEXT(".") + TraitName, TEXT("trait whose struct cannot be found"));
+					continue;
+				}
+				FDcrModelTrait& Trait = Out.Traits.AddDefaulted_GetRef();
+				Trait.Name = TraitName;
+				Trait.StructPath = TraitStruct->GetPathName();
+
+				FStructOnScope Fresh(TraitStruct);
+				if (const FProperty* NameProperty = TraitStruct->FindPropertyByName(TEXT("Name")))
+				{
+					NameProperty->CopyCompleteValue_InContainer(Instance->GetStructMemory(), Fresh.GetStructMemory());
+				}
+				const FString Text = ExportDcrStructText(*TraitStruct, Instance->GetStructMemory());
+				if (Text != ExportDcrStructText(*TraitStruct, Fresh.GetStructMemory()))
+				{
+					AddValue(Out.Values, TraitName, Text);
+				}
 			}
 		}
 
@@ -567,7 +600,7 @@ namespace UE::DreamAnim::Rig
 				Context.AddUnsupported(Location, TEXT("node with orphaned pins"));
 			}
 
-			if (!Node->GetTraitNames().IsEmpty())
+			if (!Node->GetTraitNames().IsEmpty() && !Node->IsA<URigVMUnitNode>())
 			{
 				Out.Kind = EDcrNodeKind::Unknown;
 				Context.AddUnsupported(Location, FString::Printf(TEXT("node with trait pins (%s)"), *Node->GetClass()->GetName()));
