@@ -13,11 +13,24 @@
 #include "Rig/DcrLower.h"
 #include "Rig/DcrNormalize.h"
 #include "Rig/DcrSemantic.h"
+#include "RigVMCore/RigVMRegistry.h"
 
 namespace UE::DreamAnim::Rig
 {
 	using namespace UE::DreamAnim::Compiler;
 	using namespace UE::DreamAnim::Lang;
+
+	namespace
+	{
+		/**
+		 * RigVM registers its dispatches (If, the array nodes...) at the end of engine init, which a commandlet runs
+		 * before: until then the text cannot name them.
+		 */
+		void ReadyRigVM()
+		{
+			FRigVMRegistry::Get().RefreshEngineTypesIfRequired();
+		}
+	}
 
 	void FDcrDocumentHandler::Compile(FDabCompileResult& Result, const FString& Text, const FDabCompileOptions& Options)
 	{
@@ -26,6 +39,7 @@ namespace UE::DreamAnim::Rig
 			return;
 		}
 		const FDabSpan DocumentSpan = Result.Unit->Main->Document->KindSpan;
+		ReadyRigVM();
 
 		FDcrSemanticOptions SemanticOptions;
 		if (!Options.OverridePackageName.IsEmpty())
@@ -81,6 +95,7 @@ namespace UE::DreamAnim::Rig
 	FDabDecompileResult FDcrDocumentHandler::Decompile(UObject& Asset)
 	{
 		FDabDecompileResult Result;
+		ReadyRigVM();
 		const FDcrRig Rig = WrapDcrRig(&Asset);
 		FDabDiagnosticSink Sink(Asset.GetPathName());
 		Model::FDcrModel Model;
