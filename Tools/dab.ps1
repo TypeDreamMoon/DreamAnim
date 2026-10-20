@@ -26,6 +26,8 @@
 #                                 Animation Blueprints to text, below the project's DAnim/ unless -Out;
 #                                 a file that exists and differs is only replaced with -Force; -AnimSet moves
 #                                 their animations into slots of that animation set (created when missing)
+#   dab.ps1 dal [-File F] [-Root R] [-Dal D] [-DalModule M]
+#                                 compile the .dal logic sources into C++ with the dal compiler (see below)
 #
 # build, check, fmt and decompile run `UnrealEditor-Cmd <project> -run=DreamAnim` on -Project, else the
 # project above -File, else the test host, and keep the lines that matter: diagnostics
@@ -42,6 +44,16 @@
 # installations; -EngineRoot <dir> names one instead.
 # A build writes packages: close any editor that has the project open.
 #
+# .dal logic sources are compiled by the dal compiler, which is not part of the plugin: -Dal, else the
+# DREAMANIM_DAL environment variable, names the folder that holds its `dal` package; without either, .dal
+# files are left alone. Python is DREAMANIM_PYTHON, else `python`. The sources are the .dal files under the
+# project's DAnim/ and the DAnim/ of its plugins (or -Root, or -File). Each one's C++ goes to
+# Source/<Module>/Public/Dal/ of the project or plugin it is in, with <MODULE>_API on its class: the
+# module is -DalModule, else the descriptor's first Runtime module. `build` compiles them first and stops
+# on an error; when C++ changed it builds the project's editor target before the .dab sources (-NoBuild
+# skips that). `check` checks them as well. `dal` only compiles. Their diagnostics print as the
+# commandlet's do: `<file>(<line>,<col>): error DALnnnn: ...`.
+#
 # Exit codes
 #   make: 0 built, 2 failed.
 #   test: 0 green, 1 red (a test failed or an ensure fired), 2 not judged (the build failed, the editor
@@ -49,10 +61,12 @@
 #         <host>/Saved/DreamAnimTests/<time>-<preset>/: the engine's index.json, the run log and summary.md.
 #   build, check, fmt, decompile: 0 no errors, 1 errors (fmt -Verify: a file not canonical), 2 the
 #         commandlet did not finish (it crashed, timed out, or never printed its summary).
+#   dal: 0 compiled, 1 errors in a source, 2 no compiler, a source in no module, or the compiler failed.
+#         build and check take 2 from the dal step the same way, and build takes 2 when the C++ build fails.
 
 [CmdletBinding()]
 param(
-    [Parameter(Position = 0)][ValidateSet('make', 'test', 'build', 'check', 'fmt', 'decompile')][string]$Command = 'test',
+    [Parameter(Position = 0)][ValidateSet('make', 'test', 'build', 'check', 'fmt', 'decompile', 'dal')][string]$Command = 'test',
     [ValidateSet('Quick', 'RoundTrip', 'Behavior', 'Rig', 'RigRoundTrip', 'RigBehavior', 'All')][string]$Preset = 'Quick',
     [string]$Filter,
     [switch]$NoBuild,
@@ -72,7 +86,9 @@ param(
     [switch]$NoSave,
     [switch]$Force,
     [switch]$Raw,
-    [switch]$Markers
+    [switch]$Markers,
+    [string]$Dal,
+    [string]$DalModule
 )
 
 $ErrorActionPreference = 'Stop'
@@ -160,8 +176,9 @@ elseif ($sourceFile -and [IO.Path]::IsPathRooted($sourceFile) -and (Find-Project
 else { Find-HostProject }
 $projectDir = Split-Path $uproject
 $hostName = [IO.Path]::GetFileNameWithoutExtension($uproject)
-$engineRoot = Resolve-EngineRoot $uproject
-$editorCmd = Join-Path $engineRoot 'Engine\Binaries\Win64\UnrealEditor-Cmd.exe'
+# `dal` runs no engine, so it needs none.
+$engineRoot = if ($Command -ne 'dal') { Resolve-EngineRoot $uproject }
+$editorCmd = if ($engineRoot) { Join-Path $engineRoot 'Engine\Binaries\Win64\UnrealEditor-Cmd.exe' }
 
 function Invoke-Build {
     Write-Step "Building ${hostName}Editor"
@@ -391,15 +408,169 @@ function Invoke-Commandlet {
     elseif ($exitCode -ne 0) { $script:CommandletExit = 1 }
 }
 
+# ---------------------------------------------------------------- .dal logic
+
+function Get-DalCompiler([string]$Dir) {
+    # The folder that holds the compiler's `dal` package; none when not configured.
+    if (-not $Dir) { return $null }
+    if (-not (Test-Path -LiteralPath (Join-Path $Dir 'dal\__main__.py') -PathType Leaf)) {
+        throw "No dal compiler in ${Dir}: it should hold the dal package (dal\__main__.py)."
+    }
+    return (Resolve-Path -LiteralPath $Dir).Path.TrimEnd('\')
+}
+
+function Get-DalRoots([string]$ProjectDir) {
+    # The project's DAnim/ and the DAnim/ of the plugins inside the project.
+    $roots = @(Join-Path $ProjectDir 'DAnim')
+    $plugins = Join-Path $ProjectDir 'Plugins'
+    if (Test-Path -LiteralPath $plugins -PathType Container) {
+        foreach ($descriptor in Get-ChildItem -LiteralPath $plugins -Recurse -Depth 3 -Filter '*.uplugin' -File -ErrorAction SilentlyContinue) {
+            $roots += Join-Path $descriptor.DirectoryName 'DAnim'
+        }
+    }
+    return @($roots | Where-Object { Test-Path -LiteralPath $_ -PathType Container })
+}
+
+function Get-DalSources([string[]]$Roots, [string]$File, [string]$ProjectDir) {
+    if ($File) {
+        $path = if (Test-Path -LiteralPath $File -PathType Leaf) { $File } else { Join-Path $ProjectDir $File }
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "No such source: $File" }
+        return @((Resolve-Path -LiteralPath $path).Path)
+    }
+    return @(foreach ($r in $Roots) {
+        Get-ChildItem -LiteralPath $r -Recurse -Filter '*.dal' -File | Where-Object { $_.Extension -eq '.dal' } |
+            Sort-Object FullName | ForEach-Object { $_.FullName }
+    })
+}
+
+function Get-DalTarget([string]$Source, [string]$Module) {
+    # Where a source's C++ goes: Source/<Module>/Public/Dal of the project or plugin the source is in. The
+    # module is the one given, else the descriptor's first Runtime module.
+    $dir = Split-Path -Parent $Source
+    $descriptor = $null
+    while ($dir) {
+        $descriptor = Get-ChildItem -LiteralPath $dir -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Extension -in '.uplugin', '.uproject' } | Select-Object -First 1
+        if ($descriptor) { break }
+        $parent = Split-Path -Parent $dir
+        if (-not $parent -or $parent -eq $dir) { break }
+        $dir = $parent
+    }
+    if (-not $descriptor) { throw "$Source is in no project or plugin, so its C++ has no module to go to." }
+    $name = $Module
+    if (-not $name) {
+        $modules = @((Get-Content -LiteralPath $descriptor.FullName -Raw -Encoding UTF8 | ConvertFrom-Json).Modules)
+        $name = ($modules | Where-Object { $_.Type -eq 'Runtime' } | Select-Object -First 1).Name
+        if (-not $name) { throw "$($descriptor.Name) has no Runtime module for the C++ of ${Source}: pass -DalModule." }
+    }
+    $moduleDir = Join-Path $descriptor.DirectoryName "Source\$name"
+    if (-not (Test-Path -LiteralPath $moduleDir -PathType Container)) { throw "No module $name at $moduleDir (for $Source)." }
+    return [pscustomobject]@{ Out = Join-Path $moduleDir 'Public\Dal'; Api = $name.ToUpperInvariant() + '_API' }
+}
+
+function Invoke-Dal([string]$Compiler, [string]$Python, [string]$Mode, [string[]]$Sources, [string]$Module) {
+    # `python -m dal check|compile` on each source, from the compiler's folder and with it on PYTHONPATH (not
+    # -I, which ignores both). Writes its lines to the output stream; the counts come back through
+    # $script:DalErrors (sources with errors), $script:DalFailed (runs that did not get that far) and
+    # $script:DalWritten (C++ files the compiler changed).
+    $ErrorActionPreference = 'Continue'
+    $script:DalErrors = 0
+    $script:DalFailed = 0
+    $script:DalWritten = @()
+    $saved = @{ Path = $env:PYTHONPATH; Encoding = $env:PYTHONIOENCODING; Console = [Console]::OutputEncoding }
+    $env:PYTHONPATH = if ($saved.Path) { "$Compiler;$($saved.Path)" } else { $Compiler }
+    $env:PYTHONIOENCODING = 'utf-8'
+    [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+    $errFile = [IO.Path]::GetTempFileName()
+    Push-Location -LiteralPath $Compiler
+    try {
+        foreach ($source in $Sources) {
+            $arguments = @('-m', 'dal', $Mode, $source)
+            if ($Mode -eq 'compile') {
+                try { $target = Get-DalTarget $source $Module }
+                catch { Write-Output "${source}: error: $($_.Exception.Message)"; $script:DalFailed++; continue }
+                $arguments += @('--cpp', $target.Out, '--module', $target.Api)
+            }
+            $lines = @(& $Python @arguments 2> $errFile)
+            $code = $LASTEXITCODE
+            # The compiler names the file as it was given its name; the full path is the one the editors open.
+            $leaf = Split-Path -Leaf $source
+            foreach ($line in @(Get-Content -LiteralPath $errFile -Encoding utf8)) {
+                if ($line -match '^(.*?):(\d+):(\d+): (error|warning) (DAL\d+): (.*)$') {
+                    $file = if ((Split-Path -Leaf $Matches[1]) -eq $leaf) { $source } else { $Matches[1] }
+                    Write-Output ('{0}({1},{2}): {3} {4}: {5}' -f $file, $Matches[2], $Matches[3], $Matches[4], $Matches[5], $Matches[6])
+                }
+                elseif ($line -notmatch ': \d+ error\(s\)$') { Write-Output $line }
+            }
+            foreach ($line in $lines) {
+                if ($line -match '^wrote (.*)$') { $script:DalWritten += $Matches[1]; Write-Output $line }
+            }
+            if ($code -eq 1) { $script:DalErrors++ }
+            elseif ($code -ne 0) { Write-Output "${source}: the dal compiler stopped (exit $code)."; $script:DalFailed++ }
+        }
+    }
+    finally {
+        Pop-Location
+        Remove-Item -LiteralPath $errFile -ErrorAction SilentlyContinue
+        $env:PYTHONPATH = $saved.Path
+        $env:PYTHONIOENCODING = $saved.Encoding
+        [Console]::OutputEncoding = $saved.Console
+    }
+}
+
+$script:DalExit = 0
+$script:DalWritten = @()
+$isDalFile = [bool]($sourceFile -and $sourceFile.EndsWith('.dal', [StringComparison]::OrdinalIgnoreCase))
+
+function Invoke-DalStep([string]$Mode) {
+    # The .dal sources of this run, compiled or checked. Writes its lines to the output stream; the verdict
+    # comes back through $script:DalExit: 0, 1 errors in a source, 2 not run through.
+    $script:DalExit = 0
+    $compiler = $null
+    try { $compiler = Get-DalCompiler $(if ($Dal) { $Dal } else { $env:DREAMANIM_DAL }) }
+    catch { Write-Problem $_.Exception.Message; $script:DalExit = 2; return }
+    if (-not $compiler) {
+        if ($isDalFile -or $Command -eq 'dal') { Write-Problem 'No dal compiler: pass -Dal <folder> or set DREAMANIM_DAL.'; $script:DalExit = 2 }
+        return
+    }
+    $roots = if ($Root) { @($Root) } else { Get-DalRoots $projectDir }
+    $sources = @()
+    try { $sources = Get-DalSources $roots $(if ($isDalFile) { $sourceFile } else { $null }) $projectDir }
+    catch { Write-Problem $_.Exception.Message; $script:DalExit = 2; return }
+    if ($sources.Count -eq 0) {
+        if ($Command -eq 'dal') { Write-Note "No .dal sources under $($roots -join ', ')." }
+        return
+    }
+    $python = if ($env:DREAMANIM_PYTHON) { $env:DREAMANIM_PYTHON } else { 'python' }
+    Invoke-Dal $compiler $python $Mode $sources $DalModule
+    Write-Output ('DreamAnim dal: {0} source(s), {1} with errors, {2} C++ file(s) written' -f $sources.Count, $script:DalErrors, $script:DalWritten.Count)
+    $script:DalExit = if ($script:DalFailed -gt 0) { 2 } elseif ($script:DalErrors -gt 0) { 1 } else { 0 }
+}
+
 switch ($Command) {
     'make' { if (Invoke-Build) { exit 0 } else { exit 2 } }
     'test' {
         if (-not $NoBuild) { if (-not (Invoke-Build)) { exit 2 } }
         exit (Invoke-Tests)
     }
+    'dal' {
+        Invoke-DalStep 'compile'
+        exit $script:DalExit
+    }
     default {
+        if ($Command -in 'build', 'check') {
+            Invoke-DalStep $(if ($Command -eq 'build') { 'compile' } else { 'check' })
+            # A build stops on any error in the logic; a check goes on to the other sources.
+            if ($script:DalExit -eq 2 -or ($Command -eq 'build' -and $script:DalExit -ne 0)) { exit $script:DalExit }
+            # The .dab sources name the generated classes as their parents: those must be compiled first.
+            if ($Command -eq 'build' -and $script:DalWritten.Count -gt 0) {
+                if ($NoBuild) { Write-Problem "Generated C++ changed; build ${hostName}Editor before the .dab sources that use it." }
+                elseif (-not (Invoke-Build)) { exit 2 }
+            }
+            if ($isDalFile) { exit $script:DalExit }
+        }
         # The function writes its lines to the output stream; its verdict comes back through a variable.
         Invoke-Commandlet
-        exit $script:CommandletExit
+        exit ([Math]::Max($script:CommandletExit, $script:DalExit))
     }
 }

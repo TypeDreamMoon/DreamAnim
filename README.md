@@ -187,6 +187,7 @@ Sources live in the project's `DAnim/` folder, or in `DAnim/` of an enabled plug
 | `check [-File F] [-Root R] [-Json J]` | Parses and checks: includes, templates, names. Nothing is generated. |
 | `fmt [-File F] [-Root R] [-Write \| -Verify] [-Json J]` | Prints the canonical text. `-Write` rewrites the files that differ, keeping their line ends. `-Verify` writes nothing and fails on any file that is not canonical. |
 | `decompile (-Asset A[,B] \| -Under /Game/Folder) [-AnimSet S] [-Out O] [-Stdout] [-Force] [-Json J]` | Animation Blueprints and Control Rigs to text, under the project's `DAnim/` unless `-Out`. `-Stdout` prints instead. A file that exists and differs is replaced only with `-Force`. `-AnimSet` moves their animations into slots of that animation set. |
+| `dal [-File F] [-Root R] [-Dal D] [-DalModule M]` | Compiles the `.dal` logic sources into C++ with the dal compiler; see [Logic in .dal](#logic-in-dal). |
 
 - `build`, `check`, `fmt` and `decompile` run `UnrealEditor-Cmd <project> -run=DreamAnim`. The project
   is `-Project`, else the project above `-File`, else the plugin's test host. `make` and `test` use the
@@ -213,9 +214,40 @@ Sources live in the project's `DAnim/` folder, or in `DAnim/` of an enabled plug
 Test results land in `<host>/Saved/DreamAnimTests/<time>-<preset>/`: the engine's `index.json`, the run
 log and `summary.md`.
 
-`Tools/Tests/Test-DabTools.ps1` checks the CLI's engine selection, test exit codes and host refresh
-without running Unreal. Run it with PowerShell 7 and `-NoProfile`. Refreshing a test host preserves its
-engine association; `Tools/TestHost/New-DreamAnimTestHost.ps1 -EngineAssociation 5.8` explicitly changes it.
+`Tools/Tests/Test-DabTools.ps1` checks the CLI's engine selection, test exit codes, host refresh and the
+`.dal` step (against a stand-in compiler) without running Unreal. Run it with PowerShell 7 and
+`-NoProfile`. Refreshing a test host preserves its engine association;
+`Tools/TestHost/New-DreamAnimTestHost.ps1 -EngineAssociation 5.8` explicitly changes it.
+
+### Logic in .dal
+
+A `.dal` file is logic written for the dal compiler (DreamAnimLogic), which generates the C++ anim instance
+a `.dab` Blueprint derives from. The compiler is not part of the plugin: `-Dal <folder>`, or the
+`DREAMANIM_DAL` environment variable, names the folder that holds its `dal` package. Without either, `.dal`
+files are left alone. Python is `DREAMANIM_PYTHON`, else `python` on the PATH.
+
+```
+$env:DREAMANIM_DAL = 'I:\DCC\DreamAnimLogic'
+Tools/dab.ps1 dal -Project MyGame.uproject
+Tools/dab.ps1 build -Project MyGame.uproject
+```
+
+- The sources are the `.dal` files under the project's `DAnim/` and the `DAnim/` of the plugins inside
+  the project, or under `-Root`, or the one `-File`.
+- Each source's C++ goes to `Source/<Module>/Public/Dal/` of the project or plugin the source is in, with
+  `<MODULE>_API` on its class. The module is `-DalModule`, else the descriptor's first `Runtime` module. The
+  module needs the dependencies the generated header lists at its top (`Engine`, and `EnhancedInput` for
+  input actions).
+- A `.dab` uses the generated class by name: `Settings = { Parent = HeroGait; }`.
+- `dal` compiles. `build` compiles first and stops on an error; when generated C++ changed it builds the
+  project's editor target before the `.dab` sources, unless `-NoBuild`. `check` checks the `.dal` sources
+  as well. With a `.dal` as `-File`, `build` and `check` stop after it.
+- The compiler rewrites a file only when its content changes. Files of a source that was deleted stay
+  until you remove them.
+- Diagnostics print as `<file>(<line>,<col>): error DALnnnn: message`. `-Json` does not hold them.
+- `dal` exits 0 when everything compiled, 1 on errors in a source, 2 when there is no compiler, a source
+  has no module to go to, or the compiler stopped. `build` and `check` give 2 the same way, and `build`
+  gives 2 when the C++ build fails.
 
 ## Documentation
 

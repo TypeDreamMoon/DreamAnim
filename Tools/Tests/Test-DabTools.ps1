@@ -79,6 +79,92 @@ try {
     & $createHost -HostDir $testHost -EngineAssociation '5.8' 6>> (Join-Path $scratch 'host.log')
     Assert-Equal '5.8' ((Get-Content -LiteralPath $hostProject -Raw -Encoding UTF8 | ConvertFrom-Json).EngineAssociation) 'Explicit host override'
     Assert-Equal '5.8' ((Get-Content -LiteralPath (Join-Path $testHost '.dreamanim-testhost.json') -Raw -Encoding UTF8 | ConvertFrom-Json).engineAssociation) 'Host metadata'
+
+    # The .dal step against a stand-in compiler: where sources are found, which module their C++ goes to,
+    # what counts as written, and how diagnostics come out.
+    foreach ($name in @('Get-DalCompiler', 'Get-DalRoots', 'Get-DalSources', 'Get-DalTarget', 'Invoke-Dal')) {
+        $function = $tree.Find({ param($node)
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name
+        }, $false)
+        if (-not $function) { throw "Missing function $name" }
+        Invoke-Expression $function.Extent.Text
+    }
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) { Write-Host 'No python on the PATH: the .dal checks were skipped.' }
+    else {
+        $compiler = Join-Path $scratch 'DalCompiler'
+        New-Item -ItemType Directory -Path (Join-Path $compiler 'dal') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $compiler 'dal/__init__.py') -Value '' -Encoding UTF8
+        Set-Content -LiteralPath (Join-Path $compiler 'dal/__main__.py') -Encoding UTF8 -Value @'
+import os, sys
+mode, path = sys.argv[1], sys.argv[2]
+text = open(path, encoding="utf-8").read()
+if "usage" in text:
+    sys.exit(2)
+if "bad" in text:
+    print(os.path.basename(path) + ":2:5: error DAL2004: expected an expression", file=sys.stderr)
+    print("    state X = ;", file=sys.stderr)
+    print(path + ": 1 error(s)", file=sys.stderr)
+    sys.exit(1)
+if mode == "compile":
+    out, api = sys.argv[sys.argv.index("--cpp") + 1], sys.argv[sys.argv.index("--module") + 1]
+    os.makedirs(out, exist_ok=True)
+    stem = os.path.splitext(os.path.basename(path))[0]
+    for name, body in ((stem + ".h", api), ("DalMath.h", "math")):
+        target = os.path.join(out, name)
+        if os.path.isfile(target) and open(target, encoding="utf-8").read() == body:
+            print("up to date " + target)
+        else:
+            open(target, "w", encoding="utf-8").write(body)
+            print("wrote " + target)
+'@
+        $dalProject = Join-Path $scratch 'DalProject'
+        $plugin = Join-Path $dalProject 'Plugins\Sub'
+        foreach ($dir in @('DAnim/Logic', 'Source/Game', 'Source/GameEditor')) { New-Item -ItemType Directory -Path (Join-Path $dalProject $dir) -Force | Out-Null }
+        foreach ($dir in @('DAnim', 'Source/SubRuntime')) { New-Item -ItemType Directory -Path (Join-Path $plugin $dir) -Force | Out-Null }
+        @{ Modules = @(@{ Name = 'GameEditor'; Type = 'Editor' }, @{ Name = 'Game'; Type = 'Runtime' }) } | ConvertTo-Json -Depth 4 |
+            Set-Content -LiteralPath (Join-Path $dalProject 'DalProject.uproject') -Encoding UTF8
+        @{ Modules = @(@{ Name = 'SubRuntime'; Type = 'Runtime' }) } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $plugin 'Sub.uplugin') -Encoding UTF8
+        $hero = Join-Path $dalProject 'DAnim\Logic\hero.dal'
+        $sub = Join-Path $plugin 'DAnim\sub.dal'
+        Set-Content -LiteralPath $hero -Value 'logic Hero;' -Encoding UTF8
+        Set-Content -LiteralPath $sub -Value 'logic Sub;' -Encoding UTF8
+        Set-Content -LiteralPath (Join-Path $dalProject 'DAnim/Logic/notes.dalx') -Value 'not a source' -Encoding UTF8
+
+        Assert-Equal $null (Get-DalCompiler '') 'No compiler configured'
+        $threw = $false; try { Get-DalCompiler $dalProject | Out-Null } catch { $threw = $true }
+        Assert-Equal $true $threw 'A folder without the dal package'
+        Assert-Equal $compiler (Get-DalCompiler $compiler) 'The compiler folder'
+        $roots = @(Get-DalRoots $dalProject)
+        Assert-Equal 2 $roots.Count 'Roots: the project and its plugin'
+        $sources = @(Get-DalSources $roots $null $dalProject)
+        Assert-Equal "$hero|$sub" ($sources -join '|') 'Sources: .dal files only'
+        Assert-Equal $hero ((Get-DalSources $roots 'DAnim/Logic/hero.dal' $dalProject) -join '|') 'A source relative to the project'
+        $target = Get-DalTarget $hero ''
+        Assert-Equal (Join-Path $dalProject 'Source\Game\Public\Dal') $target.Out 'The project''s first Runtime module'
+        Assert-Equal 'GAME_API' $target.Api 'Its export macro'
+        Assert-Equal 'SUBRUNTIME_API' (Get-DalTarget $sub '').Api 'A plugin''s source goes to the plugin'
+        Assert-Equal 'GAMEEDITOR_API' (Get-DalTarget $hero 'GameEditor').Api 'An explicit module'
+        $threw = $false; try { Get-DalTarget $hero 'Missing' | Out-Null } catch { $threw = $true }
+        Assert-Equal $true $threw 'A module that is not there'
+
+        $null = Invoke-Dal $compiler $python.Source 'compile' $sources ''
+        Assert-Equal '0/0/4' ('{0}/{1}/{2}' -f $script:DalErrors, $script:DalFailed, $script:DalWritten.Count) 'First compile'
+        Assert-Equal 'GAME_API' (Get-Content -LiteralPath (Join-Path $target.Out 'hero.h') -Raw).Trim() 'The macro reached the compiler'
+        $null = Invoke-Dal $compiler $python.Source 'compile' $sources ''
+        Assert-Equal '0/0/0' ('{0}/{1}/{2}' -f $script:DalErrors, $script:DalFailed, $script:DalWritten.Count) 'Nothing changed'
+        Set-Content -LiteralPath $hero -Value 'logic Hero; bad' -Encoding UTF8
+        $lines = @(Invoke-Dal $compiler $python.Source 'check' @($hero) '')
+        Assert-Equal 1 $script:DalErrors 'A source with errors'
+        Assert-Equal "$hero(2,5): error DAL2004: expected an expression" $lines[0] 'A diagnostic as the commandlet writes one'
+        Assert-Equal '    state X = ;' $lines[1] 'The source line under it'
+        Assert-Equal 2 $lines.Count 'The compiler''s own count is left out'
+        Set-Content -LiteralPath $hero -Value 'usage' -Encoding UTF8
+        $null = Invoke-Dal $compiler $python.Source 'compile' @($hero) ''
+        Assert-Equal '0/1' ('{0}/{1}' -f $script:DalErrors, $script:DalFailed) 'A compiler that stopped'
+        $null = Invoke-Dal $compiler $python.Source 'compile' @((Join-Path $scratch 'loose.dal')) ''
+        Assert-Equal 1 $script:DalFailed 'A source whose project has no Runtime module'
+    }
     Write-Host 'Tool regression checks passed.'
 }
 finally {
