@@ -1026,7 +1026,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDcrSemanticFilesTest, "DreamAnim.Rig.Semantic.
 bool FDcrSemanticFilesTest::RunTest(const FString& Parameters)
 {
 	using namespace UE::DreamAnim::Rig::Tests::SemanticPrivate;
-	static const TCHAR* const Files[] = { TEXT("PureFunctions.dcr"), TEXT("ScaleModuleControls.dcr"), TEXT("BasicFootIK.dcr"), TEXT("Hinge.dcr") };
+	static const TCHAR* const Files[] = { TEXT("PureFunctions.dcr"), TEXT("ScaleModuleControls.dcr"), TEXT("BasicFootIK.dcr"), TEXT("Hinge.dcr"), TEXT("FlowBlocks.dcr") };
 	bool bHeld = true;
 	for (const TCHAR* File : Files)
 	{

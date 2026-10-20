@@ -336,6 +336,8 @@ namespace UE::DreamAnim::Rig::Sem
 		void RunLet(const Lang::FDabLetStmt& Stmt);
 		void RunSet(const Lang::FDabSetStmt& Stmt);
 		void RunExpression(const Lang::FDabExprStmt& Stmt);
+		/** The blocks after a statement's call: each runs from the execute output it names; execution then goes on from the call. */
+		void RunFlowBlocks(FNodeRec* Rec, const TArray<Lang::FDabFlowBlock>& Blocks, const Lang::FDabSpan& CallSpan);
 		void RunIf(const Lang::FDabIfStmt& Stmt);
 		void RunFor(const Lang::FDabForStmt& Stmt);
 		void RunReturn(const Lang::FDabReturnStmt& Stmt, bool bLast, bool bFunctionTop);

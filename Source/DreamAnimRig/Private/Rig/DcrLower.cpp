@@ -439,6 +439,8 @@ namespace UE::DreamAnim::Rig
 				const FDcrModelNode* Node = nullptr;
 				enum class EKind : uint8 { Call, If, For, Return, Detached } Kind = EKind::Call;
 				TArray<TUniquePtr<FSkelBlock>> Blocks;
+				/** A call's blocks: the execute output each of Blocks runs from (`IsGameWorld() { True { ... } }`). */
+				TArray<FString> FlowPins;
 				/** Whether the next statement in the same block was already folded into this one (else-if). */
 				int32 Ordinal = 0;
 			};
@@ -521,6 +523,8 @@ namespace UE::DreamAnim::Rig
 			void WriteLet(const FString& NodeName, TArray<FDabStmtPtr>& Out);
 			FDabStmtPtr WriteStatement(const FSkel& Skel);
 			FDabStmtPtr WriteIf(const FSkel& Skel);
+			/** The blocks after a call, one for each execute output in FlowPins. */
+			TArray<FDabFlowBlock> WriteFlowBlocks(const FSkel& Skel);
 			FDabStmtPtr WriteFor(const FSkel& Skel);
 			FDabStmtPtr WriteReturn(const FDcrModelNode& Node);
 			// Expressions
@@ -1047,13 +1051,17 @@ namespace UE::DreamAnim::Rig
 					continue;
 				}
 
+				// Every other execute output that runs something is a block after the call, the body of a loop
+				// the text has no `for` for included.
 				const FString Continue = GetContinuationPin(*Node);
+				const int32 Index = Block.Statements.Num() - 1;
 				for (const FString& Pin : Node->ExecuteOut)
 				{
-					if (Pin != Continue && !Node->ExecuteIn.Contains(Pin) && Graph.Next(*Node, Pin))
+					const FDcrModelNode* First = Pin != Continue ? Graph.Next(*Node, Pin) : nullptr;
+					if (First)
 					{
-						File.AddUnsupported(Location + TEXT("/") + Node->Name + TEXT(".") + Pin,
-							TEXT("an execute output other than the one execution continues by; what it runs is left out"));
+						Block.Statements[Index].FlowPins.Add(Pin);
+						AddBlock(Block.Statements[Index], First);
 					}
 				}
 				Node = Continue.IsEmpty() ? nullptr : Graph.Next(*Node, Continue);
@@ -1209,7 +1217,9 @@ namespace UE::DreamAnim::Rig
 				for (int32 Offset = 0; Offset < Mutables.Num() && bMatches; ++Offset)
 				{
 					const FSkel& Before = Block.Statements[Index - Mutables.Num() + Offset];
-					bMatches = Before.Node == Mutables[Offset] && Before.Kind == FSkel::EKind::Call && !InlinedStatements.Contains(Before.Node->Name);
+					// A call with blocks stays a statement: an argument has no room for them.
+					bMatches = Before.Node == Mutables[Offset] && Before.Kind == FSkel::EKind::Call && Before.FlowPins.IsEmpty()
+						&& !InlinedStatements.Contains(Before.Node->Name);
 				}
 				if (bMatches)
 				{
@@ -1870,9 +1880,31 @@ namespace UE::DreamAnim::Rig
 				TUniquePtr<FDabLetStmt> Let = MakeUnique<FDabLetStmt>();
 				Let->Name = Name;
 				Let->Value = MoveTemp(Call);
+				Let->Blocks = WriteFlowBlocks(Skel);
 				return Let;
 			}
+			if (!Skel.FlowPins.IsEmpty())
+			{
+				TUniquePtr<FDabExprStmt> Stmt = MakeUnique<FDabExprStmt>();
+				Stmt->Expr = MoveTemp(Call);
+				Stmt->Blocks = WriteFlowBlocks(Skel);
+				return Stmt;
+			}
 			return MakeExprStmt(MoveTemp(Call));
+		}
+
+		TArray<FDabFlowBlock> FBodyLowering::WriteFlowBlocks(const FSkel& Skel)
+		{
+			TArray<FDabFlowBlock> Blocks;
+			for (int32 Index = 0; Index < Skel.FlowPins.Num() && Index < Skel.Blocks.Num(); ++Index)
+			{
+				FDabFlowBlock& Block = Blocks.AddDefaulted_GetRef();
+				Block.Pin = Skel.FlowPins[Index];
+				Block.Body = MakeUnique<FDabCodeBlock>();
+				WriteBlock(*Skel.Blocks[Index], Block.Body->Statements);
+				WriteLetsAt(*Skel.Blocks[Index], Skel.Blocks[Index]->Statements.Num(), Block.Body->Statements);
+			}
+			return Blocks;
 		}
 
 		FDabStmtPtr FBodyLowering::WriteIf(const FSkel& Skel)

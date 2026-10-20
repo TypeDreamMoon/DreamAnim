@@ -154,4 +154,42 @@ bool FDcrDecompileCorpusTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDcrDecompileFlowBlocksTest, "DreamAnim.Rig.Decompile.FlowBlocks",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FDcrDecompileFlowBlocksTest::RunTest(const FString& Parameters)
+{
+	using namespace UE::DreamAnim;
+	using namespace UE::DreamAnim::Rig;
+
+	// ALS's forward solve runs everything from the True output of its own control flow unit.
+	const FDcrRig Rig = LoadDcrRig(TEXT("/ALS/ALS/Character/CR_Als.CR_Als"));
+	Model::FDcrModel Model;
+	if (!TestTrue(TEXT("CR_Als is read"), Rig.IsValid() && ExtractDcrModel(Rig, Model).bSuccess))
+	{
+		return false;
+	}
+	NormalizeDcrModel(Model);
+	const FDcrLowerResult Lowered = LowerDcrModel(Model);
+	const FString Text = Lang::PrintDab(*Lowered.File);
+	for (const Model::FDcrModelUnsupported& Unsupported : Lowered.Unsupported)
+	{
+		AddError(FString::Printf(TEXT("unsupported %s: %s"), *Unsupported.Location, *Unsupported.Description));
+	}
+
+	const int32 Forward = Text.Find(TEXT("Event Forward"));
+	int32 At = Forward;
+	for (const TCHAR* Expected : { TEXT("AlsRigVMFunction_IsGameWorld()"), TEXT("True"), TEXT("RefreshDiagonalScaling();"), TEXT("RefreshSpineRotation();"),
+		TEXT("RefreshFootOffset();"), TEXT("RefreshPelvisOffset();"), TEXT("RefreshFootIk();"), TEXT("RefreshHandIk();") })
+	{
+		const int32 Found = At == INDEX_NONE ? INDEX_NONE : Text.Find(Expected, ESearchCase::CaseSensitive, ESearchDir::FromStart, At);
+		if (!TestTrue(FString::Printf(TEXT("`%s` follows in Event Forward"), Expected), Found != INDEX_NONE))
+		{
+			break;
+		}
+		At = Found;
+	}
+	return true;
+}
+
 #endif

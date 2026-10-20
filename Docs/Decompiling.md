@@ -408,6 +408,9 @@ and a build of the text makes a rig that does the same:
   becomes a `let`, named after the node.
 - **Types are written only where they are needed.** A typed `let` stands where the node's types cannot be told
   from its arguments or from where its result goes.
+- **Other execute outputs become blocks.** A node that runs code from outputs besides the one execution goes
+  on by (a plugin's control flow node, Run Once, Timer) is a call with a block for each output that runs
+  something: `IsGameWorld() { True { ... } }`. Branch nodes stay `if` and loops `for`.
 - **Collapse nodes become `Inline` functions.** Each is written once, after the events, and called where the
   node was.
 - **Nodes nothing executes are kept under `Detached`.** They stay in the graph and never run.

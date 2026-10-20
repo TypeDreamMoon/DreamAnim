@@ -1,0 +1,18 @@
+// A block for an execute output the call does not have.
+ControlRig(Name="Validate/UnknownFlowPin", Root="Game")
+{
+    Variables = { double Speed; }
+
+    Event Forward
+    {
+        ControlFlowRunOnce()
+        {
+            Twice
+            {
+                Speed = 0;
+            }
+        }
+    }
+}
+
+// EXPECT DAB9001 (10,13)

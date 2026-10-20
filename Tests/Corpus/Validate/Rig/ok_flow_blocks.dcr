@@ -1,0 +1,23 @@
+// A rig that checks clean: blocks after calls that have execute outputs, one of them named by a let.
+ControlRig(Name="Validate/FlowBlocks", Root="Game")
+{
+    Variables = { double Speed; }
+
+    Event Forward
+    {
+        ControlFlowRunOnce()
+        {
+            Once
+            {
+                Speed = 0;
+            }
+        }
+        let Clock = ControlFlowTimer(Duration = 2)
+        {
+            IsRunning
+            {
+                Speed = Clock.Ratio;
+            }
+        }
+    }
+}

@@ -168,6 +168,10 @@ namespace UE::DreamAnim::Rig
 			{
 				if (Let->LetKind != EDabLetKind::Local)
 				{
+					for (const FDabFlowBlock& Block : Let->Blocks)
+					{
+						CollectLocals(G, Block.Body.Get(), Decl);
+					}
 					return;
 				}
 				FDcrModelVariable Local;
@@ -204,6 +208,13 @@ namespace UE::DreamAnim::Rig
 			else if (const FDabDetachedStmt* Detached = Stmt.As<FDabDetachedStmt>())
 			{
 				CollectLocals(G, Detached->Body.Get(), Decl);
+			}
+			else if (const FDabExprStmt* Expr = Stmt.As<FDabExprStmt>())
+			{
+				for (const FDabFlowBlock& Block : Expr->Blocks)
+				{
+					CollectLocals(G, Block.Body.Get(), Decl);
+				}
 			}
 		}
 

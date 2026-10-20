@@ -1,8 +1,8 @@
 // Copyright DreamMoon. All Rights Reserved.
 //
-// The engine's own Control Rigs the tests read, rebuild and run. They need the test host's plugins
-// (Tools/TestHost/Template): ControlRig, ControlRigModules and ControlRigSpline are on by default,
-// MoverExamples and AnimatorKit are enabled by the host.
+// The engine's own Control Rigs the tests read, rebuild and run, and ALS-Refactored's. They need the test
+// host's plugins (Tools/TestHost/Template): ControlRig, ControlRigModules and ControlRigSpline are on by
+// default, MoverExamples, AnimatorKit and ALS are enabled by the host.
 
 #pragma once
 
@@ -48,6 +48,8 @@ namespace UE::DreamAnim::Rig::Tests
 			{ TEXT("/AnimatorKit/DeformerRigs/LatticeDeformer/CRD_Lattice_2x2x2.CRD_Lattice_2x2x2"), TEXT("CRD_Lattice_2x2x2"), EDcrCorpusGroup::Standalone },
 			{ TEXT("/AnimatorKit/DeformerRigs/LatticeDeformer/CRD_Lattice.CRD_Lattice"), TEXT("CRD_Lattice"), EDcrCorpusGroup::Standalone },
 			{ TEXT("/AnimatorKit/DeformerRigs/SculptDeformer/CRD_SculptDeformer.CRD_SculptDeformer"), TEXT("CRD_SculptDeformer"), EDcrCorpusGroup::Standalone },
+			// A rig of the Blueprint kind from outside the engine: its own control flow unit (Is Game World).
+			{ TEXT("/ALS/ALS/Character/CR_Als.CR_Als"), TEXT("CR_Als"), EDcrCorpusGroup::Standalone },
 
 			{ TEXT("/ControlRigModules/Modules58/AddControl.AddControl"), TEXT("AddControl"), EDcrCorpusGroup::Module },
 			{ TEXT("/ControlRigModules/Modules58/AnimalNeck.AnimalNeck"), TEXT("AnimalNeck"), EDcrCorpusGroup::Module },

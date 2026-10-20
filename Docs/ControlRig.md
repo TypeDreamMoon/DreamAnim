@@ -128,6 +128,7 @@ The text is the graph written in another way. It adds no meaning of its own.
 - Reading a variable by its name is a getter node, one at every use. `Name = value;` is a setter node on the
   execute chain.
 - `if` makes a Branch node and `for` a loop node. The statements after one continue from its Completed pin.
+  The other execute outputs of a node are blocks after its call; see [Blocks after a call](#blocks-after-a-call).
 - A mutable call inside the value of a statement (`A = FootTrace(...).Z;`) runs just before that statement,
   innermost first and left to right.
 - RigVM evaluates a data node once in a run, where the first node that needs it runs. Later readers get the
@@ -653,8 +654,8 @@ Chain[2] = Bone(thigh_l);
 SetTransform(Item = Control, Value = GetTransform(SteeringItem));
 ```
 
-A statement ends with `;`, except `if`, `for` and `Detached`, which end with their block. Code statements take
-no metadata (DAB2015): a `[` after an expression is an index.
+A statement ends with `;`, except `if`, `for`, `Detached` and a call with blocks, which end with their block.
+Code statements take no metadata (DAB2015): a `[` after an expression is an index.
 
 ### let
 
@@ -721,6 +722,48 @@ SetTransform(Item = Control, Value = GetTransform(SteeringItem));
 
 A call with execute pins can stand alone. Its node is on the execute chain. A call that only computes a value
 is DAB9005. Use its value, or remove it.
+
+### Blocks after a call
+
+A node can have execute outputs besides the one execution goes on by after it: ALS's Is Game World runs `True`
+or `False`, Run Once runs `Once` the first time, Timer runs `JustStarted`, `IsRunning` and `JustFinished`. The
+code each one runs is a block, written in braces after the call and named by the output.
+
+```dcr
+AlsRigVMFunction_IsGameWorld()
+{
+    True
+    {
+        RefreshDiagonalScaling();
+        RefreshSpineRotation();
+    }
+}
+
+let Clock = ControlFlowTimer(Duration = 2, Repeats = true)
+{
+    IsRunning
+    {
+        Elapsed = Clock.Time;
+    }
+    JustFinished
+    {
+        Speed = Speed + 1;
+    }
+}
+```
+
+- The statement ends with its closing brace; it takes no `;`.
+- Each block is `Output { statements }`, the output by its pin name. The blocks may come in any order, and an
+  output with nothing to run has no block.
+- The output execution goes on by (`Completed`, or the execute pin the node takes and gives) is not a block:
+  the statements after the call run from it. An output the call does not have, or that one, is DAB9001. A
+  block written twice is DAB9004, and so are blocks after a call without execute pins.
+- A `let` names the node, so its blocks can read its outputs (`Clock.Time`). A typed let takes blocks too; a
+  `local` does not.
+- Names written in a block follow the rules of the blocks of an `if`.
+- `if` and `for` stay the way to write the Branch, For Loop Count and Array Iterator nodes. The decompiler
+  writes every other node with such outputs this way, a loop the text has no `for` for included: its body is
+  the block of the pin the node takes and gives.
 
 ### if
 
@@ -1157,7 +1200,9 @@ A build lays the nodes out again.
 
 - `Event`, `Function` and `Detached`, and `if`, `else` and `for`, open their `{` on a line of their own, at
   their own indent.
-- One statement per line, each ending with `;` (`if`, `for` and `Detached` end with their block).
+- One statement per line, each ending with `;` (`if`, `for`, `Detached` and a call with blocks end with their block).
+- The blocks after a call open their `{` on a line of their own at the call's indent; each output's name is on a
+  line of its own, its block's `{` under it.
 - A function is `Function Name(Type a, Type b = 1) -> (Type c) [ meta ]` on one line, then the block; or the
   head, ` = value;` on the same line when it fits.
 - A run of `let`, typed `let` and `local` statements lines up its `=`; so does a run of assignments.

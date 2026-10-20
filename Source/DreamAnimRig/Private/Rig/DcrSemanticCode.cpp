@@ -120,6 +120,16 @@ namespace UE::DreamAnim::Rig::Sem
 
 	void FBody::ReserveLetNames(const FDabCodeBlock& Code)
 	{
+		auto ReserveInBlocks = [this](const TArray<FDabFlowBlock>& Blocks)
+		{
+			for (const FDabFlowBlock& Block : Blocks)
+			{
+				if (Block.Body)
+				{
+					ReserveLetNames(*Block.Body);
+				}
+			}
+		};
 		for (const FDabStmtPtr& Stmt : Code.Statements)
 		{
 			if (!Stmt)
@@ -129,6 +139,11 @@ namespace UE::DreamAnim::Rig::Sem
 			if (const FDabLetStmt* Let = Stmt->As<FDabLetStmt>(); Let && Let->LetKind != EDabLetKind::Local)
 			{
 				LetNames.Add(MakeNodeBaseName(Let->Name));
+				ReserveInBlocks(Let->Blocks);
+			}
+			else if (const FDabExprStmt* Expr = Stmt->As<FDabExprStmt>())
+			{
+				ReserveInBlocks(Expr->Blocks);
 			}
 			else if (const FDabIfStmt* If = Stmt->As<FDabIfStmt>())
 			{
@@ -713,6 +728,8 @@ namespace UE::DreamAnim::Rig::Sem
 			}
 		}
 		Bind(Stmt.Name, Value);
+		// After the name is bound: the blocks may read the call's outputs through it.
+		RunFlowBlocks(Value.Rec, Stmt.Blocks, Stmt.Value->Span);
 	}
 
 	void FBody::RunSet(const FDabSetStmt& Stmt)
@@ -817,15 +834,67 @@ namespace UE::DreamAnim::Rig::Sem
 			return;
 		}
 		const FVal Value = Eval(*Stmt.Expr, nullptr, FString());
-		if (Value.Kind == FVal::EKind::Invalid || Value.Kind == FVal::EKind::Void)
+		if (Value.Kind == FVal::EKind::Invalid)
 		{
 			return;
 		}
-		if (Value.Kind == FVal::EKind::Literal || !Value.Rec || !Value.Rec->Sig.IsMutable())
+		if (Value.Kind != FVal::EKind::Void && (Value.Kind == FVal::EKind::Literal || !Value.Rec || !Value.Rec->Sig.IsMutable()))
 		{
 			Sink.Error(TEXT("DAB9005"), Stmt.Span, TEXT("This call has no effect: it only computes a value."),
 				TEXT("Use the value (`let X = ...;`, an argument, an assignment), or remove the statement. Only calls that run (they have execute pins) can stand alone."));
+			return;
 		}
+		RunFlowBlocks(Value.Rec, Stmt.Blocks, Stmt.Expr->Span);
+	}
+
+	void FBody::RunFlowBlocks(FNodeRec* Rec, const TArray<FDabFlowBlock>& Blocks, const FDabSpan& CallSpan)
+	{
+		if (Blocks.IsEmpty())
+		{
+			return;
+		}
+		if (!Rec || !Rec->Sig.IsMutable())
+		{
+			Sink.Error(TEXT("DAB9004"), CallSpan, TEXT("Only a call that runs has execute outputs to write blocks for."),
+				TEXT("The blocks after a call are for a node with execute pins, as in IsGameWorld() { True { ... } }."));
+			return;
+		}
+		// A block can hang off any execute output but the one execution goes on by after the node.
+		const FString Continue = GetDcrContinuation(Rec->Node);
+		TArray<FString> Open;
+		for (const FString& Pin : Rec->Sig.ExecOut)
+		{
+			if (Pin != Continue)
+			{
+				Open.Add(TEXT("`") + Pin + TEXT("`"));
+			}
+		}
+		const FString After = Cursor;
+		TSet<FString> Done;
+		for (const FDabFlowBlock& Block : Blocks)
+		{
+			if (Block.Pin == Continue || !Rec->Sig.ExecOut.Contains(Block.Pin))
+			{
+				Sink.Error(TEXT("DAB9001"), Block.PinSpan, Open.IsEmpty()
+					? FString::Printf(TEXT("This call has no execute output `%s` for a block: execution only goes on after it."), *Block.Pin)
+					: FString::Printf(TEXT("This call has no execute output `%s` for a block; it has %s."), *Block.Pin, *FString::Join(Open, TEXT(", "))));
+				continue;
+			}
+			if (Done.Contains(Block.Pin))
+			{
+				Sink.Error(TEXT("DAB9004"), Block.PinSpan, FString::Printf(TEXT("The block for `%s` is written twice."), *Block.Pin));
+				continue;
+			}
+			Done.Add(Block.Pin);
+			Cursor = Rec->Node.Name + TEXT(".") + Block.Pin;
+			PushScope();
+			if (Block.Body)
+			{
+				RunBlock(*Block.Body, false);
+			}
+			PopScope();
+		}
+		Cursor = After;
 	}
 
 	void FBody::RunIf(const FDabIfStmt& Stmt)
