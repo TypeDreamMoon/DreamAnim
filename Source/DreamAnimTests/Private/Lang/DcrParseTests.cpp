@@ -845,6 +845,25 @@ namespace UE::DreamAnim::Tests
 				"}\n"),
 			{ { TEXT("DAB2015"), 5, 19 } });
 
+		// In the braces after a call, a statement where a block for an execute output belongs: DAB2001 at it, once,
+		// and the block after it still reads.
+		ParseExpecting(*this, TEXT("statement among flow blocks"),
+			TEXT(
+				"ControlRig(Name=\"E\", Root=\"Game\")\n"
+				"{\n"
+				"    Event Forward\n"
+				"    {\n"
+				"        IsGameWorld()\n"
+				"        {\n"
+				"            Speed = 1;\n"
+				"            True\n"
+				"            {\n"
+				"            }\n"
+				"        }\n"
+				"    }\n"
+				"}\n"),
+			{ { TEXT("DAB2001"), 7, 13 } });
+
 		// An else with no if: DAB2016 at the word; the block after it is parsed quietly.
 		ParseExpecting(*this, TEXT("else without if"),
 			TEXT(

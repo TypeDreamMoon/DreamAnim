@@ -441,6 +441,17 @@ namespace UE::DreamAnim::Lang
 		TArray<FDabStmtPtr> Statements;
 	};
 
+	/**
+	 * What one execute output of a statement's call runs, written in braces after the call:
+	 * `IsGameWorld() { True { ... } }`. Pin is the output's name.
+	 */
+	struct FDabFlowBlock
+	{
+		FString Pin;
+		FDabSpan PinSpan;
+		TUniquePtr<FDabCodeBlock> Body;
+	};
+
 	enum class EDabLetKind : uint8
 	{
 		/** `let Name = Value;` */
@@ -464,6 +475,8 @@ namespace UE::DreamAnim::Lang
 		FDabSpan NameSpan;
 		/** Null only for a local written without a value. */
 		FDabExprPtr Value;
+		/** What the execute outputs of the value's call run (`let T = Timer(...) { Running { ... } }`); never on a local. */
+		TArray<FDabFlowBlock> Blocks;
 	};
 
 	/** `Target = Value;` in code. Target is a name, a member of one (`V.X`, refused later) or an element (`Items[2]`). */
@@ -483,6 +496,8 @@ namespace UE::DreamAnim::Lang
 		FDabExprStmt() : FDabStmt(StaticKind) {}
 
 		FDabExprPtr Expr;
+		/** What the execute outputs of the call run, in the order written: `IsGameWorld() { True { ... } }`. */
+		TArray<FDabFlowBlock> Blocks;
 	};
 
 	/** `if (Condition) { ... }`, then optionally `else if (...) { ... }` (ElseIf) or `else { ... }` (Else). */

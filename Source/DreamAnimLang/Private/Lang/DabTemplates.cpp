@@ -114,6 +114,16 @@ namespace UE::DreamAnim::Lang
 			case EDabNodeKind::LetStmt:
 				static_cast<FDabLetStmt&>(Node).TypeSpan = Span;
 				static_cast<FDabLetStmt&>(Node).NameSpan = Span;
+				for (FDabFlowBlock& Block : static_cast<FDabLetStmt&>(Node).Blocks)
+				{
+					Block.PinSpan = Span;
+				}
+				break;
+			case EDabNodeKind::ExprStmt:
+				for (FDabFlowBlock& Block : static_cast<FDabExprStmt&>(Node).Blocks)
+				{
+					Block.PinSpan = Span;
+				}
 				break;
 			case EDabNodeKind::ForStmt:
 				for (FDabSpan& NameSpan : static_cast<FDabForStmt&>(Node).NameSpans)
@@ -253,12 +263,28 @@ namespace UE::DreamAnim::Lang
 				{
 					Visit(static_cast<FDabLetStmt&>(Node).Value);
 				}
+				for (FDabFlowBlock& Block : static_cast<FDabLetStmt&>(Node).Blocks)
+				{
+					if (Block.Body)
+					{
+						ForEachExprSlot(*Block.Body, Visit);
+					}
+				}
 				break;
 			case EDabNodeKind::SetStmt:
 				Visit(static_cast<FDabSetStmt&>(Node).Target);
 				Visit(static_cast<FDabSetStmt&>(Node).Value);
 				break;
-			case EDabNodeKind::ExprStmt: Visit(static_cast<FDabExprStmt&>(Node).Expr); break;
+			case EDabNodeKind::ExprStmt:
+				Visit(static_cast<FDabExprStmt&>(Node).Expr);
+				for (FDabFlowBlock& Block : static_cast<FDabExprStmt&>(Node).Blocks)
+				{
+					if (Block.Body)
+					{
+						ForEachExprSlot(*Block.Body, Visit);
+					}
+				}
+				break;
 			case EDabNodeKind::IfStmt:
 			{
 				FDabIfStmt& If = static_cast<FDabIfStmt&>(Node);

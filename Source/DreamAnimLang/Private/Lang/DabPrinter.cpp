@@ -428,6 +428,8 @@ namespace UE::DreamAnim::Lang
 			FString FormatCodeBlock(const FDabCodeBlock& Block, int32 Level);
 			/** `if (...)` and its block, then the `else if` / `else` that follow; bAfterElse prints `else if (...)`. */
 			FString FormatIf(const FDabIfStmt& If, int32 Level, bool bAfterElse);
+			/** The braces after a statement's call with a block for each execute output: from the line break before them. */
+			FString FormatFlowBlocks(const TArray<FDabFlowBlock>& Blocks, int32 Level);
 			/** `let Name`, `Type Name` or `local Type Name`: what stands before the `=` of a let. */
 			FString GetLetHead(const FDabLetStmt& Let) const;
 			/** A block of one plain statement with no comments: it may print on one line (`State Stop { Pose = StopStates; }`). */
@@ -1181,6 +1183,23 @@ namespace UE::DreamAnim::Lang
 			return Text;
 		}
 
+		FString FDabLayoutPrinter::FormatFlowBlocks(const TArray<FDabFlowBlock>& Blocks, int32 Level)
+		{
+			const FScopedFlag CodeScope(bInCode, true);
+			FString Text = TEXT("\n") + MakeIndent(Level) + TEXT("{\n");
+			for (const FDabFlowBlock& Block : Blocks)
+			{
+				Text += MakeIndent(Level + 1) + NameText(Block.Pin);
+				if (Block.Body)
+				{
+					Text += TEXT("\n") + MakeIndent(Level + 1) + FormatCodeBlock(*Block.Body, Level + 1);
+				}
+				Text += TEXT("\n");
+			}
+			Text += MakeIndent(Level) + TEXT("}");
+			return Text;
+		}
+
 		FString FDabLayoutPrinter::FormatIf(const FDabIfStmt& If, int32 Level, bool bAfterElse)
 		{
 			FString Text = bAfterElse ? FString(TEXT("else if (")) : FString(TEXT("if ("));
@@ -1393,7 +1412,7 @@ namespace UE::DreamAnim::Lang
 					const int32 ValueColumn = BaseColumn + Text.Len();
 					Text += FormatExpr(*Let.Value, Level, ValueColumn, 1);
 				}
-				Text += TEXT(";");
+				Text += Let.Blocks.IsEmpty() ? FString(TEXT(";")) : FormatFlowBlocks(Let.Blocks, Level);
 				return Text;
 			}
 			case EDabNodeKind::SetStmt:
@@ -1416,7 +1435,7 @@ namespace UE::DreamAnim::Lang
 				{
 					Text += FormatExpr(*ExprStmt.Expr, Level, BaseColumn, 1);
 				}
-				Text += TEXT(";");
+				Text += ExprStmt.Blocks.IsEmpty() ? FString(TEXT(";")) : FormatFlowBlocks(ExprStmt.Blocks, Level);
 				return Text;
 			}
 			case EDabNodeKind::IfStmt:
@@ -1709,6 +1728,21 @@ namespace UE::DreamAnim::Lang
 			return Names;
 		}
 
+		/** ` { True, False }`: the execute outputs a statement's flow blocks are for, in a dump. */
+		static FString GetFlowPinsText(const TArray<FDabFlowBlock>& Blocks)
+		{
+			if (Blocks.IsEmpty())
+			{
+				return FString();
+			}
+			TArray<FString> Pins;
+			for (const FDabFlowBlock& Block : Blocks)
+			{
+				Pins.Add(QuoteDabName(Block.Pin));
+			}
+			return FString(TEXT(" { ")) + FString::Join(Pins, TEXT(", ")) + TEXT(" }");
+		}
+
 		static FString DescribeNode(const FDabNode& Node)
 		{
 			switch (Node.Kind)
@@ -1786,13 +1820,13 @@ namespace UE::DreamAnim::Lang
 				const FDabLetStmt& Let = static_cast<const FDabLetStmt&>(Node);
 				switch (Let.LetKind)
 				{
-				case EDabLetKind::Typed: return FString(TEXT("Typed ")) + GetTypeText(Let.TypeName) + TEXT(" ") + QuoteDabName(Let.Name);
+				case EDabLetKind::Typed: return FString(TEXT("Typed ")) + GetTypeText(Let.TypeName) + TEXT(" ") + QuoteDabName(Let.Name) + GetFlowPinsText(Let.Blocks);
 				case EDabLetKind::Local: return FString(TEXT("Local ")) + GetTypeText(Let.TypeName) + TEXT(" ") + QuoteDabName(Let.Name);
-				default:                 return FString(TEXT("Let ")) + QuoteDabName(Let.Name);
+				default:                 return FString(TEXT("Let ")) + QuoteDabName(Let.Name) + GetFlowPinsText(Let.Blocks);
 				}
 			}
 			case EDabNodeKind::SetStmt:         return TEXT("Set");
-			case EDabNodeKind::ExprStmt:        return TEXT("ExprStmt");
+			case EDabNodeKind::ExprStmt:        return FString(TEXT("ExprStmt")) + GetFlowPinsText(static_cast<const FDabExprStmt&>(Node).Blocks);
 			case EDabNodeKind::IfStmt:          return TEXT("If");
 			case EDabNodeKind::ForStmt:
 			{

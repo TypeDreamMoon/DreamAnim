@@ -52,6 +52,23 @@ ControlRig(Name="Tests/CodeSnippets", Root="Game")
         {
             Speed = Speed + Ratio;
         }
+        IsGameWorld()
+        {
+            True
+            {
+                Speed = 1;
+            }
+            False
+            {
+            }
+        }
+        let Clock = Timer(Duration = 2)
+        {
+            `in`
+            {
+                Speed = Clock.Time;
+            }
+        }
 
         /* regions pair up inside one block */
         #Region "Spawn"

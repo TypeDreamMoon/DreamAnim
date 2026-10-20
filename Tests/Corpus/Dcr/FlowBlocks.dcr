@@ -1,0 +1,30 @@
+ControlRig(Name="Tests/FlowBlocks", Root="Game")
+{
+    Variables = {
+        double Speed;
+        double Elapsed;
+    }
+
+    Event Forward
+    {
+        ControlFlowRunOnce()
+        {
+            Once
+            {
+                Speed = 0;
+            }
+        }
+        let Clock = ControlFlowTimer(Duration = 2, Repeats = true)
+        {
+            IsRunning
+            {
+                Elapsed = Clock.Time;
+            }
+            JustFinished
+            {
+                Speed = Speed + 1;
+            }
+        }
+        Speed = Speed * 2;
+    }
+}

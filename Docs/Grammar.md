@@ -98,11 +98,12 @@ TypedParam  = Type Name [ "=" Expr ] ;                            (* an output t
 
 CodeBlock   = "{" { CodeStmt } "}" ;
 CodeStmt    = Let | Typed | Local | Set | ExprStmt | If | For | Return | DetachedStmt | Region ;
-Let         = "let" Name "=" Expr ";" ;
-Typed       = Type Name "=" Expr ";" ;                            (* a let with its type written *)
+Let         = "let" Name "=" Expr ( ";" | FlowBlocks ) ;
+Typed       = Type Name "=" Expr ( ";" | FlowBlocks ) ;          (* a let with its type written *)
 Local       = "local" Type Name [ "=" Expr ] ";" ;
 Set         = Expr "=" Expr ";" ;                                 (* the target is a name or an element; the checker refuses any other (DAB9006) *)
-ExprStmt    = Expr ";" ;
+ExprStmt    = Expr ( ";" | FlowBlocks ) ;
+FlowBlocks  = "{" { Name CodeBlock } "}" [ ";" ] ;                (* a block for each execute output of the call that is named *)
 If          = "if" "(" Expr ")" CodeBlock { "else" "if" "(" Expr ")" CodeBlock } [ "else" CodeBlock ] ;
 For         = "for" "(" Name { "," Name } "in" Expr ")" CodeBlock ;   (* one to four names *)
 Return      = "return" [ "(" Argument { "," Argument } ")" ] ";" ;    (* every item named; `return;` gives no outputs *)
@@ -121,6 +122,9 @@ DetachedStmt = "Detached" CodeBlock ;
 - `else` needs an `if` before it (DAB2016). A `for` header names one to four values and `in` (DAB2017).
   A `return` gives its outputs as a tuple of named items (DAB2018).
 - The value of a function written `= Expr;` is code in this respect: `[` after an expression is an index.
+- A `{` right after the expression of a let, a typed let or an expression statement opens its blocks: each
+  is the name of an execute output, then a code block. Anything else inside those braces is DAB2001. The
+  statement ends with the closing brace; a `;` after it is read and dropped.
 - `#Region` / `#EndRegion` pair up inside one code block like inside a block.
 - A `Detached` at the top of the document, or in any block, is told from a declaration by what follows it: a
   `{` or a `[`. `Event` and `Function` need a name; an `Event` takes no parameter list.
@@ -142,7 +146,7 @@ The parser looks at the first tokens of a statement in a code block:
 | `return` | a return |
 | `Detached` | a Detached block |
 | `Type Name`: a name, its type arguments if it has some, then another name | a typed let |
-| anything else | an expression; an assignment when a `=` follows it |
+| anything else | an expression; an assignment when a `=` follows it, a call with blocks when a `{` does |
 
 The words `let`, `local`, `if`, `else`, `for`, `return` and `Detached` count only when they are not written in
 backticks. A typed let is told from an expression by the second name: `float Scale = 1;` is a typed let,
@@ -250,6 +254,18 @@ once, and the canonical text parses to the same tree.
   }
   ```
 - `for (Element, Index in Items)` then the block; `Detached` then the block; `return (Out = value);`.
+- A call with blocks: the call, then `{` on its own line at the call's indent; each output's name one level
+  deeper on a line of its own, its block under it at that indent; then `}` at the call's indent. No `;`.
+
+  ```
+  IsGameWorld()
+  {
+      True
+      {
+          ...
+      }
+  }
+  ```
 - A function: `Function Name(Type a, Type b = 1) -> (Type c) [ meta ]` on one line (no arrow when there
   are no outputs), then the block; or the head, ` = Expr;` on the same line when it fits, otherwise
   broken like any value. An event: `Event Name [ meta ]`.

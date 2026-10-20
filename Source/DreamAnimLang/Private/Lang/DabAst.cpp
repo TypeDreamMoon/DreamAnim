@@ -93,6 +93,19 @@ namespace UE::DreamAnim::Lang
 			return Block ? CloneCodeBlock(*Block) : TUniquePtr<FDabCodeBlock>();
 		}
 
+		static TArray<FDabFlowBlock> CloneFlowBlocks(const TArray<FDabFlowBlock>& Blocks)
+		{
+			TArray<FDabFlowBlock> Result;
+			for (const FDabFlowBlock& Block : Blocks)
+			{
+				FDabFlowBlock& Copy = Result.AddDefaulted_GetRef();
+				Copy.Pin = Block.Pin;
+				Copy.PinSpan = Block.PinSpan;
+				Copy.Body = CloneOptionalCodeBlock(Block.Body);
+			}
+			return Result;
+		}
+
 		static TUniquePtr<FDabIfStmt> CloneIf(const FDabIfStmt& If)
 		{
 			TUniquePtr<FDabIfStmt> Result = MakeUnique<FDabIfStmt>();
@@ -508,6 +521,7 @@ namespace UE::DreamAnim::Lang
 			Result->Name = Source.Name;
 			Result->NameSpan = Source.NameSpan;
 			Result->Value = DabAstPrivate::CloneOptionalExpr(Source.Value);
+			Result->Blocks = DabAstPrivate::CloneFlowBlocks(Source.Blocks);
 			return Result;
 		}
 		case EDabNodeKind::SetStmt:
@@ -525,6 +539,7 @@ namespace UE::DreamAnim::Lang
 			TUniquePtr<FDabExprStmt> Result = MakeUnique<FDabExprStmt>();
 			Result->Span = Source.Span;
 			Result->Expr = DabAstPrivate::CloneOptionalExpr(Source.Expr);
+			Result->Blocks = DabAstPrivate::CloneFlowBlocks(Source.Blocks);
 			return Result;
 		}
 		case EDabNodeKind::IfStmt:
@@ -724,6 +739,10 @@ namespace UE::DreamAnim::Lang
 			break;
 		case EDabNodeKind::LetStmt:
 			VisitIfSet(static_cast<const FDabLetStmt&>(Node).Value.Get());
+			for (const FDabFlowBlock& Block : static_cast<const FDabLetStmt&>(Node).Blocks)
+			{
+				VisitIfSet(Block.Body.Get());
+			}
 			break;
 		case EDabNodeKind::SetStmt:
 		{
@@ -734,6 +753,10 @@ namespace UE::DreamAnim::Lang
 		}
 		case EDabNodeKind::ExprStmt:
 			VisitIfSet(static_cast<const FDabExprStmt&>(Node).Expr.Get());
+			for (const FDabFlowBlock& Block : static_cast<const FDabExprStmt&>(Node).Blocks)
+			{
+				VisitIfSet(Block.Body.Get());
+			}
 			break;
 		case EDabNodeKind::IfStmt:
 		{

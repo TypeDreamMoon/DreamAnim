@@ -2271,7 +2271,11 @@ namespace UE::DreamAnim::Lang
 					return EStmtResult::Failed;
 				}
 
-				if (!Match(EDabTokenKind::Semicolon))
+				if (Kind == EDabLetKind::Let && Let->Value && Check(EDabTokenKind::LeftBrace))
+				{
+					ParseFlowBlocks(Let->Blocks);
+				}
+				else if (!Match(EDabTokenKind::Semicolon))
 				{
 					ReportMissingSemicolon(FString::Printf(TEXT("';' after the declaration of '%s'"), *Let->Name));
 				}
@@ -2311,7 +2315,11 @@ namespace UE::DreamAnim::Lang
 					return EStmtResult::Failed;
 				}
 
-				if (!Match(EDabTokenKind::Semicolon))
+				if (Check(EDabTokenKind::LeftBrace))
+				{
+					ParseFlowBlocks(Let->Blocks);
+				}
+				else if (!Match(EDabTokenKind::Semicolon))
 				{
 					ReportMissingSemicolon(FString::Printf(TEXT("';' after the declaration of '%s'"), *Let->Name));
 				}
@@ -2321,7 +2329,7 @@ namespace UE::DreamAnim::Lang
 				return EStmtResult::Parsed;
 			}
 
-			/** `Target = Expr;` or `Expr;`. */
+			/** `Target = Expr;`, `Expr;`, or `Expr { Pin { ... } ... }`. */
 			EStmtResult ParseSimpleCodeStatement(FDabStmtPtr& Out)
 			{
 				const int32 Start = Index;
@@ -2360,7 +2368,11 @@ namespace UE::DreamAnim::Lang
 
 				TUniquePtr<FDabExprStmt> ExprStmt = MakeUnique<FDabExprStmt>();
 				ExprStmt->Expr = MoveTemp(Expr);
-				if (!Match(EDabTokenKind::Semicolon))
+				if (Check(EDabTokenKind::LeftBrace))
+				{
+					ParseFlowBlocks(ExprStmt->Blocks);
+				}
+				else if (!Match(EDabTokenKind::Semicolon))
 				{
 					ReportMissingSemicolon(TEXT("';' after the statement"));
 				}
@@ -2635,6 +2647,46 @@ namespace UE::DreamAnim::Lang
 				Detached->Span = SpanFrom(Start);
 				Out = MoveTemp(Detached);
 				return EStmtResult::Parsed;
+			}
+
+			/**
+			 * At the `{` after a statement's call: `Pin { code }` for each execute output it names, in any order. The
+			 * statement ends with the closing brace; a `;` after it is taken too.
+			 */
+			void ParseFlowBlocks(TArray<FDabFlowBlock>& Out)
+			{
+				const FDabToken& Open = Advance();
+				{
+					FBracketScope Scope(*this, Open, TEXT("{"), TEXT("}"));
+					while (!Check(EDabTokenKind::RightBrace) && !AtEnd())
+					{
+						if (!Check(EDabTokenKind::Identifier) || !Peek(1).Is(EDabTokenKind::LeftBrace))
+						{
+							if (ShouldReportAtCurrent())
+							{
+								Sink.Error(TEXT("DAB2001"), Current().Span, Expected(TEXT("an execute output of the call and its code, as in True { ... }")),
+									TEXT("Inside the braces after a call, each block is written Pin { statements }."));
+							}
+							// Up to the next `;` or block, or to the closing brace, which ends the loop.
+							SkipToStatementBoundary();
+							continue;
+						}
+						const FDabToken& Pin = Advance();
+						FDabFlowBlock& Block = Out.AddDefaulted_GetRef();
+						Block.Pin = Pin.Text;
+						Block.PinSpan = Pin.Span;
+						Block.Body = ParseCodeBlock();
+					}
+					if (Check(EDabTokenKind::RightBrace))
+					{
+						Advance();
+					}
+					else
+					{
+						ReportUnclosedAtEnd();
+					}
+				}
+				Match(EDabTokenKind::Semicolon);
 			}
 
 			/** At a `[` in code: `[ Key = ...`, `[ Key;` and `[ Key,` can only be metadata; `[ Key ]` is an index like any other. */
@@ -3216,6 +3268,17 @@ namespace UE::DreamAnim::Lang
 				}
 			}
 
+			void WalkFlowBlocks(FDabFile& File, const TArray<FDabFlowBlock>& Blocks)
+			{
+				for (const FDabFlowBlock& Block : Blocks)
+				{
+					if (Block.Body)
+					{
+						WalkCodeBlock(File, *Block.Body);
+					}
+				}
+			}
+
 			void WalkMeta(FDabFile& File, const FDabMeta* Meta)
 			{
 				if (!Meta)
@@ -3278,6 +3341,7 @@ namespace UE::DreamAnim::Lang
 				}
 				case EDabNodeKind::LetStmt:
 					WalkExpr(File, static_cast<const FDabLetStmt&>(Statement).Value.Get());
+					WalkFlowBlocks(File, static_cast<const FDabLetStmt&>(Statement).Blocks);
 					break;
 				case EDabNodeKind::SetStmt:
 				{
@@ -3288,6 +3352,7 @@ namespace UE::DreamAnim::Lang
 				}
 				case EDabNodeKind::ExprStmt:
 					WalkExpr(File, static_cast<const FDabExprStmt&>(Statement).Expr.Get());
+					WalkFlowBlocks(File, static_cast<const FDabExprStmt&>(Statement).Blocks);
 					break;
 				case EDabNodeKind::IfStmt:
 				{
