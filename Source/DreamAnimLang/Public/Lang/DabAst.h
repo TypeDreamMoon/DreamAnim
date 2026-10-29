@@ -650,6 +650,9 @@ namespace UE::DreamAnim::Lang
 	/** An integer literal that keeps every digit of Value, under a unary minus when it is negative. */
 	DREAMANIMLANG_API FDabExprPtr MakeDabInteger(int64 Value);
 
+	/** The expression inside any parentheses the author wrote around it: `((A))` is `A`. */
+	DREAMANIMLANG_API const FDabExpr& StripDabParens(const FDabExpr& Expr);
+
 	/** Calls Visit on every direct child node, in source order. */
 	DREAMANIMLANG_API void ForEachChild(const FDabNode& Node, TFunctionRef<void(const FDabNode&)> Visit);
 

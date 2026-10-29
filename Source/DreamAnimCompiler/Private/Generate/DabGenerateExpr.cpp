@@ -163,7 +163,7 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 		{
 			return EDabGenKind::Object;
 		}
-		const FDabExpr& Unwrapped = DabGenUnwrap(Expr);
+		const FDabExpr& Unwrapped = StripDabParens(Expr);
 		if (const FDabLiteralExpr* Literal = Unwrapped.As<FDabLiteralExpr>(); Literal && Literal->LiteralKind == EDabLiteralKind::String)
 		{
 			return EDabGenKind::String;
@@ -448,7 +448,7 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 
 		FValue Build(const FDabExpr& InExpr, int32 Depth)
 		{
-			const FDabExpr& Expr = DabGenUnwrap(InExpr);
+			const FDabExpr& Expr = StripDabParens(InExpr);
 			if (DabGenIsConstant(Expr))
 			{
 				FValue Constant;
@@ -475,7 +475,7 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 			}
 			if (const FDabCallExpr* Call = Expr.As<FDabCallExpr>())
 			{
-				const FDabNameExpr* Callee = Call->Callee ? DabGenUnwrap(*Call->Callee).As<FDabNameExpr>() : nullptr;
+				const FDabNameExpr* Callee = Call->Callee ? StripDabParens(*Call->Callee).As<FDabNameExpr>() : nullptr;
 				if (Callee)
 				{
 					return BuildBuiltin(*Call, Callee->Name, Depth);
@@ -881,7 +881,7 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 
 		static bool IsNumberConstant(const FValue& Value, double Number)
 		{
-			const FDabLiteralExpr* Literal = Value.Constant ? DabGenUnwrap(*Value.Constant).As<FDabLiteralExpr>() : nullptr;
+			const FDabLiteralExpr* Literal = Value.Constant ? StripDabParens(*Value.Constant).As<FDabLiteralExpr>() : nullptr;
 			return Literal && Literal->LiteralKind == EDabLiteralKind::Number && Literal->Number == Number;
 		}
 

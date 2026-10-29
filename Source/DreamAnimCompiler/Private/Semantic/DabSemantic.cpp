@@ -137,7 +137,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 				Sink.Error(TEXT("DAB6008"), Assign->NameSpan, FString::Printf(TEXT("The section `%s` is written twice."), *Assign->Name));
 				continue;
 			}
-			if (!Assign->Value || !SkipParens(*Assign->Value).Is<FDabBlockExpr>())
+			if (!Assign->Value || !StripDabParens(*Assign->Value).Is<FDabBlockExpr>())
 			{
 				Sink.Error(TEXT("DAB6011"), Assign->NameSpan, FString::Printf(TEXT("The section `%s` is a block: %s = { ... }."), *Assign->Name, *Assign->Name));
 				continue;
@@ -156,7 +156,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 
 		const auto BlockOf = [](const FDabAssignStmt* Section) -> const FDabBlockExpr*
 		{
-			return Section ? SkipParens(*Section->Value).As<FDabBlockExpr>() : nullptr;
+			return Section ? StripDabParens(*Section->Value).As<FDabBlockExpr>() : nullptr;
 		};
 
 		if (const FDabBlockExpr* Block = BlockOf(AliasesStmt))
@@ -358,7 +358,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 			}
 			if (Decl->Value)
 			{
-				const FDabExpr& Value = SkipParens(*Decl->Value);
+				const FDabExpr& Value = StripDabParens(*Decl->Value);
 				if (!IsConstant(Value) && !IsPlaceholderCall(Value) && !IsSectionRead(Value, TEXT("Props")))
 				{
 					Sink.Error(TEXT("DAB4010"), Value.Span, FString::Printf(TEXT("The default of `%s` is a constant; `%s` is read at run time."), *Decl->Name, *PrintValueText(Value)));
@@ -434,7 +434,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 
 	FString FSemantic::ReadAssetPathSetting(const FDabExpr& InValue, const UClass* ExpectedClass, const FString& What)
 	{
-		const FDabExpr& Value = SkipParens(InValue);
+		const FDabExpr& Value = StripDabParens(InValue);
 		if (IsCallTo(Value, TEXT("Path")))
 		{
 			FString ObjectPath;
@@ -482,7 +482,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 
 	void FSemantic::ReadParent(const FDabExpr& InValue)
 	{
-		const FDabExpr& Value = SkipParens(InValue);
+		const FDabExpr& Value = StripDabParens(InValue);
 		const bool bInterface = Kind == EDabDocumentKind::AnimLayerInterface;
 		const UClass* Required = bInterface ? UAnimLayerInterface::StaticClass() : UAnimInstance::StaticClass();
 		// Unknown until the parent is found: nothing is checked against a class the file does not name.
@@ -602,7 +602,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 			}
 			else if (Key == TEXT("Implements"))
 			{
-				const FDabExpr& Value = SkipParens(*Assign->Value);
+				const FDabExpr& Value = StripDabParens(*Assign->Value);
 				TArray<const FDabExpr*> Items;
 				if (const FDabListExpr* List = Value.As<FDabListExpr>())
 				{
@@ -706,7 +706,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 
 			FDabModelNotify Notify;
 			Notify.Name = Name;
-			const FDabExpr& Value = SkipParens(*Assign->Value);
+			const FDabExpr& Value = StripDabParens(*Assign->Value);
 			TArray<const FDabExpr*> Calls;
 			if (const FDabStackExpr* Stack = Value.As<FDabStackExpr>())
 			{

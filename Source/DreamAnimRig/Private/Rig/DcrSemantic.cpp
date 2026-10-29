@@ -78,15 +78,7 @@ namespace UE::DreamAnim::Rig
 		FString FGlobals::ResolveAssetPath(const FDabExpr& Expr, const UClass* Class, FString& OutProblem, bool& bOutAmbiguous) const
 		{
 			bOutAmbiguous = false;
-			const FDabExpr* Inner = &Expr;
-			while (const FDabParenExpr* Paren = Inner->As<FDabParenExpr>())
-			{
-				if (!Paren->Inner)
-				{
-					break;
-				}
-				Inner = Paren->Inner.Get();
-			}
+			const FDabExpr* Inner = &StripDabParens(Expr);
 			const FString PathObject = GetDcrPathExprObjectPath(*Inner);
 			if (!PathObject.IsEmpty())
 			{

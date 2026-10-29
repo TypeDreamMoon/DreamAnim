@@ -257,7 +257,7 @@ namespace UE::DreamAnim::Rig::Sem
 			case FVal::EKind::Literal:
 			{
 				// A name nothing here defines, or a let that stands for a constant.
-				const FDabExpr& Constant = StripParens(*Value.Expr);
+				const FDabExpr& Constant = StripDabParens(*Value.Expr);
 				if (const FDabCallExpr* ConstantCall = Constant.As<FDabCallExpr>())
 				{
 					const FDabNameExpr* ConstantCallee = ConstantCall->Callee ? ConstantCall->Callee->As<FDabNameExpr>() : nullptr;

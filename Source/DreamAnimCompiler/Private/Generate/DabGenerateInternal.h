@@ -161,8 +161,6 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 	// Values (DabGenerateValue.cpp)
 	// ------------------------------------------------------------------------------------------
 
-	/** The expression without the parentheses the author wrote around it. */
-	const Lang::FDabExpr& DabGenUnwrap(const Lang::FDabExpr& Expr);
 	FString DabGenPrint(const Lang::FDabExpr& Expr);
 	FString DabGenPrintCall(const Model::FDabModelCall& Call);
 	/** Eight hex digits of a stable hash, for generated names. */

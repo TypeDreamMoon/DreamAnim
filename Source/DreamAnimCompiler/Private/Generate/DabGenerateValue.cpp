@@ -37,20 +37,6 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 		return !SegmentIsCall.IsEmpty();
 	}
 
-	const FDabExpr& DabGenUnwrap(const FDabExpr& Expr)
-	{
-		const FDabExpr* Current = &Expr;
-		while (const FDabParenExpr* Paren = Current->As<FDabParenExpr>())
-		{
-			if (!Paren->Inner)
-			{
-				break;
-			}
-			Current = Paren->Inner.Get();
-		}
-		return *Current;
-	}
-
 	FString DabGenPrint(const FDabExpr& Expr)
 	{
 		return PrintDabExpr(Expr);
@@ -92,7 +78,7 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 
 	bool DabGenTryGetNumber(const FDabExpr& InExpr, double& OutNumber)
 	{
-		const FDabExpr& Expr = DabGenUnwrap(InExpr);
+		const FDabExpr& Expr = StripDabParens(InExpr);
 		if (const FDabLiteralExpr* Literal = Expr.As<FDabLiteralExpr>())
 		{
 			if (Literal->LiteralKind != EDabLiteralKind::Number)
@@ -117,7 +103,7 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 
 	bool DabGenTryGetBool(const FDabExpr& InExpr, bool& OutValue)
 	{
-		const FDabExpr& Expr = DabGenUnwrap(InExpr);
+		const FDabExpr& Expr = StripDabParens(InExpr);
 		if (const FDabLiteralExpr* Literal = Expr.As<FDabLiteralExpr>())
 		{
 			if (Literal->LiteralKind == EDabLiteralKind::Bool)
@@ -140,7 +126,7 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 
 	bool DabGenTryGetText(const FDabExpr& InExpr, FString& OutText)
 	{
-		const FDabExpr& Expr = DabGenUnwrap(InExpr);
+		const FDabExpr& Expr = StripDabParens(InExpr);
 		if (const FDabLiteralExpr* Literal = Expr.As<FDabLiteralExpr>())
 		{
 			if (Literal->LiteralKind == EDabLiteralKind::String)
@@ -162,7 +148,7 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 	{
 		if (const FDabCallExpr* Call = Node.As<FDabCallExpr>())
 		{
-			const FDabNameExpr* Callee = Call->Callee ? DabGenUnwrap(*Call->Callee).As<FDabNameExpr>() : nullptr;
+			const FDabNameExpr* Callee = Call->Callee ? StripDabParens(*Call->Callee).As<FDabNameExpr>() : nullptr;
 			if (Callee && Callee->Name == TEXT("Unsupported"))
 			{
 				return Call;
@@ -190,13 +176,13 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 		{
 			return true;
 		}
-		const FDabNameExpr* Name = DabGenUnwrap(*Expr).As<FDabNameExpr>();
+		const FDabNameExpr* Name = StripDabParens(*Expr).As<FDabNameExpr>();
 		return Name && Name->Name == TEXT("Self");
 	}
 
 	bool DabGenIsConstant(const FDabExpr& InExpr)
 	{
-		const FDabExpr& Expr = DabGenUnwrap(InExpr);
+		const FDabExpr& Expr = StripDabParens(InExpr);
 		switch (Expr.Kind)
 		{
 		case EDabNodeKind::LiteralExpr:
@@ -251,19 +237,19 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 
 	bool DabGenTryGetAssetPath(const FDabExpr& InExpr, FString& OutObjectPath)
 	{
-		const FDabCallExpr* Call = DabGenUnwrap(InExpr).As<FDabCallExpr>();
+		const FDabCallExpr* Call = StripDabParens(InExpr).As<FDabCallExpr>();
 		if (!Call || !Call->Callee || Call->Args.Num() != 2 || !Call->Args[0] || !Call->Args[1] || !Call->Args[0]->Value || !Call->Args[1]->Value)
 		{
 			return false;
 		}
-		const FDabNameExpr* Callee = DabGenUnwrap(*Call->Callee).As<FDabNameExpr>();
+		const FDabNameExpr* Callee = StripDabParens(*Call->Callee).As<FDabNameExpr>();
 		if (!Callee || Callee->Name != TEXT("Path"))
 		{
 			return false;
 		}
 
 		// Root: Game, Engine, Plugin.<Mount> (a name, a member chain, or the same written as a string).
-		const FDabExpr& Root = DabGenUnwrap(*Call->Args[0]->Value);
+		const FDabExpr& Root = StripDabParens(*Call->Args[0]->Value);
 		FString RootText;
 		TArray<FString> RootSegments;
 		if (const FDabLiteralExpr* RootLiteral = Root.As<FDabLiteralExpr>())
@@ -296,7 +282,7 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 			return false;
 		}
 
-		const FDabLiteralExpr* RelLiteral = DabGenUnwrap(*Call->Args[1]->Value).As<FDabLiteralExpr>();
+		const FDabLiteralExpr* RelLiteral = StripDabParens(*Call->Args[1]->Value).As<FDabLiteralExpr>();
 		if (!RelLiteral || RelLiteral->LiteralKind != EDabLiteralKind::String)
 		{
 			return false;
@@ -402,7 +388,7 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 	{
 		TArray<FString> Reversed;
 		TArray<bool> ReversedCalls;
-		const FDabExpr* Current = &DabGenUnwrap(InExpr);
+		const FDabExpr* Current = &StripDabParens(InExpr);
 		bool bPendingCall = false;
 		while (true)
 		{
@@ -413,7 +399,7 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 					return false;
 				}
 				bPendingCall = true;
-				Current = &DabGenUnwrap(*Call->Callee);
+				Current = &StripDabParens(*Call->Callee);
 				continue;
 			}
 			if (const FDabMemberExpr* Member = Current->As<FDabMemberExpr>())
@@ -425,7 +411,7 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 				Reversed.Add(Member->Member);
 				ReversedCalls.Add(bPendingCall);
 				bPendingCall = false;
-				Current = &DabGenUnwrap(*Member->Object);
+				Current = &StripDabParens(*Member->Object);
 				continue;
 			}
 			if (const FDabNameExpr* Name = Current->As<FDabNameExpr>())
@@ -523,7 +509,7 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 
 	static bool DabGenIsNoneName(const FDabExpr& Expr)
 	{
-		const FDabNameExpr* Name = DabGenUnwrap(Expr).As<FDabNameExpr>();
+		const FDabNameExpr* Name = StripDabParens(Expr).As<FDabNameExpr>();
 		return Name && (Name->Name == TEXT("None") || Name->Name == TEXT("nullptr") || Name->Name == TEXT("null"));
 	}
 
@@ -543,7 +529,7 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 
 		FString ObjectPath;
 		UObject* Object = nullptr;
-		const FDabExpr& Unwrapped = DabGenUnwrap(Expr);
+		const FDabExpr& Unwrapped = StripDabParens(Expr);
 		if (!DabGenTryGetAssetPath(Unwrapped, ObjectPath))
 		{
 			if (const FDabLiteralExpr* Literal = Unwrapped.As<FDabLiteralExpr>(); Literal && Literal->LiteralKind == EDabLiteralKind::String)
@@ -637,7 +623,7 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 
 	bool DabGenImportStruct(FDabGenContext& Ctx, const UScriptStruct* Struct, void* Data, const FDabExpr& InExpr, UObject* Owner, FString& OutError)
 	{
-		const FDabExpr& Expr = DabGenUnwrap(InExpr);
+		const FDabExpr& Expr = StripDabParens(InExpr);
 
 		if (Struct == FGameplayTag::StaticStruct())
 		{
@@ -705,7 +691,7 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 				// A tuple inside a tuple is the whole struct: what it leaves out is that struct's own default, as
 				// the decompiler and the checker compare it. Only the outermost tuple keeps what the value had.
 				void* FieldData = Field->ContainerPtrToValuePtr<void>(Data);
-				if (CastField<FStructProperty>(Field) && DabGenUnwrap(*Item->Value).Is<FDabTupleExpr>())
+				if (CastField<FStructProperty>(Field) && StripDabParens(*Item->Value).Is<FDabTupleExpr>())
 				{
 					Field->DestroyValue(FieldData);
 					Field->InitializeValue(FieldData);
@@ -739,7 +725,7 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 	bool DabGenImportValue(FDabGenContext& Ctx, const FProperty* Property, void* Value, const FDabExpr& InExpr, UObject* Owner, FString& OutError,
 		const UEnum* EnumHint)
 	{
-		const FDabExpr& Expr = DabGenUnwrap(InExpr);
+		const FDabExpr& Expr = StripDabParens(InExpr);
 		double Number = 0.0;
 		const bool bNumber = DabGenTryGetNumber(Expr, Number);
 
@@ -1015,7 +1001,7 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 				if (Property->ArrayDim > 1 && ElementIndex == INDEX_NONE)
 				{
 					// A C-style array takes a list, element by element.
-					const FDabListExpr* List = DabGenUnwrap(Expr).As<FDabListExpr>();
+					const FDabListExpr* List = StripDabParens(Expr).As<FDabListExpr>();
 					if (!List || List->Items.Num() > Property->ArrayDim)
 					{
 						OutError = FString::Printf(TEXT("%s takes a list of at most %d values"), *Name, Property->ArrayDim);
@@ -1049,7 +1035,7 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 	bool DabGenMakeDefault(FDabGenContext& Ctx, const FEdGraphPinType& Type, const FDabExpr& InExpr, FString& OutValue, UObject*& OutObject,
 		FString& OutError)
 	{
-		const FDabExpr& Expr = DabGenUnwrap(InExpr);
+		const FDabExpr& Expr = StripDabParens(InExpr);
 		OutValue.Reset();
 		OutObject = nullptr;
 		if (Type.ContainerType != EPinContainerType::None)
@@ -1376,7 +1362,7 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 
 	FString DabGenMetaString(const FDabExpr& InExpr)
 	{
-		const FDabExpr& Expr = DabGenUnwrap(InExpr);
+		const FDabExpr& Expr = StripDabParens(InExpr);
 		if (const FDabLiteralExpr* Literal = Expr.As<FDabLiteralExpr>())
 		{
 			if (Literal->LiteralKind == EDabLiteralKind::Bool)

@@ -108,24 +108,10 @@ namespace UE::DreamAnim::Rig
 			return MakeDcrAssetExpr(Path);
 		}
 
-		const FDabExpr& StripParens(const FDabExpr& Expr)
-		{
-			const FDabExpr* Current = &Expr;
-			while (const FDabParenExpr* Paren = Current->As<FDabParenExpr>())
-			{
-				if (!Paren->Inner)
-				{
-					break;
-				}
-				Current = Paren->Inner.Get();
-			}
-			return *Current;
-		}
-
 		/** A number literal, possibly negated. */
 		bool TryGetNumber(const FDabExpr& Expr, double& OutValue)
 		{
-			const FDabExpr& Inner = StripParens(Expr);
+			const FDabExpr& Inner = StripDabParens(Expr);
 			if (const FDabLiteralExpr* Literal = Inner.As<FDabLiteralExpr>())
 			{
 				if (Literal->LiteralKind == EDabLiteralKind::Number)
@@ -150,7 +136,7 @@ namespace UE::DreamAnim::Rig
 		/** The text of a string literal or a bare name. */
 		bool TryGetNameText(const FDabExpr& Expr, FString& OutText)
 		{
-			const FDabExpr& Inner = StripParens(Expr);
+			const FDabExpr& Inner = StripDabParens(Expr);
 			if (const FDabLiteralExpr* Literal = Inner.As<FDabLiteralExpr>())
 			{
 				if (Literal->LiteralKind == EDabLiteralKind::String)
@@ -915,7 +901,7 @@ namespace UE::DreamAnim::Rig
 		TArray<FDcrValuePart>& OutParts, FString& OutError, const FString& SubPath)
 	{
 		using namespace ValuesPrivate;
-		const FDabExpr& Expr = StripParens(InExpr);
+		const FDabExpr& Expr = StripDabParens(InExpr);
 		const FString Where = SubPath.IsEmpty() ? FString(TEXT("the value")) : FString::Printf(TEXT("`%s`"), *SubPath);
 
 		// Structure is always walked; anything else is a leaf, and the caller says whether a leaf is known now.
@@ -1072,7 +1058,7 @@ namespace UE::DreamAnim::Rig
 				}
 				FRigElementKey& Key = *static_cast<FRigElementKey*>(Value);
 				Key.Type = ERigElementType(Type);
-				const FDabExpr& NameArg = StripParens(*Call.Args[0]->Value);
+				const FDabExpr& NameArg = StripDabParens(*Call.Args[0]->Value);
 				FString ElementName;
 				// A name or a string is the element's name. Anything else (`Bone(Prefix + "_l")`) is the Name pin's link.
 				if (!TryGetNameText(NameArg, ElementName))

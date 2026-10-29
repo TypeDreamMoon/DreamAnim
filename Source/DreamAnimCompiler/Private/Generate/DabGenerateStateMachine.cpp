@@ -77,7 +77,7 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 			if (Option.Name == TEXT("BlendProfile") && (!LegacyProfile || LegacyProfile->HasAnyPropertyFlags(CPF_Deprecated)))
 			{
 				FString ObjectPath;
-				const FDabNameExpr* None = DabGenUnwrap(*Option.Value).As<FDabNameExpr>();
+				const FDabNameExpr* None = StripDabParens(*Option.Value).As<FDabNameExpr>();
 				if (None && None->Name == TEXT("None"))
 				{
 					Node->BlendProfileWrapper = FBlendProfileInterfaceWrapper();

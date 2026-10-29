@@ -51,7 +51,7 @@ namespace UE::DreamAnim::Rig::Sem
 		{
 			FVal Value;
 			Value.Kind = FVal::EKind::Literal;
-			Value.Expr = &StripParens(Expr);
+			Value.Expr = &StripDabParens(Expr);
 			Value.Span = Expr.Span;
 			return Value;
 		}
@@ -84,14 +84,14 @@ namespace UE::DreamAnim::Rig::Sem
 
 	bool FBody::IsLiteralShape(const FDabExpr& Expr) const
 	{
-		const FDabExpr& Inner = StripParens(Expr);
+		const FDabExpr& Inner = StripDabParens(Expr);
 		if (Inner.Is<FDabLiteralExpr>() || Inner.Is<FDabTupleExpr>() || Inner.Is<FDabListExpr>())
 		{
 			return true;
 		}
 		if (const FDabUnaryExpr* Unary = Inner.As<FDabUnaryExpr>())
 		{
-			return Unary->Op == EDabUnaryOp::Negate && Unary->Operand && StripParens(*Unary->Operand).Is<FDabLiteralExpr>();
+			return Unary->Op == EDabUnaryOp::Negate && Unary->Operand && StripDabParens(*Unary->Operand).Is<FDabLiteralExpr>();
 		}
 		if (const FDabCallExpr* Call = Inner.As<FDabCallExpr>())
 		{
@@ -215,7 +215,7 @@ namespace UE::DreamAnim::Rig::Sem
 		{
 			return MakeAbsent(Expr.Span);
 		}
-		if (const FDabNameExpr* Object = StripParens(*Expr.Object).As<FDabNameExpr>(); Object && !HasName(Object->Name))
+		if (const FDabNameExpr* Object = StripDabParens(*Expr.Object).As<FDabNameExpr>(); Object && !HasName(Object->Name))
 		{
 			// `ERigVMTransformSpace.GlobalSpace`: the enum named, then its value.
 			return MakeLiteralValue(Expr);
@@ -600,7 +600,7 @@ namespace UE::DreamAnim::Rig::Sem
 			{
 				continue;
 			}
-			const FDabCallExpr* TraitCall = StripParens(*Arg->Value).As<FDabCallExpr>();
+			const FDabCallExpr* TraitCall = StripDabParens(*Arg->Value).As<FDabCallExpr>();
 			const FDabNameExpr* TraitType = TraitCall && TraitCall->Callee ? TraitCall->Callee->As<FDabNameExpr>() : nullptr;
 			if (const UScriptStruct* TraitStruct = TraitType ? FindDcrTraitStruct(TraitType->Name) : nullptr)
 			{
@@ -639,7 +639,7 @@ namespace UE::DreamAnim::Rig::Sem
 			FDcrModelTrait& Added = Rec.Node.Traits.AddDefaulted_GetRef();
 			Added.Name = Pin.Name;
 			Added.StructPath = Trait.Value->GetPathName();
-			ApplyLiteral(Rec, Pin, StripParens(*Trait.Key->Value));
+			ApplyLiteral(Rec, Pin, StripDabParens(*Trait.Key->Value));
 		}
 		if (!Extra.IsEmpty() && !AddAggregates(Rec, Struct, Sig, Extra))
 		{
@@ -862,7 +862,7 @@ namespace UE::DreamAnim::Rig::Sem
 				continue;
 			}
 			// What tells a wildcard: a typed value, a typed let's literal, or `true` / `false` (which is nothing but a bool).
-			const FDabLiteralExpr* Literal = Arg.Value.Kind == FVal::EKind::Literal && Arg.Value.Expr ? StripParens(*Arg.Value.Expr).As<FDabLiteralExpr>() : nullptr;
+			const FDabLiteralExpr* Literal = Arg.Value.Kind == FVal::EKind::Literal && Arg.Value.Expr ? StripDabParens(*Arg.Value.Expr).As<FDabLiteralExpr>() : nullptr;
 			if ((Arg.Value.IsPin() && !Arg.Value.Pin.IsEmpty() && Arg.Value.Type.IsSet()) || (Arg.Value.Kind == FVal::EKind::Literal && Arg.Value.Type.IsSet()))
 			{
 				Pending.Known.Add(Arg.Key, Arg.Value.Type);
@@ -871,7 +871,7 @@ namespace UE::DreamAnim::Rig::Sem
 			{
 				Pending.Known.Add(Arg.Key, MakeDcrBuiltinType(TEXT("bool")));
 			}
-			else if (Arg.Value.Kind == FVal::EKind::Literal && Arg.Value.Expr && IsElementKeyLiteral(StripParens(*Arg.Value.Expr)))
+			else if (Arg.Value.Kind == FVal::EKind::Literal && Arg.Value.Expr && IsElementKeyLiteral(StripDabParens(*Arg.Value.Expr)))
 			{
 				// `Bone(name)` is nothing but an element key.
 				Pending.Known.Add(Arg.Key, MakeDcrType(*FRigElementKey::StaticStruct()));
@@ -1297,7 +1297,7 @@ namespace UE::DreamAnim::Rig::Sem
 	void FBody::BuildInjected(const FDabCallExpr& Wrapper, FNodeRec& Host, const FPin& HostPin)
 	{
 		const FDabCallExpr* Inner = (Wrapper.Args.Num() == 1 && Wrapper.Args[0] && !Wrapper.Args[0]->IsNamed() && Wrapper.Args[0]->Value)
-			? StripParens(*Wrapper.Args[0]->Value).As<FDabCallExpr>() : nullptr;
+			? StripDabParens(*Wrapper.Args[0]->Value).As<FDabCallExpr>() : nullptr;
 		if (!Inner)
 		{
 			Sink.Error(TEXT("DAB9004"), Wrapper.Span, TEXT("`Injected(...)` takes one call, `Injected(Node(...))`."));
@@ -1370,7 +1370,7 @@ namespace UE::DreamAnim::Rig::Sem
 
 	FVal FBody::BuildInjectedOutput(const FDabCallExpr& Wrapper, const FDcrType* Expected, const FString& Preferred)
 	{
-		const FDabCallExpr* Inner = Wrapper.Args[0]->Value ? StripParens(*Wrapper.Args[0]->Value).As<FDabCallExpr>() : nullptr;
+		const FDabCallExpr* Inner = Wrapper.Args[0]->Value ? StripDabParens(*Wrapper.Args[0]->Value).As<FDabCallExpr>() : nullptr;
 		FCallee Callee;
 		if (!Inner || !ResolveCallee(*Inner, Callee) || Callee.Kind != FCallee::EKind::Unit)
 		{

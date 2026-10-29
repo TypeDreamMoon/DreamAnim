@@ -50,8 +50,6 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 
 	/** One line, however long: the form two values are compared in. */
 	FString PrintValueText(const FDabExpr& Expr);
-	/** The expression inside any parentheses the author wrote. */
-	const FDabExpr& SkipParens(const FDabExpr& Expr);
 	/** A number literal, possibly negated (`-0.5` is a negation in the tree). */
 	bool ReadNumber(const FDabExpr& Expr, double& OutValue);
 	/** The text of a bare name or a string literal. */

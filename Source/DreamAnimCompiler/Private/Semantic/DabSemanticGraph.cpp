@@ -455,7 +455,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 
 	UClass* FSemantic::LoadReferencedClass(const FDabExpr& Reference)
 	{
-		const FDabExpr& Expr = SkipParens(Reference);
+		const FDabExpr& Expr = StripDabParens(Reference);
 		FString Path;
 		if (IsCallTo(Expr, TEXT("Path")))
 		{
@@ -574,7 +574,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 			{
 				continue;
 			}
-			const FDabExpr& Value = SkipParens(*Arg.Value);
+			const FDabExpr& Value = StripDabParens(*Arg.Value);
 			const UEnum* Enum = nullptr;
 			FString Text;
 			if (IsCallTo(Value, TEXT("Path")))
@@ -691,7 +691,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 	{
 		if (const FDabCallExpr* Call = Node.As<FDabCallExpr>())
 		{
-			const FDabNameExpr* Callee = Call->Callee ? SkipParens(*Call->Callee).As<FDabNameExpr>() : nullptr;
+			const FDabNameExpr* Callee = Call->Callee ? StripDabParens(*Call->Callee).As<FDabNameExpr>() : nullptr;
 			FString Name;
 			if (Callee && Callee->Name == TEXT("Input") && Call->Args.Num() > 0 && Call->Args[0] && Call->Args[0]->Value
 				&& ReadNameOrStringText(*Call->Args[0]->Value, Name))
@@ -782,7 +782,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 			if (Assign->Name == TEXT("Inputs") && FCString::Strcmp(ResultName, TEXT("Output")) == 0)
 			{
 				// The graph's input poses in the order a linked graph node feeds them.
-				const FDabListExpr* List = Assign->Value ? SkipParens(*Assign->Value).As<FDabListExpr>() : nullptr;
+				const FDabListExpr* List = Assign->Value ? StripDabParens(*Assign->Value).As<FDabListExpr>() : nullptr;
 				if (!List)
 				{
 					Sink.Error(TEXT("DAB6011"), Assign->NameSpan, TEXT("`Inputs` lists the graph's input poses in order: Inputs = [ \"First Input\", Second ];"));
@@ -906,7 +906,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 
 	FString FSemantic::BuildPose(const FDabExpr& InExpr, FGraphScope& Scope, const FString& IdHint, const FString* Feed)
 	{
-		const FDabExpr& Expr = SkipParens(InExpr);
+		const FDabExpr& Expr = StripDabParens(InExpr);
 		if (const FDabNameExpr* Name = Expr.As<FDabNameExpr>())
 		{
 			if (Feed)
@@ -1130,7 +1130,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 
 	FString FSemantic::BuildCallNode(const FDabCallExpr& Call, FGraphScope& Scope, const FString& IdHint, const FString* Feed)
 	{
-		const FDabNameExpr* Callee = Call.Callee ? SkipParens(*Call.Callee).As<FDabNameExpr>() : nullptr;
+		const FDabNameExpr* Callee = Call.Callee ? StripDabParens(*Call.Callee).As<FDabNameExpr>() : nullptr;
 		if (!Callee || Callee->Name == TEXT("Path") || Callee->Name == TEXT("Unsupported") || Aliases.Contains(Callee->Name))
 		{
 			Sink.Error(TEXT("DAB6010"), Call.Span, FString::Printf(TEXT("`%s` is not a pose."), *PrintValueText(Call)),
@@ -1191,7 +1191,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 				Sink.Error(TEXT("DAB4009"), Call.Span, TEXT("Call(Target.Function) names the function it calls: Call(Self.Refresh)."));
 				return FString();
 			}
-			const FDabExpr& First = SkipParens(*Positional[0]->Value);
+			const FDabExpr& First = StripDabParens(*Positional[0]->Value);
 			const FDabExpr* FunctionExpr = &First;
 			TArray<const FDabArgument*> CallArgs;
 			if (const FDabCallExpr* Inner = First.As<FDabCallExpr>())
@@ -1381,7 +1381,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 
 			const FString PinName = Pending.Property->GetName();
 			WrittenPoses.Add(PinName);
-			const FDabExpr& Value = SkipParens(*Arg.Value);
+			const FDabExpr& Value = StripDabParens(*Arg.Value);
 			if (!CastField<FArrayProperty>(Pending.Property))
 			{
 				const FString Id = BuildPose(Value, Scope, Node.Id + TEXT("/") + PinName, nullptr);
@@ -1493,7 +1493,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		// A linked graph's or layer's input poses, by the target's input pose names.
 		if (InputsArg)
 		{
-			const FDabBlockExpr* Block = SkipParens(*InputsArg->Value).As<FDabBlockExpr>();
+			const FDabBlockExpr* Block = StripDabParens(*InputsArg->Value).As<FDabBlockExpr>();
 			if (!Block)
 			{
 				Sink.Error(TEXT("DAB4006"), InputsArg->Value->Span, TEXT("Inputs is a block of input poses: Inputs = { Name = Pose; }."));
@@ -1544,7 +1544,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		{
 			const FNodeValueArg& Arg = *Pending.Arg;
 			const FString What = FString::Printf(TEXT("%s of %s"), *Arg.Name, *TypeLabel);
-			const FDabExpr& Value = SkipParens(*Arg.Value);
+			const FDabExpr& Value = StripDabParens(*Arg.Value);
 
 			if (!Pending.Property)
 			{
@@ -1655,7 +1655,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 				TArray<FDabExprPtr> Converted;
 				for (int32 Index = 0; Index < Items.Num(); ++Index)
 				{
-					const FDabExpr* Item = Items[Index] ? &SkipParens(*Items[Index]) : nullptr;
+					const FDabExpr* Item = Items[Index] ? &StripDabParens(*Items[Index]) : nullptr;
 					if (Item && bBoneLayers && Name == TEXT("LayerSetup") && IsCallTo(*Item, TEXT("bones")))
 					{
 						OwnedItems.Add(MakeSemanticBonesTuple(static_cast<const FDabCallExpr&>(*Item), Sink));
@@ -1716,7 +1716,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 				{
 					const FNodeValueArg& Curve = *Curves[Index];
 					CurveNames.Add(MakeStringExpr(FName(*Curve.Name).IsNone() ? FString() : Curve.Name));
-					const FDabExpr& Value = SkipParens(*Curve.Value);
+					const FDabExpr& Value = StripDabParens(*Curve.Value);
 					FDabExprPtr Element;
 					if (IsConstant(Value) || IsPlaceholderCall(Value))
 					{
@@ -1927,7 +1927,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 			}
 			return;
 		}
-		const FDabExpr& Written = SkipParens(*Value);
+		const FDabExpr& Written = StripDabParens(*Value);
 		if (!IsConstant(Written) && !IsPlaceholderCall(Written) && !IsSectionRead(Written, TEXT("Props")))
 		{
 			Sink.Error(TEXT("DAB4010"), Written.Span,
@@ -2162,7 +2162,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		FRuleSet Rules;
 		if (RulesStmt)
 		{
-			const FDabBlockExpr* Block = RulesStmt->Value ? SkipParens(*RulesStmt->Value).As<FDabBlockExpr>() : nullptr;
+			const FDabBlockExpr* Block = RulesStmt->Value ? StripDabParens(*RulesStmt->Value).As<FDabBlockExpr>() : nullptr;
 			if (!Block)
 			{
 				Sink.Error(TEXT("DAB6011"), RulesStmt->NameSpan, TEXT("Rules is a block: Rules = { Name = Condition; }."));
@@ -2205,7 +2205,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		}
 		else
 		{
-			const FDabNameExpr* Entry = EntryStmt->Value ? SkipParens(*EntryStmt->Value).As<FDabNameExpr>() : nullptr;
+			const FDabNameExpr* Entry = EntryStmt->Value ? StripDabParens(*EntryStmt->Value).As<FDabNameExpr>() : nullptr;
 			const int32* EntryKind = Entry ? Members.Find(Entry->Name) : nullptr;
 			if (!Entry || !EntryKind || *EntryKind == MemberAlias)
 			{
@@ -2251,7 +2251,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		{
 			FDabModelAlias Alias;
 			Alias.Name = AliasStmt->Name;
-			const FDabExpr* Value = AliasStmt->Value ? &SkipParens(*AliasStmt->Value) : nullptr;
+			const FDabExpr* Value = AliasStmt->Value ? &StripDabParens(*AliasStmt->Value) : nullptr;
 			if (const FDabNameExpr* All = Value ? Value->As<FDabNameExpr>() : nullptr; All && All->Name == TEXT("All"))
 			{
 				Alias.bGlobal = true;
@@ -2260,7 +2260,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 			{
 				for (const FDabExprPtr& Item : List->Items)
 				{
-					const FDabNameExpr* Aliased = Item ? SkipParens(*Item).As<FDabNameExpr>() : nullptr;
+					const FDabNameExpr* Aliased = Item ? StripDabParens(*Item).As<FDabNameExpr>() : nullptr;
 					const int32* AliasedKind = Aliased ? Members.Find(Aliased->Name) : nullptr;
 					if (!Aliased || !AliasedKind || *AliasedKind == MemberAlias)
 					{
@@ -2280,7 +2280,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 
 		if (TransitionsStmt)
 		{
-			const FDabBlockExpr* Block = TransitionsStmt->Value ? SkipParens(*TransitionsStmt->Value).As<FDabBlockExpr>() : nullptr;
+			const FDabBlockExpr* Block = TransitionsStmt->Value ? StripDabParens(*TransitionsStmt->Value).As<FDabBlockExpr>() : nullptr;
 			if (!Block)
 			{
 				Sink.Error(TEXT("DAB6011"), TransitionsStmt->NameSpan, TEXT("Transitions is a block: Transitions = { From -> To : Condition; }."));
@@ -2414,7 +2414,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 
 			if (Row->Condition)
 			{
-				const FDabExpr& Condition = SkipParens(*Row->Condition);
+				const FDabExpr& Condition = StripDabParens(*Row->Condition);
 				const FDabNameExpr* Name = Condition.As<FDabNameExpr>();
 				if (Name && Name->Name == TEXT("Auto"))
 				{

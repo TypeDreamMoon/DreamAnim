@@ -475,20 +475,6 @@ namespace UE::DreamAnim::Rig::Sem
 
 	const TCHAR* const DefaultExecuteName = TEXT("ExecuteContext");
 
-	const FDabExpr& StripParens(const FDabExpr& Expr)
-	{
-		const FDabExpr* Current = &Expr;
-		while (const FDabParenExpr* Paren = Current->As<FDabParenExpr>())
-		{
-			if (!Paren->Inner)
-			{
-				break;
-			}
-			Current = Paren->Inner.Get();
-		}
-		return *Current;
-	}
-
 	FString MakeNodeBaseName(const FString& Name)
 	{
 		FString Result;

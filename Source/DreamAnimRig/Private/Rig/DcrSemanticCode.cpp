@@ -414,16 +414,8 @@ namespace UE::DreamAnim::Rig::Sem
 		{
 			return;
 		}
-		const FDabExpr* Value = Stmt.Value.Get();
-		StatementSpan = Value->Span;
-		while (const FDabParenExpr* Paren = Value->As<FDabParenExpr>())
-		{
-			if (!Paren->Inner)
-			{
-				break;
-			}
-			Value = Paren->Inner.Get();
-		}
+		StatementSpan = Stmt.Value->Span;
+		const FDabExpr* Value = &StripDabParens(*Stmt.Value);
 		const FDabTupleExpr* Tuple = Value->As<FDabTupleExpr>();
 		bool bPerOutput = false;
 		if (Tuple && !Tuple->Items.IsEmpty())

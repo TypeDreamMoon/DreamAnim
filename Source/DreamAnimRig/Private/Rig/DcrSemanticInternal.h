@@ -113,8 +113,6 @@ namespace UE::DreamAnim::Rig::Sem
 	bool GetTypeAtSubPath(const Model::FDcrType& Type, const FString& Path, Model::FDcrType& OutType, FString& OutEnginePath);
 	/** `Get Transform 2` -> `Get_Transform_2`: a node name that has no dots or spaces. */
 	FString MakeNodeBaseName(const FString& Name);
-	/** The expression inside the parentheses the author wrote around it. */
-	const Lang::FDabExpr& StripParens(const Lang::FDabExpr& Expr);
 	/** The name of a function's, a variable setter's and a collapse node's execute pin. */
 	extern const TCHAR* const DefaultExecuteName;
 

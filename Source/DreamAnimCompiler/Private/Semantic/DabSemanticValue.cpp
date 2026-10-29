@@ -164,23 +164,9 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		return PrintDabExpr(Expr, 0, 0, nullptr, PrintOptions);
 	}
 
-	const FDabExpr& SkipParens(const FDabExpr& Expr)
-	{
-		const FDabExpr* Current = &Expr;
-		while (const FDabParenExpr* Paren = Current->As<FDabParenExpr>())
-		{
-			if (!Paren->Inner)
-			{
-				break;
-			}
-			Current = Paren->Inner.Get();
-		}
-		return *Current;
-	}
-
 	bool ReadNumber(const FDabExpr& InExpr, double& OutValue)
 	{
-		const FDabExpr& Expr = SkipParens(InExpr);
+		const FDabExpr& Expr = StripDabParens(InExpr);
 		if (const FDabLiteralExpr* Literal = Expr.As<FDabLiteralExpr>())
 		{
 			if (Literal->LiteralKind != EDabLiteralKind::Number)
@@ -204,8 +190,8 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 
 	bool IsCallTo(const FDabExpr& Expr, const TCHAR* Callee)
 	{
-		const FDabCallExpr* Call = SkipParens(Expr).As<FDabCallExpr>();
-		const FDabNameExpr* Name = Call && Call->Callee ? SkipParens(*Call->Callee).As<FDabNameExpr>() : nullptr;
+		const FDabCallExpr* Call = StripDabParens(Expr).As<FDabCallExpr>();
+		const FDabNameExpr* Name = Call && Call->Callee ? StripDabParens(*Call->Callee).As<FDabNameExpr>() : nullptr;
 		return Name && Name->Name == Callee;
 	}
 
@@ -216,7 +202,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 
 	const FDabNameExpr* GetPathRoot(const FDabExpr& InExpr)
 	{
-		const FDabExpr* Current = &SkipParens(InExpr);
+		const FDabExpr* Current = &StripDabParens(InExpr);
 		for (int32 Guard = 0; Current && Guard < 256; ++Guard)
 		{
 			if (const FDabNameExpr* Name = Current->As<FDabNameExpr>())
@@ -225,11 +211,11 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 			}
 			if (const FDabMemberExpr* Member = Current->As<FDabMemberExpr>())
 			{
-				Current = Member->Object ? &SkipParens(*Member->Object) : nullptr;
+				Current = Member->Object ? &StripDabParens(*Member->Object) : nullptr;
 			}
 			else if (const FDabCallExpr* Call = Current->As<FDabCallExpr>())
 			{
-				Current = Call->Callee ? &SkipParens(*Call->Callee) : nullptr;
+				Current = Call->Callee ? &StripDabParens(*Call->Callee) : nullptr;
 			}
 			else
 			{
@@ -241,8 +227,8 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 
 	bool IsSectionRead(const FDabExpr& Expr, const TCHAR* Section, FString* OutMember)
 	{
-		const FDabMemberExpr* Member = SkipParens(Expr).As<FDabMemberExpr>();
-		const FDabNameExpr* Object = Member && Member->Object ? SkipParens(*Member->Object).As<FDabNameExpr>() : nullptr;
+		const FDabMemberExpr* Member = StripDabParens(Expr).As<FDabMemberExpr>();
+		const FDabNameExpr* Object = Member && Member->Object ? StripDabParens(*Member->Object).As<FDabNameExpr>() : nullptr;
 		if (!Object || Object->Name != Section)
 		{
 			return false;
@@ -405,7 +391,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 	/** `Game` / `Engine` / `Plugin.X` (as a name, a member or a string) -> the mount point. */
 	bool ReadMountRoot(const FDabExpr& InRoot, FString& OutMount)
 	{
-		const FDabExpr& Root = SkipParens(InRoot);
+		const FDabExpr& Root = StripDabParens(InRoot);
 		FString Text;
 		if (const FDabNameExpr* Name = Root.As<FDabNameExpr>())
 		{
@@ -413,7 +399,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		}
 		else if (const FDabMemberExpr* Member = Root.As<FDabMemberExpr>())
 		{
-			const FDabNameExpr* Object = Member->Object ? SkipParens(*Member->Object).As<FDabNameExpr>() : nullptr;
+			const FDabNameExpr* Object = Member->Object ? StripDabParens(*Member->Object).As<FDabNameExpr>() : nullptr;
 			if (!Object || Object->Name != TEXT("Plugin"))
 			{
 				return false;
@@ -457,7 +443,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 			OutError = FString::Printf(TEXT("`%s` is not a root; a root is Game, Engine or Plugin.<Name>."), *PrintValueText(*Call.Args[0]->Value));
 			return false;
 		}
-		const FDabLiteralExpr* Relative = SkipParens(*Call.Args[1]->Value).As<FDabLiteralExpr>();
+		const FDabLiteralExpr* Relative = StripDabParens(*Call.Args[1]->Value).As<FDabLiteralExpr>();
 		if (!Relative || Relative->LiteralKind != EDabLiteralKind::String || Relative->Text.IsEmpty())
 		{
 			OutError = TEXT("The second argument of Path is the asset's path under the root, as a string.");
@@ -1183,7 +1169,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 
 	bool FSemantic::IsConstant(const FDabExpr& InExpr) const
 	{
-		const FDabExpr& Expr = SkipParens(InExpr);
+		const FDabExpr& Expr = StripDabParens(InExpr);
 		switch (Expr.Kind)
 		{
 		case EDabNodeKind::LiteralExpr:
@@ -1235,7 +1221,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 
 	FDabExprPtr FSemantic::Resolve(const FDabExpr& InExpr, FRuleSet* Rules, bool bInGetter)
 	{
-		const FDabExpr& Expr = SkipParens(InExpr);
+		const FDabExpr& Expr = StripDabParens(InExpr);
 		switch (Expr.Kind)
 		{
 		case EDabNodeKind::LiteralExpr:
@@ -1309,7 +1295,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 			{
 				return nullptr;
 			}
-			const FDabNameExpr* CalleeName = SkipParens(*Call.Callee).As<FDabNameExpr>();
+			const FDabNameExpr* CalleeName = StripDabParens(*Call.Callee).As<FDabNameExpr>();
 			const bool bGetter = CalleeName && (CalleeName->Name == TEXT("StateWeight") || CalleeName->Name == TEXT("MachineWeight")
 				|| CalleeName->Name == TEXT("TimeRemaining") || CalleeName->Name == TEXT("TimeRemainingRatio"));
 			// A function's own name is never a rule or an alias.
@@ -1424,7 +1410,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		if (!Index || !Model.Variables.IsValidIndex(*Index))
 		{
 			// At the name, as where Props.X is bound.
-			const FDabMemberExpr& Member = static_cast<const FDabMemberExpr&>(SkipParens(Expr));
+			const FDabMemberExpr& Member = static_cast<const FDabMemberExpr&>(StripDabParens(Expr));
 			Sink.Error(TEXT("DAB5003"), Member.MemberSpan.IsEmpty() ? Member.Span : Member.MemberSpan, FString::Printf(TEXT("There is no tuning value `%s`."), *Name),
 				TEXT("Declare it in Properties = { float Name = 0; }."));
 			return nullptr;
@@ -1450,7 +1436,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 	/** The text of a name or string literal. */
 	bool ReadNameOrStringText(const FDabExpr& InExpr, FString& OutText)
 	{
-		const FDabExpr& Expr = SkipParens(InExpr);
+		const FDabExpr& Expr = StripDabParens(InExpr);
 		if (const FDabNameExpr* Name = Expr.As<FDabNameExpr>())
 		{
 			OutText = Name->Name;
@@ -1471,7 +1457,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 
 	FDabExprPtr FSemantic::ConvertTyped(const FSemType& Type, const FDabExpr& InExpr, const void* StructDefault, const FString& What)
 	{
-		const FDabExpr& Expr = SkipParens(InExpr);
+		const FDabExpr& Expr = StripDabParens(InExpr);
 		if (IsPlaceholderCall(Expr))
 		{
 			// The extractor's stand-in for something inexpressible: the model already lists it as unsupported.
@@ -1715,7 +1701,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 
 	FDabExprPtr FSemantic::ConvertUntyped(const FDabExpr& InExpr)
 	{
-		const FDabExpr& Expr = SkipParens(InExpr);
+		const FDabExpr& Expr = StripDabParens(InExpr);
 		int64 Integer = 0;
 		if (TryGetDabInteger(Expr, Integer))
 		{
@@ -2140,7 +2126,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 
 	bool FSemantic::TypePath(const FDabExpr& InExpr, const UStruct*& OutScope, const FProperty*& OutProperty) const
 	{
-		const FDabExpr& Expr = SkipParens(InExpr);
+		const FDabExpr& Expr = StripDabParens(InExpr);
 		OutScope = nullptr;
 		OutProperty = nullptr;
 		if (const FDabNameExpr* Name = Expr.As<FDabNameExpr>())
@@ -2170,7 +2156,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		}
 		if (const FDabCallExpr* Call = Expr.As<FDabCallExpr>())
 		{
-			const FDabMemberExpr* Callee = Call->Callee ? SkipParens(*Call->Callee).As<FDabMemberExpr>() : nullptr;
+			const FDabMemberExpr* Callee = Call->Callee ? StripDabParens(*Call->Callee).As<FDabMemberExpr>() : nullptr;
 			const UStruct* Scope = nullptr;
 			const FProperty* Ignored = nullptr;
 			if (!Callee || !Call->Args.IsEmpty() || !Callee->Object || !TypePath(*Callee->Object, Scope, Ignored))
@@ -2189,7 +2175,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 	bool FSemantic::ResolveCallee(const FDabExpr& Callee, FDabExprPtr& OutTarget, FString& OutFunction, const UFunction*& OutUFunction, const FString& What)
 	{
 		OutUFunction = nullptr;
-		const FDabMemberExpr* Member = SkipParens(Callee).As<FDabMemberExpr>();
+		const FDabMemberExpr* Member = StripDabParens(Callee).As<FDabMemberExpr>();
 		if (!Member || !Member->Object)
 		{
 			Sink.Error(TEXT("DAB5001"), Callee.Span,
@@ -2278,7 +2264,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 				}
 			}
 
-			const FDabExpr& Value = SkipParens(*Arg->Value);
+			const FDabExpr& Value = StripDabParens(*Arg->Value);
 			const FString ArgumentWhat = FString::Printf(TEXT("%s, argument %s"), *What, Name.IsEmpty() ? TEXT("?") : *Name);
 			FDabExprPtr Converted;
 			if (IsPlaceholderCall(Value))
@@ -2312,7 +2298,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 
 	bool FSemantic::ConvertCall(const FDabExpr& InExpr, FDabModelCall& OutCall, const FString& What)
 	{
-		const FDabExpr& Expr = SkipParens(InExpr);
+		const FDabExpr& Expr = StripDabParens(InExpr);
 		const FDabExpr* Callee = &Expr;
 		TArray<const FDabArgument*> Args;
 		if (const FDabCallExpr* Call = Expr.As<FDabCallExpr>())

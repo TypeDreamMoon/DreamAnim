@@ -823,4 +823,18 @@ namespace UE::DreamAnim::Lang
 		}
 		return true;
 	}
+
+	const FDabExpr& StripDabParens(const FDabExpr& Expr)
+	{
+		const FDabExpr* Current = &Expr;
+		while (const FDabParenExpr* Paren = Current->As<FDabParenExpr>())
+		{
+			if (!Paren->Inner)
+			{
+				break;
+			}
+			Current = Paren->Inner.Get();
+		}
+		return *Current;
+	}
 }
