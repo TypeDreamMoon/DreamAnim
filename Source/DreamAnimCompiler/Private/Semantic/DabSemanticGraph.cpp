@@ -1543,6 +1543,14 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 			}
 			if (Pending.bEditor ? !IsRecordedEditorProperty(Property) : !IsRecordedNodeField(Property))
 			{
+				if (Property.HasAnyPropertyFlags(CPF_Deprecated))
+				{
+					// Such as a blend list's bResetChildOnActivation, which 5.6 replaced with ChildUpateMode.
+					const FString Message = Property.GetMetaData(TEXT("DeprecationMessage"));
+					Sink.Error(TEXT("DAB4004"), Arg.Span, FString::Printf(TEXT("`%s` of %s is deprecated in this engine version; it is not written."), *Arg.Name, *TypeLabel),
+						Message.IsEmpty() ? FString() : Message + TEXT("."));
+					continue;
+				}
 				Sink.Error(TEXT("DAB4004"), Arg.Span, FString::Printf(TEXT("`%s` of %s is filled in by the editor or the compiler; it is not written."), *Name, *TypeLabel));
 				continue;
 			}
