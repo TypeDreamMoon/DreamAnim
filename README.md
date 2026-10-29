@@ -187,9 +187,10 @@ Sources live in the project's `DAnim/` folder, or in `DAnim/` of an enabled plug
 | `check [-File F] [-Root R] [-Json J]` | Parses and checks: includes, templates, names. Nothing is generated. |
 | `fmt [-File F] [-Root R] [-Write \| -Verify] [-Json J]` | Prints the canonical text. `-Write` rewrites the files that differ, keeping their line ends. `-Verify` writes nothing and fails on any file that is not canonical. |
 | `decompile (-Asset A[,B] \| -Under /Game/Folder) [-AnimSet S] [-Out O] [-Stdout] [-Force] [-Json J]` | Animation Blueprints and Control Rigs to text, under the project's `DAnim/` unless `-Out`. `-Stdout` prints instead. A file that exists and differs is replaced only with `-Force`. `-AnimSet` moves their animations into slots of that animation set. |
+| `vocab (-Out O \| -Stdout) [-RigUnits]` | What the languages know, as JSON: the grammar version, the words of each kind of document, every anim node type with its pins; `-RigUnits` adds the Control Rig units. See [Tools.md](Docs/Tools.md). |
 | `dal [-File F] [-Root R] [-Dal D] [-DalModule M]` | Compiles the `.dal` logic sources into C++ with the dal compiler; see [Logic in .dal](#logic-in-dal). |
 
-- `build`, `check`, `fmt` and `decompile` run `UnrealEditor-Cmd <project> -run=DreamAnim`. The project
+- `build`, `check`, `fmt`, `decompile` and `vocab` run `UnrealEditor-Cmd <project> -run=DreamAnim`. The project
   is `-Project`, else the project above `-File`, else the plugin's test host. `make` and `test` use the
   test host unless `-Project` is given.
 - Without `-File`, these commands cover every source under the source roots: the project's `DAnim/`
@@ -259,7 +260,9 @@ Tools/dab.ps1 build -Project MyGame.uproject
 | [Decompiling.md](Docs/Decompiling.md) | Turning existing Blueprints and Control Rigs into text, and migrating a character. |
 | [WriteBack.md](Docs/WriteBack.md) | Working in the editor: rebuilds, write-back, conflicts, node positions, settings. |
 | [Diagnostics.md](Docs/Diagnostics.md) | Every `DABnnnn` code and how to fix it. |
-| [Grammar.md](Docs/Grammar.md) | The formal grammar and the canonical format. |
+| [Grammar.md](Docs/Grammar.md) | The formal grammar, the canonical format and the grammar version. |
+| [Changelog.md](Docs/Changelog.md) | What each grammar version changed in the text. |
+| [Tools.md](Docs/Tools.md) | For tools that read or write the sources: the vocabulary JSON, checking from a running editor. |
 | [Mapping.md](Docs/Mapping.md) | How the text maps onto the Blueprint model. |
 
 ## Layout
