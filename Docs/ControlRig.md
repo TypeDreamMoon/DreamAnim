@@ -1116,6 +1116,8 @@ if (GetMetadata.Value && GetMetadata.Found)
 [Templates and #include](Language.md#templates-and-include). A `.dcr` file includes a template library with
 `#include "Path.dat"` before the document.
 
+- A `.dcr` file uses templates but does not define them: they are written in a `.dat` library it includes. A
+  `Template` in the ControlRig itself is DAB6011.
 - A template is a named expression. It expands in the expressions of code, before any name is checked.
 - Each expansion makes its own nodes, nodes with state included.
 
