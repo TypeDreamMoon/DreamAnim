@@ -11,31 +11,15 @@
 // and entry, so renaming nodes does not change the text.
 
 #include "Model/DcrModel.h"
+#include "ModelDumpText.h"
 
 namespace UE::DreamAnim::Model
 {
 	namespace
 	{
-		// FString's operator< ignores case; a canonical dump must not depend on it.
-		int32 CompareText(const FString& A, const FString& B)
-		{
-			return A.Compare(B, ESearchCase::CaseSensitive);
-		}
-
-		bool LessText(const FString& A, const FString& B)
-		{
-			return CompareText(A, B) < 0;
-		}
-
-		void Line(FString& Out, int32 Depth, const FString& Text)
-		{
-			for (int32 Level = 0; Level < Depth; ++Level)
-			{
-				Out += TEXT("  ");
-			}
-			Out += Text;
-			Out += TEXT("\n");
-		}
+		using DumpText::CompareText;
+		using DumpText::LessText;
+		using DumpText::Line;
 
 		/** One line however long the text is. */
 		FString OneLine(const FString& Text)

@@ -4,6 +4,7 @@
 
 #include "Lang/DabPrinter.h"
 #include "Misc/CString.h"
+#include "ModelDumpText.h"
 
 namespace UE::DreamAnim::Model
 {
@@ -71,11 +72,8 @@ namespace UE::DreamAnim::Model
 
 	namespace
 	{
-		// FString's operator< ignores case; a canonical dump must not depend on it.
-		bool LessText(const FString& A, const FString& B)
-		{
-			return A.Compare(B, ESearchCase::CaseSensitive) < 0;
-		}
+		using DumpText::LessText;
+		using DumpText::Line;
 
 		FString PrintValue(const Lang::FDabExprPtr& Expr)
 		{
@@ -120,16 +118,6 @@ namespace UE::DreamAnim::Model
 			}
 			Text += TEXT(")");
 			return Text;
-		}
-
-		void Line(FString& Out, int32 Depth, const FString& Text)
-		{
-			for (int32 Level = 0; Level < Depth; ++Level)
-			{
-				Out += TEXT("  ");
-			}
-			Out += Text;
-			Out += TEXT("\n");
 		}
 
 		/** `Word` alone when Value is empty, so no line ends in a space. */
