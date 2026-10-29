@@ -41,6 +41,7 @@
 #include "Lang/DabDiagnostic.h"
 #include "Lang/DabSource.h"
 #include "Lang/DabToken.h"
+#include "Lang/DabVocabulary.h"
 
 namespace UE::DreamAnim::Lang
 {
@@ -262,41 +263,18 @@ namespace UE::DreamAnim::Lang
 				return Token.Is(EDabTokenKind::Identifier) && !Token.bQuoted && Token.Text.Equals(Word, ESearchCase::CaseSensitive);
 			}
 
-			/** The block words; a Control Rig document has more of them. */
+			/**
+			 * The block words (Lang/DabVocabulary.h). Every document parses the Animation Blueprint's, so that the
+			 * checker can say where one does not belong; a Control Rig document has its own as well.
+			 */
 			bool IsBlockWord(const FDabToken& Token) const
 			{
 				if (!Token.Is(EDabTokenKind::Identifier) || Token.bQuoted)
 				{
 					return false;
 				}
-				static const TCHAR* const BlockWords[] =
-				{
-					TEXT("StateMachine"), TEXT("State"), TEXT("Layer"), TEXT("Template"), TEXT("Conduit"), TEXT("Alias"),
-				};
-				for (const TCHAR* Word : BlockWords)
-				{
-					if (Token.Text.Equals(Word, ESearchCase::CaseSensitive))
-					{
-						return true;
-					}
-				}
-				if (!bControlRig)
-				{
-					return false;
-				}
-				static const TCHAR* const RigBlockWords[] =
-				{
-					TEXT("Event"), TEXT("Function"), TEXT("Detached"),
-					TEXT("Bone"), TEXT("Null"), TEXT("Control"), TEXT("Curve"), TEXT("Connector"), TEXT("Socket"),
-				};
-				for (const TCHAR* Word : RigBlockWords)
-				{
-					if (Token.Text.Equals(Word, ESearchCase::CaseSensitive))
-					{
-						return true;
-					}
-				}
-				return false;
+				return IsDabBlockWord(EDabDocumentKind::AnimBlueprint, Token.Text)
+					|| (bControlRig && IsDabBlockWord(EDabDocumentKind::ControlRig, Token.Text));
 			}
 
 			/** The block words whose body is code. */

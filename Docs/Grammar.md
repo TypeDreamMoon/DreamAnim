@@ -3,6 +3,12 @@
 This is the reference the lexer, the parser and the printer implement. It covers the syntax only;
 what a name means (a node type, a C++ property, an asset slot) is decided by the later stages.
 
+Grammar version: 5
+
+The version goes up by one each time the syntax or the meaning of the text changes: what a file may hold,
+what it builds, what write-back writes, how node GUIDs are made. [Changelog.md](Changelog.md) says what each
+version changed. `Tools/dab.ps1 vocab` reports it as `grammarVersion`, with the words of each kind of document.
+
 ## Files
 
 | Extension | Document kind | Produces |
