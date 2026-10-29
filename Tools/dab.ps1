@@ -26,10 +26,14 @@
 #                                 Animation Blueprints to text, below the project's DAnim/ unless -Out;
 #                                 a file that exists and differs is only replaced with -Force; -AnimSet moves
 #                                 their animations into slots of that animation set (created when missing)
+#   dab.ps1 vocab (-Out O | -Stdout) [-RigUnits]
+#                                 what the languages know, as JSON: the grammar version, the words of each kind
+#                                 of document, every anim node type with its pins; -RigUnits adds the Control
+#                                 Rig units and dispatches (Docs/Tools.md)
 #   dab.ps1 dal [-File F] [-Root R] [-Dal D] [-DalModule M]
 #                                 compile the .dal logic sources into C++ with the dal compiler (see below)
 #
-# build, check, fmt and decompile run `UnrealEditor-Cmd <project> -run=DreamAnim` on -Project, else the
+# build, check, fmt, decompile and vocab run `UnrealEditor-Cmd <project> -run=DreamAnim` on -Project, else the
 # project above -File, else the test host, and keep the lines that matter: diagnostics
 # (`<file>(<line>,<col>): error DABnnnn: ...`), the summary, errors and crashes (-Raw shows everything).
 # -File is a source (absolute, relative to the current directory, or relative to the project directory);
@@ -59,14 +63,14 @@
 #   test: 0 green, 1 red (a test failed or an ensure fired), 2 not judged (the build failed, the editor
 #         crashed or timed out, or fewer tests ran than the preset expects). Results land in
 #         <host>/Saved/DreamAnimTests/<time>-<preset>/: the engine's index.json, the run log and summary.md.
-#   build, check, fmt, decompile: 0 no errors, 1 errors (fmt -Verify: a file not canonical), 2 the
+#   build, check, fmt, decompile, vocab: 0 no errors, 1 errors (fmt -Verify: a file not canonical), 2 the
 #         commandlet did not finish (it crashed, timed out, or never printed its summary).
 #   dal: 0 compiled, 1 errors in a source, 2 no compiler, a source in no module, or the compiler failed.
 #         build and check take 2 from the dal step the same way, and build takes 2 when the C++ build fails.
 
 [CmdletBinding()]
 param(
-    [Parameter(Position = 0)][ValidateSet('make', 'test', 'build', 'check', 'fmt', 'decompile', 'dal')][string]$Command = 'test',
+    [Parameter(Position = 0)][ValidateSet('make', 'test', 'build', 'check', 'fmt', 'decompile', 'vocab', 'dal')][string]$Command = 'test',
     [ValidateSet('Quick', 'RoundTrip', 'Behavior', 'Rig', 'RigRoundTrip', 'RigBehavior', 'All')][string]$Preset = 'Quick',
     [string]$Filter,
     [switch]$NoBuild,
@@ -87,6 +91,7 @@ param(
     [switch]$Force,
     [switch]$Raw,
     [switch]$Markers,
+    [switch]$RigUnits,
     [string]$Dal,
     [string]$DalModule
 )
@@ -102,7 +107,7 @@ $Presets = @{
     Quick     = @{ Filter = 'DreamAnim.Lang+DreamAnim.Driver+DreamAnim.Runtime+DreamAnim.WriteBack+DreamAnim.Editor'; MinTests = 100; Timeout = 30 }
     RoundTrip = @{ Filter = 'DreamAnim.Corpus.Als.Compiles+DreamAnim.Corpus.Als.Decompile+DreamAnim.Corpus.Als.Semantic+DreamAnim.Corpus.Als.Generate+DreamAnim.Corpus.Als.AnimSet.'; MinTests = 100; Timeout = 60 }
     Behavior  = @{ Filter = 'DreamAnim.Corpus.Als.PoseHarness+DreamAnim.Corpus.Als.PoseDiff+DreamAnim.Corpus.Als.AnimSetPoseDiff+DreamAnim.Corpus.Als.AnimSetSwap+DreamAnim.Generate'; MinTests = 5; Timeout = 60 }
-    Rig       = @{ Filter = 'DreamAnim.Lang.Dcr+DreamAnim.Rig.Extract+DreamAnim.Rig.Decompile+DreamAnim.Rig.Semantic+DreamAnim.Rig.WriteBack'; MinTests = 50; Timeout = 30 }
+    Rig       = @{ Filter = 'DreamAnim.Lang.Dcr+DreamAnim.Rig.Extract+DreamAnim.Rig.Decompile+DreamAnim.Rig.Semantic+DreamAnim.Rig.WriteBack+DreamAnim.Rig.Vocabulary'; MinTests = 50; Timeout = 30 }
     RigRoundTrip = @{ Filter = 'DreamAnim.Rig.Generate+DreamAnim.Rig.RoundTrip'; MinTests = 45; Timeout = 90 }
     RigBehavior  = @{ Filter = 'DreamAnim.Rig.Behavior+DreamAnim.Rig.Generate.RoundTrip.Standalone'; MinTests = 2; Timeout = 60 }
     All       = @{ Filter = 'DreamAnim.'; MinTests = 200; Timeout = 90 }
@@ -321,6 +326,7 @@ function Invoke-Commandlet {
         'check' { $arguments += '-Check' }
         'fmt' { $arguments += '-Format' }
         'decompile' { $arguments += '-Decompile' }
+        'vocab' { $arguments += '-Vocabulary' }
     }
     if ($sourceFile) { $arguments += Format-Switch 'File' $sourceFile }
     if ($Root) { $arguments += Format-Switch 'Root' (($Root | ForEach-Object { $_.TrimEnd('\') }) -join ',') }
@@ -334,6 +340,7 @@ function Invoke-Commandlet {
     if ($Json) { $arguments += Format-Switch 'Json' $Json }
     if ($NoSave) { $arguments += '-NoSave' }
     if ($Force) { $arguments += '-Force' }
+    if ($RigUnits) { $arguments += '-RigUnits' }
 
     $writesAssets = $Command -eq 'build'
     if ($writesAssets -and @(Get-EditorsOnProject $uproject).Count -gt 0) {
@@ -369,7 +376,7 @@ function Invoke-Commandlet {
     $logLines = if (Test-Path -LiteralPath $log) { @(Get-Content -LiteralPath $log -Encoding utf8) } else { @() }
 
     # fmt and decompile -Stdout print text: that goes on the output stream, everything else on the host.
-    $printsText = ($Command -eq 'fmt' -and -not $Write -and -not $Verify) -or ($Command -eq 'decompile' -and $Stdout)
+    $printsText = ($Command -eq 'fmt' -and -not $Write -and -not $Verify) -or ($Command -in 'decompile', 'vocab' -and $Stdout)
     $status = if ($printsText) { { param($Line) Write-Host $Line } } else { { param($Line) Write-Output $Line } }
 
     if ($Raw) {

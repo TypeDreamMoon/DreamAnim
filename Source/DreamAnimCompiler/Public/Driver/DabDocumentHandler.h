@@ -10,6 +10,7 @@
 
 #include "CoreMinimal.h"
 #include "Driver/DabDriver.h"
+#include "Driver/DabVocabularyExport.h"
 #include "UObject/TopLevelAssetPath.h"
 #include "WriteBack/DabWriteBack.h"
 
@@ -48,6 +49,9 @@ namespace UE::DreamAnim::Compiler
 		/** The text Asset was last built from or written to, kept with it; empty when there is none. */
 		virtual FString GetGeneratedText(const UObject& Asset) const { return FString(); }
 		virtual void SetGeneratedText(UObject& Asset, const FString& Text) const {}
+
+		/** Adds what this kind of document knows from the engine to the vocabulary `dab.ps1 vocab` writes (Out is its root). */
+		virtual void AddVocabulary(FJsonObject& Out, const FDabVocabularyOptions& Options) const {}
 	};
 
 	DREAMANIMCOMPILER_API void RegisterDabDocumentHandler(Lang::EDabDocumentKind Kind, TSharedRef<IDabDocumentHandler> Handler);

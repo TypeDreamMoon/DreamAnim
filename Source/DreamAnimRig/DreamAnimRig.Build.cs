@@ -32,6 +32,7 @@ public class DreamAnimRig : ModuleRules
 			"AssetRegistry",
 			"AssetTools",
 			"ControlRigEditor",
+			"Json",
 			"Projects",
 			"UnrealEd",
 		});

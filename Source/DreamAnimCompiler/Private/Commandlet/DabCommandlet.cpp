@@ -8,8 +8,10 @@
 #include "Driver/DabDocumentHandler.h"
 #include "Driver/DabDriver.h"
 #include "Driver/DabDriverPrivate.h"
+#include "Driver/DabVocabularyExport.h"
 #include "HAL/FileManager.h"
 #include "Lang/DabParser.h"
+#include "Lang/DabVocabulary.h"
 #include "Misc/FileHelper.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
@@ -26,6 +28,7 @@ namespace UE::DreamAnim::Compiler::CommandletPrivate
 		Check,
 		Format,
 		Decompile,
+		Vocabulary,
 	};
 
 	/** One run: what was asked, and what it found. */
@@ -37,6 +40,7 @@ namespace UE::DreamAnim::Compiler::CommandletPrivate
 		bool bVerify = false;
 		bool bStdout = false;
 		bool bForce = false;
+		bool bRigUnits = false;
 		FString File;
 		TArray<FString> Roots;
 		TArray<FString> Assets;
@@ -162,6 +166,15 @@ namespace UE::DreamAnim::Compiler::CommandletPrivate
 				Run.Mode = EDabCommandletMode::Decompile;
 				++NumModes;
 			}
+			else if (Key == TEXT("Vocabulary"))
+			{
+				Run.Mode = EDabCommandletMode::Vocabulary;
+				++NumModes;
+			}
+			else if (Key == TEXT("RigUnits"))
+			{
+				Run.bRigUnits = true;
+			}
 			else if (Key == TEXT("NoSave"))
 			{
 				Run.bNoSave = true;
@@ -198,7 +211,7 @@ namespace UE::DreamAnim::Compiler::CommandletPrivate
 
 		if (NumModes > 1)
 		{
-			Run.Fail(TEXT("Give at most one of -Check, -Format and -Decompile."));
+			Run.Fail(TEXT("Give at most one of -Check, -Format, -Decompile and -Vocabulary."));
 			return false;
 		}
 		if (Run.bWrite && Run.bVerify)
@@ -214,6 +227,16 @@ namespace UE::DreamAnim::Compiler::CommandletPrivate
 		if (!Run.AnimSet.IsEmpty() && Run.Mode != EDabCommandletMode::Decompile)
 		{
 			Run.Fail(TEXT("-AnimSet goes with -Decompile."));
+			return false;
+		}
+		if (Run.bRigUnits && Run.Mode != EDabCommandletMode::Vocabulary)
+		{
+			Run.Fail(TEXT("-RigUnits goes with -Vocabulary."));
+			return false;
+		}
+		if (Run.Mode == EDabCommandletMode::Vocabulary && Run.Out.IsEmpty() && !Run.bStdout)
+		{
+			Run.Fail(TEXT("-Vocabulary needs -Out=<file> or -Stdout."));
 			return false;
 		}
 		if (Run.Mode == EDabCommandletMode::Decompile && Run.Assets.IsEmpty() && Run.Under.IsEmpty())
@@ -415,6 +438,31 @@ namespace UE::DreamAnim::Compiler::CommandletPrivate
 			UE_LOG(LogDreamAnimCommandlet, Display, TEXT("DreamAnim check: %d file(s), %d error(s), %d warning(s)"),
 				Files.Num(), Run.NumErrors, Run.NumWarnings);
 		}
+	}
+
+	void RunDabVocabulary(FDabCommandletRun& Run)
+	{
+		FDabVocabularyOptions Options;
+		Options.bRigUnits = Run.bRigUnits;
+		const FString Text = MakeDabVocabularyJson(Options);
+		if (Run.bStdout)
+		{
+			PrintDabTextBlock(TEXT("vocabulary.json"), Text);
+		}
+		FString Written;
+		if (!Run.Out.IsEmpty())
+		{
+			const FString OutPath = DriverPrivate::NormalizeDabPath(Run.Out);
+			IFileManager::Get().MakeDirectory(*FPaths::GetPath(OutPath), true);
+			if (!FFileHelper::SaveStringToFile(Text, *OutPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+			{
+				Run.Fail(FString::Printf(TEXT("Cannot write %s."), *OutPath));
+				return;
+			}
+			Written = TEXT(" to ") + OutPath;
+		}
+		UE_LOG(LogDreamAnimCommandlet, Display, TEXT("DreamAnim vocab: grammar version %d, %d character(s) written%s"),
+			Lang::DabGrammarVersion, Text.Len(), *Written);
 	}
 
 	void RunDabFormat(FDabCommandletRun& Run)
@@ -705,7 +753,7 @@ int32 UDreamAnimCommandlet::Main(const FString& Params)
 
 	// A commandlet's asset registry starts empty; bare asset names in the text are looked up in it. The
 	// editor scans on its own.
-	if (Run.Mode != EDabCommandletMode::Format && IsRunningCommandlet())
+	if (Run.Mode != EDabCommandletMode::Format && Run.Mode != EDabCommandletMode::Vocabulary && IsRunningCommandlet())
 	{
 		IAssetRegistry::GetChecked().SearchAllAssets(true);
 	}
@@ -721,6 +769,9 @@ int32 UDreamAnimCommandlet::Main(const FString& Params)
 		break;
 	case EDabCommandletMode::Decompile:
 		RunDabDecompile(Run);
+		break;
+	case EDabCommandletMode::Vocabulary:
+		RunDabVocabulary(Run);
 		break;
 	}
 

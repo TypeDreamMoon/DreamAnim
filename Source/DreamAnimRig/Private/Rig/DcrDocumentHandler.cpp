@@ -4,15 +4,20 @@
 
 #include "ControlRigBlueprintLegacy.h"
 #include "ControlRigRuntimeAsset.h"
+#include "Dom/JsonObject.h"
+#include "Dom/JsonValue.h"
 #include "Lang/DabDiagnostic.h"
 #include "Lang/DabPrinter.h"
 #include "Misc/Paths.h"
 #include "Rig/DcrAsset.h"
+#include "Rig/DcrExecPins.h"
 #include "Rig/DcrExtract.h"
 #include "Rig/DcrGenerate.h"
 #include "Rig/DcrLower.h"
+#include "Rig/DcrNames.h"
 #include "Rig/DcrNormalize.h"
 #include "Rig/DcrSemantic.h"
+#include "Rig/DcrSemanticInternal.h"
 #include "Rig/DcrWriteBack.h"
 #include "RigVMCore/RigVMRegistry.h"
 
@@ -158,5 +163,91 @@ namespace UE::DreamAnim::Rig
 	void FDcrDocumentHandler::SetGeneratedText(UObject& Asset, const FString& Text) const
 	{
 		SetDcrGeneratedText(Asset, Text);
+	}
+
+	void FDcrDocumentHandler::AddVocabulary(FJsonObject& Out, const Compiler::FDabVocabularyOptions& Options) const
+	{
+		if (!Options.bRigUnits)
+		{
+			return;
+		}
+		ReadyRigVM();
+		const auto Strings = [](TConstArrayView<FString> Items)
+		{
+			TArray<TSharedPtr<FJsonValue>> Values;
+			for (const FString& Item : Items)
+			{
+				Values.Add(MakeShared<FJsonValueString>(Item));
+			}
+			return Values;
+		};
+
+		TArray<TSharedPtr<FJsonValue>> Units;
+		for (const FDcrNodeType& Type : GetDcrNodeTypes())
+		{
+			const UScriptStruct& Struct = *Type.Struct;
+			const Sem::FSignature Signature = Type.bDispatch ? Sem::MakeDispatchSignature(Struct) : Sem::MakeUnitSignature(Struct);
+			TSharedRef<FJsonObject> Unit = MakeShared<FJsonObject>();
+			Unit->SetStringField(TEXT("name"), GetDcrNodeTypeName(Struct));
+			Unit->SetStringField(TEXT("struct"), Struct.GetPathName());
+			Unit->SetStringField(TEXT("kind"), Type.bDispatch ? TEXT("dispatch") : TEXT("unit"));
+			Unit->SetBoolField(TEXT("deprecated"), Type.bDeprecated);
+			for (const TCHAR* Key : { TEXT("DisplayName"), TEXT("Category"), TEXT("Keywords") })
+			{
+				const FString Value = Struct.GetMetaData(Key);
+				if (!Value.IsEmpty())
+				{
+					Unit->SetStringField(FString(Key).Left(1).ToLower() + FString(Key).Mid(1), Value);
+				}
+			}
+
+			// Execute pins: what runs it, what it runs, and the outputs a block after its call can hang off.
+			Unit->SetBoolField(TEXT("mutable"), Signature.IsMutable());
+			if (Signature.IsMutable())
+			{
+				Model::FDcrModelNode Probe;
+				Probe.Kind = Type.bDispatch ? Model::EDcrNodeKind::Dispatch : Model::EDcrNodeKind::Unit;
+				Probe.StructPath = Struct.GetPathName();
+				Probe.ExecuteIn = Signature.ExecIn;
+				Probe.ExecuteOut = Signature.ExecOut;
+				const FString Continue = GetDcrContinuation(Probe);
+				TArray<FString> Blocks = Signature.ExecOut.FilterByPredicate([&Continue](const FString& Pin) { return Pin != Continue; });
+				Unit->SetArrayField(TEXT("executeIn"), Strings(Signature.ExecIn));
+				Unit->SetArrayField(TEXT("executeOut"), Strings(Signature.ExecOut));
+				Unit->SetStringField(TEXT("continuesBy"), Continue);
+				Unit->SetArrayField(TEXT("blocks"), Strings(Blocks));
+			}
+
+			TArray<TSharedPtr<FJsonValue>> Pins;
+			for (const Sem::FPin& Pin : Signature.Pins)
+			{
+				TSharedRef<FJsonObject> Entry = MakeShared<FJsonObject>();
+				Entry->SetStringField(TEXT("name"), Pin.Name);
+				Entry->SetStringField(TEXT("direction"), Pin.bInput && Pin.bOutput ? TEXT("io") : Pin.bOutput ? TEXT("output") : TEXT("input"));
+				Entry->SetStringField(TEXT("type"), Pin.Type.IsSet() ? GetDcrTypeName(Pin.Type) : FString(TEXT("wildcard")));
+				if (Pin.Type.IsSet())
+				{
+					Entry->SetStringField(TEXT("cppType"), Pin.Type.CPPType);
+				}
+				if (Pin.bWildcard)
+				{
+					// A dispatch argument that takes several types: the call picks one.
+					Entry->SetBoolField(TEXT("wildcard"), true);
+				}
+				if (Pin.bAggregate)
+				{
+					Entry->SetBoolField(TEXT("aggregate"), true);
+				}
+				if (!Pin.Default.IsEmpty())
+				{
+					// The engine's export text, as a fresh node holds it.
+					Entry->SetStringField(TEXT("default"), Pin.Default);
+				}
+				Pins.Add(MakeShared<FJsonValueObject>(Entry));
+			}
+			Unit->SetArrayField(TEXT("pins"), Pins);
+			Units.Add(MakeShared<FJsonValueObject>(Unit));
+		}
+		Out.SetArrayField(TEXT("rigUnits"), Units);
 	}
 }

@@ -21,6 +21,7 @@ public class DreamAnimTests : ModuleRules
 			"DreamAnimLang",
 			"DreamAnimCompiler",
 			"GameplayTags",
+			"Json",
 			"Projects",
 			"AnimGraph",
 			"BlueprintGraph",

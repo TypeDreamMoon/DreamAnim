@@ -247,6 +247,22 @@ namespace UE::DreamAnim::Rig
 		return Name;
 	}
 
+	TArray<FDcrNodeType> GetDcrNodeTypes()
+	{
+		const NamesPrivate::FNodeTypeIndex& Index = NamesPrivate::GetNodeTypeIndex();
+		TArray<FDcrNodeType> Types;
+		for (const TPair<FString, FDcrNodeType>& Entry : Index.UnitsByFull)
+		{
+			Types.Add(Entry.Value);
+		}
+		for (const TPair<FString, FDcrNodeType>& Entry : Index.DispatchesByFull)
+		{
+			Types.Add(Entry.Value);
+		}
+		Types.Sort([](const FDcrNodeType& A, const FDcrNodeType& B) { return A.Struct->GetName() < B.Struct->GetName(); });
+		return Types;
+	}
+
 	TArray<FDcrNodeType> FindDcrUnits(const FString& Name)
 	{
 		const NamesPrivate::FNodeTypeIndex& Index = NamesPrivate::GetNodeTypeIndex();

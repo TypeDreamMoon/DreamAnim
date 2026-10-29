@@ -24,5 +24,7 @@ namespace UE::DreamAnim::Rig
 			const Compiler::FDabWriteBackOptions& Options) override;
 		virtual FString GetGeneratedText(const UObject& Asset) const override;
 		virtual void SetGeneratedText(UObject& Asset, const FString& Text) const override;
+		/** With RigUnits: every unit and dispatch a .dcr can call, with its pins, as `rigUnits`. */
+		virtual void AddVocabulary(FJsonObject& Out, const Compiler::FDabVocabularyOptions& Options) const override;
 	};
 }

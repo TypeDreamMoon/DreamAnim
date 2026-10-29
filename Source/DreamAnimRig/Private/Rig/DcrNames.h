@@ -62,6 +62,9 @@ namespace UE::DreamAnim::Rig
 	/** `RigUnit_GetTransform` -> `GetTransform`, `RigVMDispatch_If` -> `If`: the struct name without its prefix. */
 	FString GetDcrShortName(const FString& StructName);
 
+	/** Every unit and dispatch the text can call, sorted by struct name (deprecated ones included and marked). */
+	TArray<FDcrNodeType> GetDcrNodeTypes();
+
 	/** Units by short name or full name (`GetTransform`, `RigUnit_GetTransform`). Non-deprecated ones hide deprecated ones of the same short name. */
 	TArray<FDcrNodeType> FindDcrUnits(const FString& Name);
 	/** Dispatches the same way (`If`, `RigVMDispatch_If`). */
