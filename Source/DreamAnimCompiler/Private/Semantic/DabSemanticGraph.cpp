@@ -263,6 +263,41 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 	// Node classes
 	// ------------------------------------------------------------------------------------------
 
+	TArray<UClass*> GetSemanticNodeClasses()
+	{
+		TArray<UClass*> Classes;
+		for (TObjectIterator<UClass> It; It; ++It)
+		{
+			if (It->IsChildOf(UAnimGraphNode_Base::StaticClass()) && !It->HasAnyClassFlags(CLASS_NewerVersionExists))
+			{
+				Classes.Add(*It);
+			}
+		}
+		return Classes;
+	}
+
+	FString GetSemanticNodeTypeName(const UClass& Class, TConstArrayView<UClass*> Classes)
+	{
+		// The rule ResolveNodeClass reads names by: the short form finds the classes whose names end with it.
+		const FString Name = Class.GetName();
+		const int32 At = Name.Find(TEXT("AnimGraphNode_"), ESearchCase::CaseSensitive, ESearchDir::FromEnd);
+		if (At == INDEX_NONE)
+		{
+			return Name;
+		}
+		const FString Short = Name.Mid(At + FCString::Strlen(TEXT("AnimGraphNode_")));
+		const FString Suffix = TEXT("AnimGraphNode_") + Short;
+		int32 Matches = 0;
+		for (const UClass* Other : Classes)
+		{
+			if (Other->GetName().EndsWith(Suffix, ESearchCase::CaseSensitive) || Other->GetName().Equals(Short, ESearchCase::CaseSensitive))
+			{
+				++Matches;
+			}
+		}
+		return Short.IsEmpty() || Matches != 1 ? Name : Short;
+	}
+
 	UClass* FSemantic::FindNodeClassByName(const TCHAR* ClassName) const
 	{
 		for (UClass* Class : NodeClasses)

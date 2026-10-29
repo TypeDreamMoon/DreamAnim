@@ -60,13 +60,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		SelfClass = Kind == EDabDocumentKind::AnimBlueprint ? UAnimInstance::StaticClass() : nullptr;
 		ReadHeader(*Document);
 
-		for (TObjectIterator<UClass> It; It; ++It)
-		{
-			if (It->IsChildOf(UAnimGraphNode_Base::StaticClass()) && !It->HasAnyClassFlags(CLASS_NewerVersionExists))
-			{
-				NodeClasses.Add(*It);
-			}
-		}
+		NodeClasses = GetSemanticNodeClasses();
 
 		// Sections by name; layers and machines in written order.
 		const FDabAssignStmt* SettingsStmt = nullptr;

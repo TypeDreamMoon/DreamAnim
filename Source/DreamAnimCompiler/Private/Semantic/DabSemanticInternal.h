@@ -182,6 +182,15 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 	bool IsRecordedNodeField(const FProperty& Field);
 	/** An editor-node property the extractor records (Tag, BoundEnum, ...; not the editor's own view of the node). */
 	bool IsRecordedEditorProperty(const FProperty& Property);
+	/** An editor-node property a node argument or a machine's metadata may name: what the extractor reads off an editor node. */
+	bool IsEditorNodeArgument(const FProperty& Property, const FStructProperty* NodeProperty);
+	/** The editor node classes a node type can name: every one but those a newer version of the class replaced. */
+	TArray<UClass*> GetSemanticNodeClasses();
+	/**
+	 * How the text names a node class: without the `AnimGraphNode_` its name ends with when no other class's name
+	 * ends the same way (`SequencePlayer`, `GameplayTagsBlend` for `AlsAnimGraphNode_GameplayTagsBlend`), else in full.
+	 */
+	FString GetSemanticNodeTypeName(const UClass& Class, TConstArrayView<UClass*> Classes);
 
 	// ------------------------------------------------------------------------------------------
 	// The pass
