@@ -702,8 +702,16 @@ namespace UE::DreamAnim::Compiler::GeneratePrivate
 						: FString::Printf(TEXT("%s has fewer fields than the tuple has items"), *Struct->GetName());
 					return false;
 				}
+				// A tuple inside a tuple is the whole struct: what it leaves out is that struct's own default, as
+				// the decompiler and the checker compare it. Only the outermost tuple keeps what the value had.
+				void* FieldData = Field->ContainerPtrToValuePtr<void>(Data);
+				if (CastField<FStructProperty>(Field) && DabGenUnwrap(*Item->Value).Is<FDabTupleExpr>())
+				{
+					Field->DestroyValue(FieldData);
+					Field->InitializeValue(FieldData);
+				}
 				FString FieldError;
-				if (!DabGenImportValue(Ctx, Field, Field->ContainerPtrToValuePtr<void>(Data), *Item->Value, Owner, FieldError))
+				if (!DabGenImportValue(Ctx, Field, FieldData, *Item->Value, Owner, FieldError))
 				{
 					OutError = FString::Printf(TEXT("%s: %s"), *Field->GetName(), *FieldError);
 					return false;

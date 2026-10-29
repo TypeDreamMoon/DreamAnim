@@ -915,7 +915,11 @@ interfaces first, then every document after the DreamAnim assets it names.
 A struct is a tuple of its fields: `(InRange = (Max = 0.25), InterpSpeedIncreasing = 20)`.
 
 - Fields may be named, or positional in declaration order (DAB4007 when there are too many).
-- Fields not written keep their defaults. Fields equal to their defaults are dropped.
+- Fields not written keep their defaults. In the value of an argument or a setting, those are the node's or
+  the setting's defaults. In a tuple inside a tuple, they are the defaults of that struct: a struct written
+  inside a tuple is its whole value. `LookAt_Axis = (Axis = (X = 1))` points the axis along X, though Look At's
+  own default axis is Y.
+- Fields equal to those defaults are dropped.
 - `()` is the struct with every field at its default. A block `{ Field = Value; }` reads like a tuple.
 - A one-item tuple needs a name or a trailing comma: `(5)` is `5` in parentheses, `(5,)` is a tuple.
 - A fixed-size array field cannot be written (DAB4006).
