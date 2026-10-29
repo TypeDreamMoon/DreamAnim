@@ -6,6 +6,9 @@
 #include "Dom/JsonObject.h"
 #include "Driver/DabVocabularyExport.h"
 #include "Misc/AutomationTest.h"
+#include "RigVMCore/RigVMDispatchFactory.h"
+#include "RigVMCore/RigVMRegistry.h"
+#include "Units/RigUnitContext.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -73,6 +76,36 @@ bool FDcrVocabularyTest::RunTest(const FString& Parameters)
 		const TSharedPtr<FJsonObject> Result = FindUnit(If->GetArrayField(TEXT("pins")), TEXT("Result"));
 		TestTrue(TEXT("If's Result is a wildcard"), Result.IsValid() && Result->GetBoolField(TEXT("wildcard")));
 	}
+
+	// Only what runs in a Control Rig: a unit or dispatch of another execute context (UAF's) cannot be added to one,
+	// so it is not listed (and the checker does not find it).
+	TSet<FString> Listed;
+	for (const TSharedPtr<FJsonValue>& Item : *Units)
+	{
+		Listed.Add(Item->AsObject()->GetStringField(TEXT("struct")));
+	}
+	const UScriptStruct* ExecuteContext = StaticStruct<FControlRigExecuteContext>();
+	const FRigVMRegistry& Registry = FRigVMRegistry::Get();
+	int32 NumOther = 0;
+	const TChunkedArray<FRigVMFunction>& Functions = Registry.GetFunctions();
+	for (int32 Index = 0; Index < Functions.Num(); ++Index)
+	{
+		const FRigVMFunction& Function = Functions[Index];
+		if (Function.Struct && !Function.Factory && !Function.SupportsExecuteContextStruct(ExecuteContext))
+		{
+			++NumOther;
+			TestFalse(FString::Printf(TEXT("%s runs in another execute context"), *Function.Struct->GetName()), Listed.Contains(Function.Struct->GetPathName()));
+		}
+	}
+	for (const FRigVMDispatchFactory* Factory : Registry.GetFactories())
+	{
+		if (Factory && Factory->GetScriptStruct() && !Factory->SupportsExecuteContextStruct(ExecuteContext))
+		{
+			++NumOther;
+			TestFalse(FString::Printf(TEXT("%s runs in another execute context"), *Factory->GetScriptStruct()->GetName()), Listed.Contains(Factory->GetScriptStruct()->GetPathName()));
+		}
+	}
+	AddInfo(FString::Printf(TEXT("%d units and dispatches of another execute context left out"), NumOther));
 	return true;
 }
 

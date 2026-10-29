@@ -62,6 +62,9 @@ namespace UE::DreamAnim::Rig
 	/** `RigUnit_GetTransform` -> `GetTransform`, `RigVMDispatch_If` -> `If`: the struct name without its prefix. */
 	FString GetDcrShortName(const FString& StructName);
 
+	/** The execute context of a Control Rig. A unit, dispatch or template is one the text can call only if it supports it. */
+	const UScriptStruct* GetDcrExecuteContextStruct();
+
 	/** Every unit and dispatch the text can call, sorted by struct name (deprecated ones included and marked). */
 	TArray<FDcrNodeType> GetDcrNodeTypes();
 

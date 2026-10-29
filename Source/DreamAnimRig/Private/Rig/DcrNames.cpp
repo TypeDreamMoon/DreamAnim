@@ -19,6 +19,7 @@
 #include "UObject/ObjectRedirector.h"
 #include "UObject/UObjectHash.h"
 #include "UObject/UObjectIterator.h"
+#include "Units/RigUnitContext.h"
 
 namespace UE::DreamAnim::Rig
 {
@@ -125,11 +126,13 @@ namespace UE::DreamAnim::Rig
 				*this = FNodeTypeIndex();
 				FunctionCount = Functions.Num();
 				FactoryCount = Factories.Num();
+				// Only what runs in a Control Rig: the editor refuses a node of another execute context (UAF's).
+				const UScriptStruct* ExecuteContext = GetDcrExecuteContextStruct();
 
 				for (int32 Index = 0; Index < Functions.Num(); ++Index)
 				{
 					const FRigVMFunction& Function = Functions[Index];
-					if (!Function.Struct || Function.Factory)
+					if (!Function.Struct || Function.Factory || !Function.SupportsExecuteContextStruct(ExecuteContext))
 					{
 						continue;
 					}
@@ -142,7 +145,7 @@ namespace UE::DreamAnim::Rig
 				for (const FRigVMDispatchFactory* Factory : Factories)
 				{
 					const UScriptStruct* Struct = Factory ? Factory->GetScriptStruct() : nullptr;
-					if (!Struct)
+					if (!Struct || !Factory->SupportsExecuteContextStruct(ExecuteContext))
 					{
 						continue;
 					}
@@ -161,7 +164,7 @@ namespace UE::DreamAnim::Rig
 				for (int32 Index = 0; Index < Templates.Num(); ++Index)
 				{
 					const FRigVMTemplate& Template = Templates[Index];
-					if (Template.UsesDispatch())
+					if (Template.UsesDispatch() || !Template.SupportsExecuteContextStruct(ExecuteContext))
 					{
 						continue;
 					}
@@ -245,6 +248,11 @@ namespace UE::DreamAnim::Rig
 			}
 		}
 		return Name;
+	}
+
+	const UScriptStruct* GetDcrExecuteContextStruct()
+	{
+		return StaticStruct<FControlRigExecuteContext>();
 	}
 
 	TArray<FDcrNodeType> GetDcrNodeTypes()

@@ -36,7 +36,7 @@ the node types are those of the plugins the project enables.
 | `pluginVersion`, `engineVersion` | the plugin's version name and the engine's version |
 | `documents` | one entry for each kind of document |
 | `animNodes` | every anim node type, sorted by name |
-| `rigUnits` | with `-RigUnits`: every unit and dispatch, sorted by struct name |
+| `rigUnits` | with `-RigUnits`: every unit and dispatch that runs in a Control Rig, sorted by struct name |
 
 ### documents
 

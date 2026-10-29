@@ -876,6 +876,8 @@ what the name finds.
   `RigUnit_GetTransform`, `If` for `RigVMDispatch_If`. The full name works too, and picks exactly.
 - A template is written by its name with the spaces left out (`Multiply`, `Scale`). It is found only when no
   unit or dispatch has that name. See [Templates](#templates).
+- Only units, dispatches and templates that run in a Control Rig are found. Those of another execute context
+  (UAF's, for instance) cannot be added to a Control Rig, and their names are unknown in the text.
 - A function of this rig hides everything else of its name. To reach the engine's node, write its full name.
 - A function of a used rig is found by its name when nothing else has it. Two libraries with a function of that
   name, or a library's function and a node of the engine, make the name ambiguous (DAB9002). Write the library's
