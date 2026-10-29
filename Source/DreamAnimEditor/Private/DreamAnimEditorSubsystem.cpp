@@ -934,6 +934,39 @@ void UDreamAnimEditorSubsystem::OpenSource(const FString& FilePath, int32 Line, 
 	FPlatformProcess::LaunchFileInDefaultExternalApplication(*Full);
 }
 
+FString UDreamAnimEditorSubsystem::CheckSource(const FString& FilePath, const FString& Text)
+{
+	// A relative path means the project, as on the command line.
+	const FString Path = NormalizeSourcePath(FPaths::IsRelative(FilePath) ? FPaths::Combine(FPaths::ProjectDir(), FilePath) : FilePath);
+	FDabCompileOptions Options;
+	Options.bGenerate = false;
+	Options.ResolveDreamAnimAsset = [this](const FString& AssetName) { return Index.FindByAssetName(AssetName); };
+
+	TArray<UE::DreamAnim::Lang::FDabDiagnostic> Diagnostics;
+	if (!Text.IsEmpty())
+	{
+		Diagnostics = CompileDabText(Path, Text, Options).Diagnostics;
+	}
+	else
+	{
+		// A library on disk is checked as the documents that include it see it, as `dab.ps1 check` does.
+		TArray<FString> Files;
+		if (UE::DreamAnim::Lang::GetDabFileKindFromPath(Path) == UE::DreamAnim::Lang::EDabFileKind::Templates)
+		{
+			Files = Index.FindDependents(Path);
+		}
+		if (Files.IsEmpty())
+		{
+			Files.Add(Path);
+		}
+		for (const FString& File : Files)
+		{
+			Diagnostics.Append(CompileDabFile(File, Options).Diagnostics);
+		}
+	}
+	return DabDiagnosticsToJson(Diagnostics);
+}
+
 // ---------------------------------------------------------------------------------------------
 // Reporting
 // ---------------------------------------------------------------------------------------------

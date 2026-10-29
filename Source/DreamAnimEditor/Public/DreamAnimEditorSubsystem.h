@@ -89,6 +89,17 @@ public:
 	/** Opens a source at a line, with the command in the settings. */
 	void OpenSource(const FString& FilePath, int32 Line = 1, int32 Column = 1) const;
 
+	/**
+	 * Checks a DreamAnim source as `dab.ps1 check` does (parse, includes, templates, names; nothing is built) and
+	 * returns its diagnostics as the JSON `-Json` writes: `[{"file", "line", "column", "length", "severity",
+	 * "code", "message", "hint"}, ...]`, empty `[]` when it checks clean. Text is the source to check, an unsaved
+	 * buffer for instance; empty reads FilePath from disk. A library (.dat) read from disk is checked through the
+	 * documents that include it; given as Text, it is checked alone. For tools that reach the editor from
+	 * Python: unreal.get_editor_subsystem(unreal.DreamAnimEditorSubsystem).check_source(path, text).
+	 */
+	UFUNCTION(BlueprintCallable, Category = "DreamAnim")
+	FString CheckSource(const FString& FilePath, const FString& Text);
+
 private:
 	void WatchRoots();
 	void UnwatchRoots();
