@@ -182,6 +182,12 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 	bool IsRecordedEditorProperty(const FProperty& Property);
 	/** An editor-node property a node argument or a machine's metadata may name: what the extractor reads off an editor node. */
 	bool IsEditorNodeArgument(const FProperty& Property, const FStructProperty* NodeProperty);
+	/**
+	 * Whether a node argument of this name is the editor node's property when the runtime node has a field of
+	 * the same name. Only Tag: the compiler copies the editor node's into the runtime field. Any other name is the
+	 * runtime field's.
+	 */
+	bool IsEditorNodeArgumentFirst(FName Name);
 	/** The editor node classes a node type can name: every one but those a newer version of the class replaced. */
 	TArray<UClass*> GetSemanticNodeClasses();
 	/**

@@ -104,6 +104,10 @@ A `value` or `setting` pin has:
 | `default` | the node's default as the text writes a value (`1`, `Linear`, `(Axis = (Y = 1))`, `[ 0.1 ]`); left out when the text cannot write it |
 | `enum`, `values` | for an enum: its name and the entries the text writes values by |
 
+A node lists each name once. When the runtime node and the editor node have a property of the same name, the
+text's argument of that name is one of them and only that one is listed: the runtime field (a `value`), except
+`Tag`, which is the editor node's (a `setting`; the compiler copies it into the runtime field).
+
 ### rigUnits
 
 | Field | What it is |

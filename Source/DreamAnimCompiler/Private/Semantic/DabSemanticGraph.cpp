@@ -184,6 +184,11 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		return IsRecordedEditorProperty(Property);
 	}
 
+	bool IsEditorNodeArgumentFirst(FName Name)
+	{
+		return Name == FName(TEXT("Tag"));
+	}
+
 	const FDabExpr* FindSemanticModelProperty(const FDabModelNode& Node, const TCHAR* Name)
 	{
 		for (const FDabModelProperty& Property : Node.Properties)
@@ -435,8 +440,7 @@ namespace UE::DreamAnim::Compiler::SemanticPrivate
 		OutDefault = nullptr;
 		bOutEditor = false;
 		const FName PropertyName(*Name);
-		// Tag is always the editor node's: the compiler copies it into a runtime field of that name.
-		if (Shape.Struct && Name != TEXT("Tag"))
+		if (Shape.Struct && !IsEditorNodeArgumentFirst(PropertyName))
 		{
 			if (const FProperty* Field = FindFProperty<FProperty>(Shape.Struct, PropertyName))
 			{

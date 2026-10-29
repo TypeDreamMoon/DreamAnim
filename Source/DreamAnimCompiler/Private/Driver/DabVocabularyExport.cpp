@@ -295,6 +295,16 @@ namespace UE::DreamAnim::Compiler
 			{
 				NumPoseArrays += IsPoseLinkProperty(**It) && It->IsA<FArrayProperty>() && !bLinkedGraph ? 1 : 0;
 			}
+			// A name the runtime node and the editor node both have is one argument of the text, and only that
+			// property is listed (FSemantic::FindNodeProperty).
+			TSet<FName> EditorArguments;
+			for (TFieldIterator<FProperty> It(&Class); It; ++It)
+			{
+				if (IsEditorNodeArgument(**It, NodeProperty))
+				{
+					EditorArguments.Add(It->GetFName());
+				}
+			}
 			for (TFieldIterator<FProperty> It(Struct); It; ++It)
 			{
 				const FProperty& Field = **It;
@@ -317,7 +327,7 @@ namespace UE::DreamAnim::Compiler
 					Pins.Add(MakeShared<FJsonValueObject>(Pin));
 					continue;
 				}
-				if (!IsRecordedNodeField(Field))
+				if (!IsRecordedNodeField(Field) || (IsEditorNodeArgumentFirst(Field.GetFName()) && EditorArguments.Contains(Field.GetFName())))
 				{
 					continue;
 				}
@@ -326,7 +336,8 @@ namespace UE::DreamAnim::Compiler
 			}
 			for (TFieldIterator<FProperty> It(&Class); It; ++It)
 			{
-				if (IsEditorNodeArgument(**It, NodeProperty))
+				const FName Name = It->GetFName();
+				if (EditorArguments.Contains(Name) && (IsEditorNodeArgumentFirst(Name) || !FindFProperty<FProperty>(Struct, Name)))
 				{
 					Pins.Add(MakeShared<FJsonValueObject>(MakeValuePin(**It, It->ContainerPtrToValuePtr<void>(Defaults), TEXT("setting"), false, Printer)));
 				}

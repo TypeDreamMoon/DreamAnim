@@ -90,6 +90,29 @@ bool FDabVocabularyExportTest::RunTest(const FString& Parameters)
 		TestTrue(TEXT("Root says how it is written"), Result->HasField(TEXT("writtenAs")));
 	}
 
+	if (const TSharedPtr<FJsonObject> Inertia = FindByName(Nodes, TEXT("Inertialization")); TestTrue(TEXT("Inertialization"), Inertia.IsValid()))
+	{
+		// The runtime node has a Tag too; the text's Tag is the editor node's, which the compiler copies over.
+		const TSharedPtr<FJsonObject> Tag = FindByName(Inertia->GetArrayField(TEXT("pins")), TEXT("Tag"));
+		TestTrue(TEXT("Inertialization's Tag is the editor node's setting"), Tag.IsValid() && Tag->GetStringField(TEXT("kind")) == TEXT("setting"));
+	}
+
+	// An argument name means one property, so a node lists it once.
+	for (const TSharedPtr<FJsonValue>& Item : Nodes)
+	{
+		const TSharedPtr<FJsonObject> Node = Item->AsObject();
+		TSet<FString> Seen;
+		for (const TSharedPtr<FJsonValue>& Pin : Node.IsValid() ? Node->GetArrayField(TEXT("pins")) : TArray<TSharedPtr<FJsonValue>>())
+		{
+			const FString PinName = Pin->AsObject()->GetStringField(TEXT("name"));
+			if (Seen.Contains(PinName))
+			{
+				AddError(FString::Printf(TEXT("%s lists `%s` twice"), *Node->GetStringField(TEXT("name")), *PinName));
+			}
+			Seen.Add(PinName);
+		}
+	}
+
 	// Every name the vocabulary gives a node type is one the checker finds that node by.
 	int32 Checked = 0;
 	for (const TSharedPtr<FJsonValue>& Item : Nodes)
